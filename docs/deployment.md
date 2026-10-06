@@ -6,17 +6,26 @@ Four Vercel projects from one repository (see `infrastructure/vercel/README.md`)
 own domain, environment variables, service account and rollback. `turbo-ignore` skips builds for
 apps whose dependency graph did not change.
 
-## Flow
+## Branches and flow
+
+| Branch                          | Purpose                                           | Deploys to                          | Firebase project        |
+| ------------------------------- | ------------------------------------------------- | ----------------------------------- | ----------------------- |
+| `feature/*`, `fix/*`, `chore/*` | One change each, short-lived, branched from `dev` | Vercel Preview                      | `ppidk-website-staging` |
+| `dev`                           | Integration of finished work                      | Vercel Preview (dev branch)         | `ppidk-website-staging` |
+| `staging`                       | Release candidate, tested by the team             | Vercel Staging (custom environment) | `ppidk-website-staging` |
+| `prod`                          | What is live (default branch)                     | Vercel Production                   | `ppidk-website-prod`    |
 
 ```text
-feature branch → PR → CI (format, lint+boundaries, typecheck, test, build, secrets, e2e)
-               → Vercel Preview (staging Firebase, deployment protection on)
-               → review → merge to main
-               → Staging (automatic) → smoke checks → promote to Production
+feature/* ─PR─▶ dev ─PR─▶ staging ─PR─▶ prod
+              CI on every PR and push: format, lint+boundaries, typecheck, test, build, secrets, e2e
 ```
 
-- Trunk-based, short-lived branches; `main` is protected (required CI, ≥1 review, no force push).
-- Production is promoted, not rebuilt, so what was tested is what ships.
+- Changes only move forward by pull request: `feature → dev → staging → prod`. Never commit
+  directly to `dev`, `staging` or `prod`, and never merge `dev` straight into `prod`.
+- Hotfix: branch from `prod`, PR into `prod`, then merge `prod` back into `staging` and `dev`.
+- Protect `dev`, `staging` and `prod` on GitHub: require a PR, require the **CI** check, block
+  force pushes and deletion. `prod` additionally requires ≥ 1 approving review.
+- Dependabot PRs target `dev`.
 
 ## Rollback
 
