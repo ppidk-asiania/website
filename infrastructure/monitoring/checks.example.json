@@ -1,0 +1,29 @@
+{
+  "checks": [
+    {
+      "name": "web",
+      "url": "https://web.example.org/",
+      "expectStatus": 200,
+      "intervalSeconds": 60
+    },
+    {
+      "name": "admin",
+      "url": "https://admin.example.org/",
+      "expectStatus": 200,
+      "intervalSeconds": 60
+    },
+    {
+      "name": "shop",
+      "url": "https://shop.example.org/",
+      "expectStatus": 200,
+      "intervalSeconds": 60
+    },
+    {
+      "name": "gateway",
+      "url": "https://api.example.org/health",
+      "expectStatus": 200,
+      "expectBody": "{\"status\":\"ok\"}",
+      "intervalSeconds": 60
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "name": "platform",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint && eslint tests scripts --max-warnings=0 && node scripts/check-boundaries.mjs",
+    "lint:boundaries": "node scripts/check-boundaries.mjs",
+    "typecheck": "turbo run typecheck && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:secrets"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@next/eslint-plugin-next": "16.3.8",
+    "@platform/apikeys": "workspace:*",
+    "@platform/audit": "workspace:*",
+    "@platform/config": "workspace:*",
+    "@platform/contracts": "workspace:*",
+    "@platform/db": "workspace:*",
+    "@platform/domain": "workspace:*",
+    "@platform/observability": "workspace:*",
+    "@platform/permissions": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.1",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.4.0",
+    "prettier": "3.9.9",
+    "turbo": "2.11.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
+    "vitest": "5.0.3",
+    "zod": "4.6.5"
+  }
+}
