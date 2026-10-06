@@ -1,0 +1,63 @@
+# Documentation
+
+## Where documentation lives
+
+| Kind                  | Location                        | Example                            |
+| --------------------- | ------------------------------- | ---------------------------------- |
+| Project-wide guides   | `docs/` (this folder)           | Architecture, deployment, security |
+| What a workspace owns | `<workspace>/README.md`         | `apps/admin/README.md`             |
+| Feature documentation | `<workspace>/docs/<feature>.md` | `packages/domain/docs/members.md`  |
+
+Put a feature doc in the workspace that **owns** the feature (where its main code lives).
+If a feature spans several workspaces, document it in the one that owns the business rule
+and link to it from the others.
+
+## Project-wide guides
+
+- [Architecture](architecture.md) — applications, packages and dependency rules
+- [Development](development.md) — local setup and daily commands
+- [Environments](environment.md) — development, staging, production
+- [Deployment](deployment.md) — branches, CI/CD, rollback
+- [Security](security.md) — controls and threat model
+- [Disaster recovery](disaster-recovery.md) — backups and restore
+
+## Feature docs index
+
+| Feature         | Doc                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| Member profiles | [packages/domain/docs/members.md](../packages/domain/docs/members.md)                       |
+| Database        | [packages/db/docs/database.md](../packages/db/docs/database.md)                             |
+| Authentication  | [packages/auth/docs/authentication.md](../packages/auth/docs/authentication.md)             |
+| Authorization   | [packages/permissions/docs/authorization.md](../packages/permissions/docs/authorization.md) |
+| Audit logging   | [packages/audit/docs/audit-logging.md](../packages/audit/docs/audit-logging.md)             |
+
+Add a row here when you add a feature doc.
+
+## Feature doc template
+
+Keep it short. Document what a future developer needs, not how you got there.
+
+```markdown
+# <Feature name>
+
+## What it does
+
+One paragraph, in plain words.
+
+## Where it lives
+
+- Code: `packages/.../src/...`
+- Tests: `tests/unit/...`
+
+## How to use it
+
+Short example or the main entry points.
+
+## Rules and assumptions
+
+Permissions, validation, limits, data stored.
+
+## Configuration
+
+Environment variables or settings (or "None").
+```

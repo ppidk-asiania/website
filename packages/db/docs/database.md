@@ -26,7 +26,7 @@ servers with the Admin SDK (`infrastructure/firebase/firestore.rules`).
 | Collection                  | Doc id                | Contents                                                      | Notes                                                                          |
 | --------------------------- | --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `users`                     | Firebase uid          | email, status, `roleAssignments[]`, createdAt, lastSignInAt   | One record per account (staff, members, customers). Roles = RBAC.              |
-| `memberProfiles`            | Firebase uid          | Personal data — see `docs/data-model.md`                      | Separate from `users` so role checks/listings never load PII.                  |
+| `memberProfiles`            | Firebase uid          | Personal data — see `packages/domain/docs/members.md`         | Separate from `users` so role checks/listings never load PII.                  |
 | `countries`                 | ISO alpha-2           | name                                                          | PPI countries                                                                  |
 | `chapters`                  | slug                  | name, countryCode, active                                     |                                                                                |
 | `content`                   | id                    | kind (news/article/page), slug, status, publishAt, chapterId  | Scheduled publishing = read-time rule                                          |

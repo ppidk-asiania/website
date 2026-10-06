@@ -1,4 +1,4 @@
-# Member data model
+# Member profiles
 
 Collected once per user in `memberProfiles/{uid}` and reused for event registrations
 (registrations reference the user; they do not copy personal data).

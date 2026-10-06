@@ -21,6 +21,7 @@ Read `docs/architecture.md` before changing structure. Non-negotiable:
 - Every admin mutation uses `createGuardedAction` (authenticate → validate → authorize → domain → audit in the same transaction). Never authorize in UI, middleware/`proxy.ts`, or from client-supplied roles.
 - The gateway never imports `@website/auth`, `@website/permissions`, `@website/audit` or `@website/ui`. Public responses are explicit DTOs from `@website/contracts`.
 - All data is in Firestore; one Firebase Auth user pool for everyone; authorization is RBAC (`@website/permissions`) from `users/{uid}` — never Custom Claims.
-- Member personal data (`docs/data-model.md`) is read only with `members.read_pii` or `profile.read_own`, never exposed via the gateway, and never written to audit logs unredacted (use `profileAuditSnapshots`).
+- Member personal data (`packages/domain/docs/members.md`) is read only with `members.read_pii` or `profile.read_own`, never exposed via the gateway, and never written to audit logs unredacted (use `profileAuditSnapshots`).
 - Never commit `.env*` (except `.env.example` with empty placeholders), keys or service-account JSON.
+- Documentation: each workspace has a `README.md` (what it owns) and a `docs/` folder for its feature docs; project-wide guides are in `/docs`. Update them in the same commit as the code.
 - Strict TypeScript; no `any`. Run `pnpm verify` before proposing a change.

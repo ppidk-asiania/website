@@ -8,7 +8,7 @@ import type { ChapterReader } from "@website/domain/organizations";
  * Each deployable gets ONE role and only the repositories that role may use.
  * The type system stops `web` from ever obtaining a writer.
  *
- * All data lives in Firestore. Roles map to separate service accounts (see docs/database.md);
+ * All data lives in Firestore. Roles map to separate service accounts (see packages/db/docs/database.md);
  * because Firestore IAM is project-wide, the per-role repository surface below is what
  * actually limits each app.
  */

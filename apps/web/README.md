@@ -1,0 +1,36 @@
+# web
+
+Public website of PPIDK Asia-Oseania and the member self-service area.
+
+## Responsibilities
+
+- Landing pages, news, articles, events, gallery, organization and chapters
+- Member sign-in and own-profile management (same user pool as admin and shop)
+- Public forms (newsletter, event registration) protected by reCAPTCHA
+
+## Structure
+
+| Path           | Purpose                                                                          |
+| -------------- | -------------------------------------------------------------------------------- |
+| `src/app/`     | Pages (App Router). Public pages are static/ISR so they survive backend outages. |
+| `src/server/`  | Server-only code (`import "server-only"`): env, database and auth access.        |
+| `.env.example` | Variables this app needs.                                                        |
+
+## Rules
+
+- Domain `web.example.org`, local port **3000**.
+- May read public content and the signed-in user's **own** profile only (`profile.*_own`).
+- No admin tooling: may not import `@website/audit`, `@website/apikeys` or `@website/domain/shop`.
+
+## Commands
+
+```bash
+pnpm --filter web dev       # http://localhost:3000
+pnpm --filter web build
+pnpm --filter web lint
+```
+
+## Documentation
+
+Feature docs for this workspace: [`docs/`](docs/README.md).
+Project-wide guides: [../../docs/](../../docs/README.md).
