@@ -33,7 +33,7 @@
     "@platform/observability": "workspace:*",
     "@platform/permissions": "workspace:*",
     "@playwright/test": "1.63.0",
-    "@types/node": "24.19.1",
+    "@types/node": "26.6.4",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
