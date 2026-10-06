@@ -4,6 +4,17 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    # Majors are deliberate upgrades (docs/development.md), not bot PRs:
+    # @types/node tracks the Node LTS we run (24); TypeScript/ESLint majors break typescript-eslint.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
     groups:
       next-react:
         {
