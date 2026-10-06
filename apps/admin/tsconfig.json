@@ -1,5 +1,5 @@
 {
-  "extends": "@platform/config/tsconfig/nextjs.json",
+  "extends": "@website/config/tsconfig/nextjs.json",
   "compilerOptions": {
     "paths": { "@/*": ["./src/*"] }
   },

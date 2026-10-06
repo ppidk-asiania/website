@@ -11,10 +11,10 @@ export type AppEnvironment = (typeof APP_ENVIRONMENTS)[number];
  * Firebase/GCP project IDs that are PRODUCTION. Only APP_ENV=production may use them.
  * Keep in sync with infrastructure/firebase/.firebaserc. Placeholder until projects exist.
  */
-export const PRODUCTION_FIREBASE_PROJECT_IDS: readonly string[] = ["ppidk-platform-prod"];
+export const PRODUCTION_FIREBASE_PROJECT_IDS: readonly string[] = ["ppidk-website-prod"];
 
 /** Staging project IDs. Production must never point at these either. */
-export const STAGING_FIREBASE_PROJECT_IDS: readonly string[] = ["ppidk-platform-staging"];
+export const STAGING_FIREBASE_PROJECT_IDS: readonly string[] = ["ppidk-website-staging"];
 
 export class EnvironmentIsolationError extends Error {
   override readonly name = "EnvironmentIsolationError";

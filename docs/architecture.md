@@ -15,7 +15,7 @@ no queues, no self-managed workers.
                packages/: domain · db · auth · permissions · audit · contracts · apikeys
                           email · ui · observability · config
                                                    │
-                      Firebase Auth · Firestore (behind @platform/db) · Storage · Resend · payment provider
+                      Firebase Auth · Firestore (behind @website/db) · Storage · Resend · payment provider
 ```
 
 Each app is its own Vercel project and failure boundary. A broken admin deploy cannot take
@@ -64,19 +64,19 @@ Enforced by tooling, not just this document:
 Approved matrix:
 
 ```text
-web      → config, contracts, db, domain(content|events|organizations|newsletter|shared), email, observability, ui, auth
+web      → auth, config, contracts, db, domain(content|events|organizations|newsletter|members|shared), email, observability, permissions, ui
 admin    → audit, auth, config, db, domain, email, observability, permissions, ui
 shop     → auth, config, db, domain(shop|shared), email, observability, permissions, ui
-gateway  → apikeys, config, contracts, db, domain, observability
+gateway  → apikeys, config, contracts, db, domain(content|events|organizations|shared), observability
 auth     → config
 db       → apikeys, config, domain
 others   → (none)
 ```
 
-Forbidden (fails lint): app → app, package → app, gateway → auth/permissions/audit/ui/email,
+Forbidden (fails lint): app → app, package → app, gateway → auth/permissions/audit/ui/email/domain-members (no personal data via the API),
 shop → non-shop domain, domain → React/Next/Hono/Vercel/Firebase/any workspace package,
 domain/shop ↔ other domain modules, any Firebase import outside `packages/db/src/firestore/**`
-and `packages/auth/src/firebase-admin.ts`, infrastructure (`@platform/db`, `@platform/email`,
+and `packages/auth/src/firebase-admin.ts`, infrastructure (`@website/db`, `@website/email`,
 Firebase admin adapter) from app code outside `src/server/**`.
 
 Changing the matrix is an architecture decision: update the script, ESLint config and this file
@@ -86,9 +86,9 @@ in the same PR.
 
 ```text
 UI → Server Action → createGuardedAction:
-       authenticate (session cookie → Firebase verify + revocation → staff record in DB)
+       authenticate (session cookie → Firebase verify + revocation → users/{uid} roles in Firestore; staff role required)
        → validate (Zod) → authorize (permissions.can, scoped)
-       → domain logic → repository (@platform/db) + audit event in the SAME transaction
+       → domain logic → repository (@website/db) + audit event in the SAME transaction
 ```
 
 ## Asynchronous work

@@ -1,11 +1,11 @@
-# platform
+# ppidk-website
 
-Production monorepo for the public website, admin platform, shop and external API gateway.
+Production monorepo for the public website, admin, shop and external API gateway.
 
 ```text
 apps/            independently deployed applications (one Vercel project each)
   web/           public website            → web.example.org     (port 3000)
-  admin/         admin platform            → admin.example.org   (port 3001)
+  admin/         admin                     → admin.example.org   (port 3001)
   shop/          customer-facing shop      → shop.example.org    (port 3002)
   gateway/       third-party API (/v1)     → api.example.org     (port 3003)
 packages/        shared, framework-independent where possible
@@ -31,7 +31,8 @@ Requirements: Node.js 24 LTS (≥ 22.12), Git. See [docs/development.md](docs/de
 - One repo, four deployables, no microservices, no queues/job workers.
 - Admin data is written only by the server: authenticate → authorize → validate → domain → audit → DB.
 - The gateway is the only public API and cannot import staff auth or admin internals.
-- Staging can never reach production (`docs/environment.md`).
+- Staging (`ppidk-website-staging`) can never reach production (`ppidk-website-prod`) — `docs/environment.md`.
+- Firestore for all data; one user pool for staff, members and customers; RBAC.
 - Boundaries are enforced by `pnpm lint` (`docs/architecture.md`).
 
 ## Docs
@@ -40,4 +41,4 @@ Requirements: Node.js 24 LTS (≥ 22.12), Git. See [docs/development.md](docs/de
 [environment](docs/environment.md) · [deployment](docs/deployment.md) ·
 [security](docs/security.md) · [database](docs/database.md) ·
 [authentication](docs/authentication.md) · [authorization](docs/authorization.md) ·
-[audit logging](docs/audit-logging.md) · [disaster recovery](docs/disaster-recovery.md)
+[data model](docs/data-model.md) · [audit logging](docs/audit-logging.md) · [disaster recovery](docs/disaster-recovery.md)

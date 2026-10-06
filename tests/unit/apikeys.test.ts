@@ -5,7 +5,7 @@ import {
   parseApiKey,
   verifyApiKey,
   type ApiKeyRecord,
-} from "@platform/apikeys";
+} from "@website/apikeys";
 
 const pepper = "unit-test-pepper-0123456789abcdef0123456789";
 const now = new Date("2026-10-07T00:00:00Z");

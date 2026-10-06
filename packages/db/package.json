@@ -1,5 +1,5 @@
 {
-  "name": "@platform/db",
+  "name": "@website/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@platform/apikeys": "workspace:*",
-    "@platform/config": "workspace:*",
-    "@platform/domain": "workspace:*",
+    "@website/apikeys": "workspace:*",
+    "@website/config": "workspace:*",
+    "@website/domain": "workspace:*",
     "firebase-admin": "14.5.0"
   }
 }

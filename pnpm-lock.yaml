@@ -172,36 +172,36 @@ importers:
       '@next/eslint-plugin-next':
         specifier: 16.3.8
         version: 16.3.8(eslint@9.39.5(supports-color@7.2.0))
-      '@platform/apikeys':
-        specifier: workspace:*
-        version: link:packages/apikeys
-      '@platform/audit':
-        specifier: workspace:*
-        version: link:packages/audit
-      '@platform/config':
-        specifier: workspace:*
-        version: link:packages/config
-      '@platform/contracts':
-        specifier: workspace:*
-        version: link:packages/contracts
-      '@platform/db':
-        specifier: workspace:*
-        version: link:packages/db
-      '@platform/domain':
-        specifier: workspace:*
-        version: link:packages/domain
-      '@platform/observability':
-        specifier: workspace:*
-        version: link:packages/observability
-      '@platform/permissions':
-        specifier: workspace:*
-        version: link:packages/permissions
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
       '@types/node':
         specifier: 24.19.1
         version: 24.19.1
+      '@website/apikeys':
+        specifier: workspace:*
+        version: link:packages/apikeys
+      '@website/audit':
+        specifier: workspace:*
+        version: link:packages/audit
+      '@website/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@website/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@website/db':
+        specifier: workspace:*
+        version: link:packages/db
+      '@website/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@website/observability':
+        specifier: workspace:*
+        version: link:packages/observability
+      '@website/permissions':
+        specifier: workspace:*
+        version: link:packages/permissions
       eslint:
         specifier: 9.39.5
         version: 9.39.5(supports-color@7.2.0)
@@ -232,31 +232,31 @@ importers:
 
   apps/admin:
     dependencies:
-      '@platform/audit':
+      '@website/audit':
         specifier: workspace:*
         version: link:../../packages/audit
-      '@platform/auth':
+      '@website/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@platform/config':
+      '@website/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@platform/db':
+      '@website/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@platform/domain':
+      '@website/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@platform/email':
+      '@website/email':
         specifier: workspace:*
         version: link:../../packages/email
-      '@platform/observability':
+      '@website/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@platform/permissions':
+      '@website/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
-      '@platform/ui':
+      '@website/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       next:
@@ -293,22 +293,22 @@ importers:
       '@hono/zod-openapi':
         specifier: 1.6.3
         version: 1.6.3(hono@4.13.13)(zod@4.6.5)
-      '@platform/apikeys':
+      '@website/apikeys':
         specifier: workspace:*
         version: link:../../packages/apikeys
-      '@platform/config':
+      '@website/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@platform/contracts':
+      '@website/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@platform/db':
+      '@website/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@platform/domain':
+      '@website/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@platform/observability':
+      '@website/observability':
         specifier: workspace:*
         version: link:../../packages/observability
       hono:
@@ -330,28 +330,28 @@ importers:
 
   apps/shop:
     dependencies:
-      '@platform/auth':
+      '@website/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@platform/config':
+      '@website/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@platform/db':
+      '@website/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@platform/domain':
+      '@website/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@platform/email':
+      '@website/email':
         specifier: workspace:*
         version: link:../../packages/email
-      '@platform/observability':
+      '@website/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@platform/permissions':
+      '@website/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
-      '@platform/ui':
+      '@website/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       next:
@@ -382,19 +382,25 @@ importers:
 
   apps/web:
     dependencies:
-      '@platform/config':
+      '@website/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@website/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@platform/db':
+      '@website/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@platform/domain':
+      '@website/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@platform/observability':
+      '@website/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@platform/ui':
+      '@website/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
+      '@website/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       next:
@@ -429,7 +435,7 @@ importers:
 
   packages/auth:
     dependencies:
-      '@platform/config':
+      '@website/config':
         specifier: workspace:*
         version: link:../config
       firebase-admin:
@@ -450,20 +456,24 @@ importers:
 
   packages/db:
     dependencies:
-      '@platform/apikeys':
+      '@website/apikeys':
         specifier: workspace:*
         version: link:../apikeys
-      '@platform/config':
+      '@website/config':
         specifier: workspace:*
         version: link:../config
-      '@platform/domain':
+      '@website/domain':
         specifier: workspace:*
         version: link:../domain
       firebase-admin:
         specifier: 14.5.0
         version: 14.5.0(supports-color@7.2.0)
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
 
   packages/email: {}
 

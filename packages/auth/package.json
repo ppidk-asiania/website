@@ -1,5 +1,5 @@
 {
-  "name": "@platform/auth",
+  "name": "@website/auth",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@platform/config": "workspace:*",
+    "@website/config": "workspace:*",
     "firebase-admin": "14.5.0"
   }
 }

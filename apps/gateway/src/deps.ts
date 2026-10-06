@@ -1,7 +1,7 @@
-import { createInMemoryRateLimiter } from "@platform/apikeys";
-import { baseEnv, gatewayEnv, loadEnv } from "@platform/config/env";
-import { createMemoryGatewayRepositories } from "@platform/db/memory";
-import { createLogger } from "@platform/observability";
+import { createInMemoryRateLimiter } from "@website/apikeys";
+import { baseEnv, gatewayEnv, loadEnv } from "@website/config/env";
+import { createMemoryGatewayRepositories } from "@website/db/memory";
+import { createLogger } from "@website/observability";
 import type { GatewayDeps } from "./types";
 
 const gatewayEnvSchema = baseEnv.extend(gatewayEnv.shape);

@@ -1,5 +1,5 @@
 {
-  "name": "@platform/domain",
+  "name": "@website/domain",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,14 @@
     "./organizations": "./src/organizations/index.ts",
     "./newsletter": "./src/newsletter/index.ts",
     "./shop": "./src/shop/index.ts",
+    "./members": "./src/members/index.ts",
     "./shared": "./src/shared/index.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
   }
 }

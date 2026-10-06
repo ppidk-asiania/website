@@ -27,7 +27,7 @@ export function isPubliclyVisible(
   return false;
 }
 
-/** Repository port — implemented in @platform/db. */
+/** Repository port — implemented in @website/db. */
 export interface ContentReader {
   findPublishedBySlug(kind: ContentKind, slug: string, now: Date): Promise<ContentItem | null>;
 }

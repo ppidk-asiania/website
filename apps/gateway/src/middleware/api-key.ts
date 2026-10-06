@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { hasScope, verifyApiKey, type ApiScope } from "@platform/apikeys";
+import { hasScope, verifyApiKey, type ApiScope } from "@website/apikeys";
 import { problem } from "../http/problem";
 import type { GatewayDeps, GatewayVariables } from "../types";
 

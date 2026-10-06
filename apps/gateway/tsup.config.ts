@@ -9,5 +9,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   // Bundle workspace packages (they ship TS source); keep third-party deps external.
-  noExternal: [/^@platform\//],
+  noExternal: [/^@website\//],
 });

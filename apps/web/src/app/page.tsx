@@ -1,4 +1,4 @@
-import { AppShell, StatusBadge } from "@platform/ui";
+import { AppShell, StatusBadge } from "@website/ui";
 
 // Public pages are static/ISR so they keep serving even if admin, shop or the database is down.
 export const revalidate = 300;

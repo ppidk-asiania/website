@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { resolveRequestId } from "@platform/observability";
+import { resolveRequestId } from "@website/observability";
 import type { GatewayVariables } from "../types";
 
 export const requestId = createMiddleware<{ Variables: GatewayVariables }>(async (c, next) => {

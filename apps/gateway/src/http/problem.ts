@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { GatewayVariables } from "../types";
-import { PROBLEM_CONTENT_TYPE, ProblemTypes, type ProblemDetails } from "@platform/contracts";
+import { PROBLEM_CONTENT_TYPE, ProblemTypes, type ProblemDetails } from "@website/contracts";
 
 type ProblemKey = keyof typeof ProblemTypes;
 

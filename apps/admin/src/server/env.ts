@@ -7,7 +7,7 @@ import {
   resendEnv,
   sessionEnv,
   zoomEnv,
-} from "@platform/config/env";
+} from "@website/config/env";
 
 const adminEnvSchema = baseEnv
   .extend(firebaseAdminEnv.shape)

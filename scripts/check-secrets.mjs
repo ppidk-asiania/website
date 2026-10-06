@@ -37,7 +37,7 @@ const CONTENT_PATTERNS = [
   [/\bre_[A-Za-z0-9]{16,}_[A-Za-z0-9]{8,}\b/, "Resend API key"],
   [/\b(?:sk|rk)_live_[0-9A-Za-z]{16,}\b/, "live payment secret key"],
   [/\bxnd_(?:production|development)_[0-9A-Za-z]{20,}\b/, "Xendit secret key"],
-  [/\bpk_live_[a-z0-9]{12}_[A-Za-z0-9_-]{43}\b/, "platform live API key"],
+  [/\bpk_live_[a-z0-9]{12}_[A-Za-z0-9_-]{43}\b/, "live gateway API key"],
   [/\bAKIA[0-9A-Z]{16}\b/, "AWS access key"],
   [/\bgh[pousr]_[A-Za-z0-9]{36,}\b/, "GitHub token"],
 ];

@@ -1,11 +1,12 @@
 /**
- * Session cookie policy for staff (admin) sessions.
- * `__Host-` prefix => Secure, Path=/, no Domain: the cookie is bound to admin.example.org
- * and is never sent to web/shop/api subdomains.
+ * Session cookie policy. There is ONE Firebase Auth user pool for everyone (staff, members,
+ * customers), but each app keeps its own session cookie:
+ * `__Host-` prefix => Secure, Path=/, no Domain, so a cookie set by admin.example.org is
+ * never sent to web/shop/api, and a stolen shop session cannot be replayed against admin.
  */
-export const STAFF_SESSION_COOKIE = "__Host-staff_session";
+export const SESSION_COOKIE = "__Host-session";
 
-export function staffSessionCookieOptions(maxAgeHours: number) {
+export function sessionCookieOptions(maxAgeHours: number) {
   return {
     httpOnly: true,
     secure: true,
@@ -15,7 +16,7 @@ export function staffSessionCookieOptions(maxAgeHours: number) {
   };
 }
 
-/** Verified identity. Says WHO someone is — never what they may do. */
+/** Verified identity. Says WHO someone is — never what they may do (that is RBAC, from Firestore). */
 export interface VerifiedIdentity {
   readonly uid: string;
   readonly email: string | null;
@@ -26,7 +27,7 @@ export interface VerifiedIdentity {
 }
 
 /**
- * Identity provider port. Firebase today; the rest of the platform depends only on this.
+ * Identity provider port. Firebase today; the rest of the website depends only on this.
  */
 export interface IdentityProvider {
   /** Exchanges a fresh ID token (from the client SDK) for a server session cookie. */

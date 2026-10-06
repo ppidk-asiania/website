@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: { default: "Platform", template: "%s · Platform" },
+  title: { default: "PPIDK Asia-Oseania", template: "%s · PPIDK Asia-Oseania" },
   description: "Public website",
 };
 

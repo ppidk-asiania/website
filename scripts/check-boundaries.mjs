@@ -3,10 +3,10 @@
  * Architecture boundary check (runs in `pnpm lint` and CI).
  *
  * 1. Every workspace dependency edge must be in ALLOWED.
- * 2. Every `@platform/*` import in source must be (a) declared in that workspace's
+ * 2. Every `@website/*` import in source must be (a) declared in that workspace's
  *    package.json and (b) allowed — no phantom dependencies.
  * 3. No relative import may escape its workspace (e.g. ../../apps/admin/...).
- * 4. Subpath rules (e.g. shop may only use @platform/domain/shop).
+ * 4. Subpath rules (e.g. shop may only use @website/domain/shop).
  * 5. The workspace dependency graph must be acyclic.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -21,7 +21,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  */
 const ALLOWED = {
   // apps
-  web: ["config", "contracts", "db", "domain", "email", "observability", "ui", "auth"],
+  web: [
+    "auth",
+    "config",
+    "contracts",
+    "db",
+    "domain",
+    "email",
+    "observability",
+    "permissions",
+    "ui",
+  ],
   admin: ["audit", "auth", "config", "db", "domain", "email", "observability", "permissions", "ui"],
   shop: ["auth", "config", "db", "domain", "email", "observability", "permissions", "ui"],
   gateway: ["apikeys", "config", "contracts", "db", "domain", "observability"],
@@ -42,7 +52,9 @@ const ALLOWED = {
 /** Subpath restrictions: workspace → package → allowed subpaths. @type {Record<string, Record<string, string[]>>} */
 const SUBPATHS = {
   shop: { domain: ["shop", "shared"] },
-  web: { domain: ["content", "events", "organizations", "newsletter", "shared"] },
+  web: { domain: ["content", "events", "organizations", "newsletter", "members", "shared"] },
+  // Personal data (domain/members) never leaves through the third-party API.
+  gateway: { domain: ["content", "events", "organizations", "shared"] },
 };
 
 /** Packages an app may never depend on, with the reason. @type {Record<string, Record<string, string>>} */
@@ -69,9 +81,9 @@ for (const group of ["apps", "packages"]) {
   }
 }
 
-const shortName = (/** @type {string} */ pkgName) => pkgName.replace(/^@platform\//, "");
+const shortName = (/** @type {string} */ pkgName) => pkgName.replace(/^@website\//, "");
 const isInternal = (/** @type {string} */ name) =>
-  name.startsWith("@platform/") || ["web", "admin", "shop", "gateway"].includes(name);
+  name.startsWith("@website/") || ["web", "admin", "shop", "gateway"].includes(name);
 
 // 1. package.json edges
 /** @type {Map<string, string[]>} */
@@ -92,7 +104,7 @@ for (const ws of workspaces) {
       errors.push(`${ws.group}/${key} → ${target}: apps must never depend on apps.`);
     } else if (!(ALLOWED[key] ?? []).includes(target)) {
       const reason = FORBIDDEN_REASON[key]?.[target] ?? "edge not in ALLOWED matrix";
-      errors.push(`${ws.group}/${key} → @platform/${target}: ${reason}.`);
+      errors.push(`${ws.group}/${key} → @website/${target}: ${reason}.`);
     }
   }
 }
@@ -130,9 +142,9 @@ for (const ws of workspaces) {
         }
         continue;
       }
-      if (!spec.startsWith("@platform/")) continue;
+      if (!spec.startsWith("@website/")) continue;
       const [, pkgShort, ...rest] = spec.split("/");
-      const pkgName = `@platform/${pkgShort}`;
+      const pkgName = `@website/${pkgShort}`;
       if (!declared.has(pkgName))
         errors.push(`${rel}: imports ${spec} but ${pkgName} is not declared in package.json.`);
       if (!(ALLOWED[ws.name] ?? []).includes(pkgShort ?? ""))

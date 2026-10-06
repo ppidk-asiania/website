@@ -1,4 +1,4 @@
-import { AppShell, StatusBadge } from "@platform/ui";
+import { AppShell, StatusBadge } from "@website/ui";
 import { getPrincipal } from "@/server/context";
 
 // Never cache admin pages: every request is authenticated server-side.

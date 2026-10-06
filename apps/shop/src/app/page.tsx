@@ -1,5 +1,5 @@
-import { AppShell, StatusBadge } from "@platform/ui";
-import { money } from "@platform/domain/shop";
+import { AppShell, StatusBadge } from "@website/ui";
+import { money } from "@website/domain/shop";
 
 export const revalidate = 300;
 

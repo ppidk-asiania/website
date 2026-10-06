@@ -1,5 +1,5 @@
 {
-  "name": "@platform/contracts",
+  "name": "@website/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",

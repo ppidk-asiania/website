@@ -10,7 +10,7 @@
 | No browser access to Firestore/Storage | Deny-all `firestore.rules` / `storage.rules`; lint bans `firebase/firestore` etc. in apps                                                                                 |
 | Admin SDK never in browser code        | Firebase imports allowed only in two server adapters; adapters throw if bundled for the browser; app code reaches them only from `src/server/**` (`import "server-only"`) |
 | Server-side authN/Z for admin          | `getPrincipal()` per request + `createGuardedAction` (tests: `admin-guarded-action.test.ts`)                                                                              |
-| Gateway isolated from staff auth       | Lint + boundary check (gateway cannot import `@platform/auth`, `permissions`, `audit`, `ui`)                                                                              |
+| Gateway isolated from staff auth       | Lint + boundary check (gateway cannot import `@website/auth`, `permissions`, `audit`, `ui`)                                                                               |
 | Health endpoints leak nothing          | `{ "status": "ok" }` only (tests)                                                                                                                                         |
 | Security headers                       | `next.config.ts` per app; `secureHeaders()` in gateway                                                                                                                    |
 | Install scripts                        | Denied by default; explicit `allowBuilds` in `pnpm-workspace.yaml`                                                                                                        |
@@ -37,4 +37,4 @@
 
 ## Reporting
 
-Security issues: contact the platform maintainers privately; do not open public issues.
+Security issues: contact the website maintainers privately; do not open public issues.

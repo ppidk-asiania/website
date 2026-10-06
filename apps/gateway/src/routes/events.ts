@@ -4,12 +4,12 @@ import {
   ListEventsQuerySchema,
   ProblemDetailsSchema,
   type EventDto,
-} from "@platform/contracts";
-import { isRegistrationOpen, type PlatformEvent } from "@platform/domain/events";
+} from "@website/contracts";
+import { isRegistrationOpen, type EventEntity } from "@website/domain/events";
 import type { GatewayDeps, GatewayVariables } from "../types";
 
 /** Explicit mapping: domain entity → public DTO. Internal fields are dropped by construction. */
-export function toEventDto(event: PlatformEvent, now: Date): EventDto {
+export function toEventDto(event: EventEntity, now: Date): EventDto {
   return {
     id: event.id,
     slug: event.slug,

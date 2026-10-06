@@ -1,18 +1,29 @@
-# Authorization
+# Authorization (RBAC)
 
-## Model: RBAC with scope
+## Model
 
-- **Permissions** (`packages/permissions/src/permissions.ts`): `<resource>.<action>`, e.g.
-  `events.write`, `news.publish`, `users.manage`, `shop.refund`, `audit.revert`.
-- **Roles** → permissions map in code (reviewed in PRs): `superadmin`, `admin`, `editor`,
-  `chapter_editor`, `shop_manager`, `viewer`. `admin`/`superadmin` are the high-level roles; the
-  rest are granular.
-- **Assignments** (database): `(staffId, role, scope)` where scope is `global` or
-  `{ chapter: id }`.
+- **Permissions** (`packages/permissions/src/permissions.ts`): `<resource>.<action>`.
+  `*_own` permissions apply only to resources the user owns (`ownerId === userId`).
+- **Roles** → permissions map in code (reviewed in PRs).
+- **Assignments** in `users/{uid}.roleAssignments`: `{ role, scope }`, scope `global` or `{ chapter }`.
+
+| Role             | Who                     | Key permissions                                                                              |
+| ---------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
+| `user`           | every account (default) | `profile.*_own`, `events.register`, `registrations.read_own`, `shop.orders.read_own`         |
+| `member`         | approved PPI member     | same self-service (member-only features later)                                               |
+| `viewer`         | staff                   | `admin.access`, read content/news/events/gallery                                             |
+| `chapter_editor` | staff, chapter-scoped   | write content/news/events/gallery in their chapter                                           |
+| `editor`         | staff                   | + `news.publish`, `newsletter.write`                                                         |
+| `chapter_admin`  | staff, chapter-scoped   | + `members.read`, `members.read_pii`, `members.approve`, `registrants.read` in their chapter |
+| `shop_manager`   | staff                   | `shop.products.write`, `shop.orders.manage`                                                  |
+| `admin`          | staff                   | everything except `users.manage`, `apikeys.manage`, `shop.refund`, `members.export`          |
+| `superadmin`     | 2–3 people              | everything                                                                                   |
 
 ```ts
-can(principal, "events.write", { chapterId: "jp" }); // boolean, deny by default
-requirePermission(principal, "news.publish"); // throws Unauthenticated/Forbidden
+can(principal, "events.write", { chapterId: "jp" });
+can(principal, "profile.write_own", { ownerId: principal.userId });
+canAccessAdmin(principal); // any staff role
+requirePermission(principal, "news.publish");
 canAssignRole(principal, "editor"); // anti-escalation
 ```
 
@@ -20,9 +31,7 @@ canAssignRole(principal, "editor"); // anti-escalation
 
 - Evaluated **server-side only**. Never trust hidden buttons, client route guards, client
   state, a Firebase login alone, URL params, or role fields in payloads (tested).
-- UI may _hide_ things for UX by calling server-provided capability flags, but the server check
-  is the only one that counts. No authorization logic inside UI components.
-- Every admin mutation uses `createGuardedAction({ permission, input, resource?, handler })`.
-- Third-party scopes (`events.read`, `registrations.write`) are a separate vocabulary in
-  `@platform/apikeys`.
-- Superadmins: keep 2–3; the last one cannot be demoted; role changes emit security events.
+- Every admin mutation uses `createGuardedAction` (staff role → validation → permission).
+- Third-party API scopes (`events.read`, `registrations.write`) are a separate vocabulary in
+  `@website/apikeys`.
+- Keep 2–3 superadmins; the last one cannot be demoted; role changes emit security events.

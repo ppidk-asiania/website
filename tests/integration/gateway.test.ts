@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createInMemoryRateLimiter, generateApiKey } from "@platform/apikeys";
-import { EventPageSchema, ProblemDetailsSchema } from "@platform/contracts";
-import { createMemoryGatewayRepositories } from "@platform/db/memory";
-import { createLogger } from "@platform/observability";
+import { createInMemoryRateLimiter, generateApiKey } from "@website/apikeys";
+import { EventPageSchema, ProblemDetailsSchema } from "@website/contracts";
+import { createMemoryGatewayRepositories } from "@website/db/memory";
+import { createLogger } from "@website/observability";
 import { createGatewayApp } from "../../apps/gateway/src/app";
 
 const pepper = "integration-pepper-0123456789abcdef012345";

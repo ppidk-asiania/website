@@ -12,7 +12,7 @@ Local emulators (optional, requires the Firebase CLI and Java):
 
 ```bash
 cd infrastructure/firebase
-firebase emulators:start --project demo-platform
+firebase emulators:start --project demo-ppidk-website
 ```
 
 `demo-*` project IDs never touch real cloud resources. Deploy rules explicitly and per alias:

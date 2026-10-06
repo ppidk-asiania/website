@@ -10,7 +10,7 @@ automatically by this repository. Start with:
 
 ## Provisioning checklist (one-time, per environment)
 
-- [ ] Firebase projects `ppidk-platform-staging` and `ppidk-platform-prod` (Blaze plan), owned by ≥2 people with MFA
+- [ ] Firebase projects `ppidk-website-staging` and `ppidk-website-prod` (Blaze plan), owned by ≥2 people with MFA
 - [ ] Separate service accounts per app role: `web-ro`, `admin-rw`, `shop-rw`, `gateway-rw` (least privilege)
 - [ ] Prefer Vercel OIDC → GCP Workload Identity Federation over JSON keys
 - [ ] Deploy deny-all `firestore.rules` and `storage.rules`

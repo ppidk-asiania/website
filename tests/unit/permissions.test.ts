@@ -1,49 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { can, canAssignRole, requirePermission, type Principal } from "@platform/permissions";
+import {
+  can,
+  canAccessAdmin,
+  canAssignRole,
+  DEFAULT_ROLE_ASSIGNMENTS,
+  requirePermission,
+  type Principal,
+} from "@website/permissions";
 
-const staff = (assignments: Principal["assignments"], active = true): Principal => ({
-  kind: "staff",
-  staffId: "s1",
-  uid: "u1",
+const user = (assignments: Principal["assignments"], active = true): Principal => ({
+  kind: "user",
+  userId: "u1",
   active,
   assignments,
 });
+const global = { type: "global" } as const;
 
-describe("permissions", () => {
+describe("RBAC", () => {
   it("denies by default and for null/inactive principals", () => {
     expect(can(null, "events.read")).toBe(false);
+    expect(can(user([{ role: "superadmin", scope: global }], false), "events.read")).toBe(false);
+    expect(can(user([]), "events.read")).toBe(false);
+  });
+
+  it("one user pool: plain users and members are not staff", () => {
+    expect(canAccessAdmin(user(DEFAULT_ROLE_ASSIGNMENTS))).toBe(false);
+    expect(canAccessAdmin(user([{ role: "member", scope: global }]))).toBe(false);
+    expect(canAccessAdmin(user([{ role: "viewer", scope: global }]))).toBe(true);
+  });
+
+  it("*_own permissions only apply to the user's own resources", () => {
+    const u = user(DEFAULT_ROLE_ASSIGNMENTS);
+    expect(can(u, "profile.write_own", { ownerId: "u1" })).toBe(true);
+    expect(can(u, "profile.write_own", { ownerId: "someone-else" })).toBe(false);
+    expect(can(u, "profile.write_own")).toBe(false);
+    // even a superadmin edits OTHER people's data via admin permissions, not *_own
     expect(
-      can(staff([{ role: "superadmin", scope: { type: "global" } }], false), "events.read"),
+      can(user([{ role: "superadmin", scope: global }]), "profile.write_own", { ownerId: "x" }),
     ).toBe(false);
-    expect(can(staff([]), "events.read")).toBe(false);
   });
 
   it("grants granular permissions through roles", () => {
-    const editor = staff([{ role: "editor", scope: { type: "global" } }]);
+    const editor = user([{ role: "editor", scope: global }]);
     expect(can(editor, "news.publish")).toBe(true);
+    expect(can(editor, "members.read_pii")).toBe(false);
     expect(can(editor, "users.manage")).toBe(false);
-    expect(can(editor, "shop.refund")).toBe(false);
   });
 
-  it("scopes chapter roles to their chapter", () => {
-    const chapterEditor = staff([
-      { role: "chapter_editor", scope: { type: "chapter", chapterId: "jp" } },
-    ]);
-    expect(can(chapterEditor, "events.write", { chapterId: "jp" })).toBe(true);
-    expect(can(chapterEditor, "events.write", { chapterId: "au" })).toBe(false);
-    expect(can(chapterEditor, "events.write")).toBe(false);
+  it("scopes chapter roles to their chapter, including member personal data", () => {
+    const jp = user([{ role: "chapter_admin", scope: { type: "chapter", chapterId: "jp" } }]);
+    expect(can(jp, "members.read_pii", { chapterId: "jp" })).toBe(true);
+    expect(can(jp, "members.read_pii", { chapterId: "au" })).toBe(false);
+    expect(can(jp, "members.export", { chapterId: "jp" })).toBe(false);
   });
 
   it("requirePermission throws for missing permission", () => {
     expect(() =>
-      requirePermission(staff([{ role: "viewer", scope: { type: "global" } }]), "news.publish"),
+      requirePermission(user([{ role: "viewer", scope: global }]), "news.publish"),
     ).toThrow(/Missing permission/);
   });
 
   it("prevents privilege escalation when assigning roles", () => {
-    const admin = staff([{ role: "admin", scope: { type: "global" } }]);
-    const superadmin = staff([{ role: "superadmin", scope: { type: "global" } }]);
+    const admin = user([{ role: "admin", scope: global }]);
+    const superadmin = user([{ role: "superadmin", scope: global }]);
     expect(canAssignRole(admin, "editor")).toBe(false); // admin lacks users.manage
     expect(canAssignRole(superadmin, "superadmin")).toBe(true);
+    expect(canAssignRole(superadmin, "member")).toBe(true);
   });
 });

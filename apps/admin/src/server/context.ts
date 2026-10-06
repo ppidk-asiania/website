@@ -1,20 +1,21 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { STAFF_SESSION_COOKIE } from "@platform/auth";
-import { createFirebaseIdentityProvider } from "@platform/auth/firebase-admin";
-import type { Principal } from "@platform/permissions";
+import { SESSION_COOKIE } from "@website/auth";
+import { createFirebaseIdentityProvider } from "@website/auth/firebase-admin";
+import { canAccessAdmin, type Principal } from "@website/permissions";
 import { getAdminEnv } from "./env";
-import { denyAllStaffDirectory, type StaffDirectory } from "./staff-directory";
+import { denyAllUserDirectory, type UserDirectory } from "./user-directory";
 
-const staffDirectory: StaffDirectory = denyAllStaffDirectory;
+const userDirectory: UserDirectory = denyAllUserDirectory;
 
 /**
  * Resolves the current principal on the server for every request:
- * session cookie → Firebase verification (with revocation check) → staff record in DB.
+ * session cookie → Firebase verification (with revocation check) → user record + roles in Firestore.
+ * Returns null unless the user holds a staff role (`admin.access`).
  * Never trusts client state, token claims, URL params or payload role fields.
  */
 export async function getPrincipal(): Promise<Principal | null> {
-  const cookie = (await cookies()).get(STAFF_SESSION_COOKIE)?.value;
+  const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!cookie) return null;
 
   const env = getAdminEnv();
@@ -27,5 +28,6 @@ export async function getPrincipal(): Promise<Principal | null> {
   }).verifySessionCookie(cookie);
   if (!identity) return null;
 
-  return staffDirectory.findPrincipalByUid(identity.uid);
+  const principal = await userDirectory.findPrincipalByUid(identity.uid);
+  return canAccessAdmin(principal) ? principal : null;
 }

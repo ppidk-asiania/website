@@ -6,7 +6,7 @@ import {
   loadEnv,
   paymentEnv,
   resendEnv,
-} from "@platform/config/env";
+} from "@website/config/env";
 
 const shopEnvSchema = baseEnv
   .extend(firebaseAdminEnv.shape)

@@ -2,12 +2,12 @@
 
 One Vercel project per deployable, all pointing at this repository:
 
-| Vercel project     | Root directory | Domain              | Template              |
-| ------------------ | -------------- | ------------------- | --------------------- |
-| `platform-web`     | `apps/web`     | `web.example.org`   | `web.vercel.json`     |
-| `platform-admin`   | `apps/admin`   | `admin.example.org` | `admin.vercel.json`   |
-| `platform-shop`    | `apps/shop`    | `shop.example.org`  | `shop.vercel.json`    |
-| `platform-gateway` | `apps/gateway` | `api.example.org`   | `gateway.vercel.json` |
+| Vercel project          | Root directory | Domain              | Template              |
+| ----------------------- | -------------- | ------------------- | --------------------- |
+| `ppidk-website-web`     | `apps/web`     | `web.example.org`   | `web.vercel.json`     |
+| `ppidk-website-admin`   | `apps/admin`   | `admin.example.org` | `admin.vercel.json`   |
+| `ppidk-website-shop`    | `apps/shop`    | `shop.example.org`  | `shop.vercel.json`    |
+| `ppidk-website-gateway` | `apps/gateway` | `api.example.org`   | `gateway.vercel.json` |
 
 Copy a template to `apps/<app>/vercel.json` when creating the project (kept here so the
 apps stay deployment-agnostic until then). `turbo-ignore` skips a deployment when nothing

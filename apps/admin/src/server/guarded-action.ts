@@ -1,14 +1,15 @@
 import type { z } from "zod";
 import {
+  canAccessAdmin,
   requirePermission,
   type Permission,
   type Principal,
   type ResourceContext,
-} from "@platform/permissions";
+} from "@website/permissions";
 
 /**
  * The ONLY way to define an admin mutation. Order is fixed:
- * authenticate → authorize → validate → business logic (which writes the audit record
+ * authenticate (+ staff role) → validate → authorize → business logic (which writes the audit record
  * in the same transaction).
  *
  * Kept free of `server-only` so it is unit-testable; it is wired in ./context.ts.
@@ -31,6 +32,8 @@ export function createGuardedAction<S extends z.ZodType, T>(definition: {
     async (rawInput: unknown): Promise<GuardedResult<T>> => {
       const principal = await getPrincipal();
       if (principal === null || !principal.active) return { ok: false, error: "unauthenticated" };
+      // One user pool: a member or customer account is authenticated but is not staff.
+      if (!canAccessAdmin(principal)) return { ok: false, error: "forbidden" };
 
       // Validate before resource-scoped authorization (scope may depend on input),
       // but never reveal validation details to unauthenticated callers.

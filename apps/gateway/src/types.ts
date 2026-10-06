@@ -1,6 +1,6 @@
-import type { ApiKeyRecord, ApiKeyStore, KeyEnvironment, RateLimiter } from "@platform/apikeys";
-import type { EventReader } from "@platform/domain/events";
-import type { Logger } from "@platform/observability";
+import type { ApiKeyRecord, ApiKeyStore, KeyEnvironment, RateLimiter } from "@website/apikeys";
+import type { EventReader } from "@website/domain/events";
+import type { Logger } from "@website/observability";
 
 /** Everything the gateway needs, injected. The gateway has NO access to admin/staff auth. */
 export interface GatewayDeps {

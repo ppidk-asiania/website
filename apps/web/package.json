@@ -11,11 +11,13 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@platform/config": "workspace:*",
-    "@platform/db": "workspace:*",
-    "@platform/domain": "workspace:*",
-    "@platform/observability": "workspace:*",
-    "@platform/ui": "workspace:*",
+    "@website/auth": "workspace:*",
+    "@website/config": "workspace:*",
+    "@website/db": "workspace:*",
+    "@website/domain": "workspace:*",
+    "@website/observability": "workspace:*",
+    "@website/permissions": "workspace:*",
+    "@website/ui": "workspace:*",
     "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",

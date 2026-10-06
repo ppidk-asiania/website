@@ -1,6 +1,6 @@
 {
   "projects": {
-    "staging": "ppidk-platform-staging",
-    "production": "ppidk-platform-prod"
+    "staging": "ppidk-website-staging",
+    "production": "ppidk-website-prod"
   }
 }

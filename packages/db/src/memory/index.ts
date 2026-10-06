@@ -1,5 +1,5 @@
-import type { ApiKeyRecord } from "@platform/apikeys";
-import type { PlatformEvent } from "@platform/domain/events";
+import type { ApiKeyRecord } from "@website/apikeys";
+import type { EventEntity } from "@website/domain/events";
 import type { GatewayRepositories } from "../roles";
 
 /**
@@ -8,7 +8,7 @@ import type { GatewayRepositories } from "../roles";
  */
 export function createMemoryGatewayRepositories(
   seed: {
-    events?: readonly PlatformEvent[];
+    events?: readonly EventEntity[];
     apiKeys?: readonly ApiKeyRecord[];
   } = {},
 ): GatewayRepositories {

@@ -1,6 +1,6 @@
 /**
- * Shop module. MUST stay self-contained (no imports from other domain modules)
- * so it can be extracted — e.g. moved onto PostgreSQL — without touching the rest.
+ * Shop module (Firestore). MUST stay self-contained (no imports from other domain modules)
+ * so it can be extracted later without touching the rest.
  * Enforced by eslint (see eslint.config.mjs).
  */
 export type CurrencyCode = string; // ISO 4217

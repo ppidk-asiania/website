@@ -1,7 +1,7 @@
 /**
  * Firestore access is confined to this folder. No other package or app may import
- * `firebase-admin/firestore` (lint-enforced), so the backing store can change —
- * e.g. the shop moving to PostgreSQL — without touching domain or UI code.
+ * `firebase-admin/firestore` (lint-enforced), so storage details stay out of
+ * domain and UI code.
  */
 import {
   applicationDefault,
@@ -12,11 +12,11 @@ import {
   type App,
 } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { assertEnvironmentIsolation, type AppEnvironment } from "@platform/config";
+import { assertEnvironmentIsolation, type AppEnvironment } from "@website/config";
 import type { DatabaseRole } from "../roles";
 
 if ("window" in globalThis) {
-  throw new Error("@platform/db must never be bundled into browser code.");
+  throw new Error("@website/db must never be bundled into browser code.");
 }
 
 export interface FirestoreConfig {
@@ -35,7 +35,7 @@ export function getFirestoreForRole(config: FirestoreConfig): Firestore {
     firebaseProjectId: config.projectId,
     emulatorHost: config.emulatorHost,
   });
-  const name = `platform-db-${config.role}`;
+  const name = `website-db-${config.role}`;
   const app: App = getApps().some((a) => a.name === name)
     ? getApp(name)
     : initializeApp(
@@ -57,4 +57,4 @@ export function getFirestoreForRole(config: FirestoreConfig): Firestore {
 
 // Repository implementations (events, content, chapters, apiKeys, audit) are added
 // in the next phase, after the data model is validated. They implement the ports
-// declared in @platform/domain and are exposed per role via ../roles.ts.
+// declared in @website/domain and are exposed per role via ../roles.ts.

@@ -11,11 +11,11 @@ import {
   type App,
 } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { assertEnvironmentIsolation, type AppEnvironment } from "@platform/config";
+import { assertEnvironmentIsolation, type AppEnvironment } from "@website/config";
 import type { IdentityProvider, VerifiedIdentity } from "./session";
 
 if ("window" in globalThis) {
-  throw new Error("@platform/auth/firebase-admin must never be bundled into browser code.");
+  throw new Error("@website/auth/firebase-admin must never be bundled into browser code.");
 }
 
 export interface FirebaseAdminConfig {
@@ -26,7 +26,7 @@ export interface FirebaseAdminConfig {
   readonly authEmulatorHost?: string | undefined;
 }
 
-const APP_NAME = "platform-auth";
+const APP_NAME = "website-auth";
 
 function adminApp(config: FirebaseAdminConfig): App {
   assertEnvironmentIsolation({

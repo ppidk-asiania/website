@@ -28,8 +28,7 @@ feature branch → PR → CI (format, lint+boundaries, typecheck, test, build, s
 ## Migrations
 
 Firestore has no schema migrations: use versioned scripts (`infrastructure/` in a later phase)
-plus a `schemaVersion` field and tolerant readers. If the shop moves to PostgreSQL, its
-migrations run in CI before deploy.
+plus a `schemaVersion` field and tolerant readers.
 
 ## Feature flags
 

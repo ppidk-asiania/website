@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import * as audit from "@platform/audit";
+import * as audit from "@website/audit";
 import {
   buildRevertEvent,
   diffSnapshots,
   evaluateRevert,
   REVERT_WINDOW_MS,
   type AuditEvent,
-} from "@platform/audit";
+} from "@website/audit";
 
 const DAY = 24 * 60 * 60 * 1000;
 const base: AuditEvent = {

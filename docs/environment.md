@@ -4,8 +4,8 @@
 | ------------- | ------------------------ | ----------------------------------- | -------------- |
 | `development` | Your machine             | Emulators (`demo-*`) or **staging** | Fake / staging |
 | `test`        | CI, Playwright           | None (in-memory adapters)           | Fake           |
-| `staging`     | Vercel Preview + Staging | `ppidk-platform-staging`            | Staging only   |
-| `production`  | Vercel Production        | `ppidk-platform-prod`               | Real           |
+| `staging`     | Vercel Preview + Staging | `ppidk-website-staging`             | Staging only   |
+| `production`  | Vercel Production        | `ppidk-website-prod`                | Real           |
 
 `APP_ENV` is ours; `NODE_ENV` is "production" for every optimized build and must not be used
 to tell staging from production.

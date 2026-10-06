@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EnvironmentIsolationError } from "@platform/config";
-import { baseEnv, EnvValidationError, firebaseAdminEnv, loadEnv } from "@platform/config/env";
+import { EnvironmentIsolationError } from "@website/config";
+import { baseEnv, EnvValidationError, firebaseAdminEnv, loadEnv } from "@website/config/env";
 
 const schema = baseEnv.extend(firebaseAdminEnv.shape);
 
@@ -14,32 +14,31 @@ describe("environment validation", () => {
   it("never lets staging/development use the production Firebase project", () => {
     for (const appEnv of ["development", "test", "staging"]) {
       expect(() =>
-        loadEnv(schema, { APP_ENV: appEnv, FIREBASE_PROJECT_ID: "ppidk-platform-prod" }),
+        loadEnv(schema, { APP_ENV: appEnv, FIREBASE_PROJECT_ID: "ppidk-website-prod" }),
       ).toThrow(EnvironmentIsolationError);
     }
   });
 
   it("requires production to use a registered production project and no emulators", () => {
     expect(() =>
-      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-platform-staging" }),
+      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-website-staging" }),
     ).toThrow(EnvironmentIsolationError);
     expect(() =>
       loadEnv(schema, {
         APP_ENV: "production",
-        FIREBASE_PROJECT_ID: "ppidk-platform-prod",
+        FIREBASE_PROJECT_ID: "ppidk-website-prod",
         FIRESTORE_EMULATOR_HOST: "localhost:8080",
       }),
     ).toThrow(EnvironmentIsolationError);
     expect(
-      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-platform-prod" })
-        .APP_ENV,
+      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-website-prod" }).APP_ENV,
     ).toBe("production");
   });
 
   it("accepts staging with the staging project", () => {
     expect(
-      loadEnv(schema, { APP_ENV: "staging", FIREBASE_PROJECT_ID: "ppidk-platform-staging" })
+      loadEnv(schema, { APP_ENV: "staging", FIREBASE_PROJECT_ID: "ppidk-website-staging" })
         .FIREBASE_PROJECT_ID,
-    ).toBe("ppidk-platform-staging");
+    ).toBe("ppidk-website-staging");
   });
 });
