@@ -8,24 +8,26 @@ apps whose dependency graph did not change.
 
 ## Branches and flow
 
-| Branch                          | Purpose                                           | Deploys to                          | Firebase project        |
-| ------------------------------- | ------------------------------------------------- | ----------------------------------- | ----------------------- |
-| `feature/*`, `fix/*`, `chore/*` | One change each, short-lived, branched from `dev` | Vercel Preview                      | `ppidk-website-staging` |
-| `dev`                           | Integration of finished work                      | Vercel Preview (dev branch)         | `ppidk-website-staging` |
-| `staging`                       | Release candidate, tested by the team             | Vercel Staging (custom environment) | `ppidk-website-staging` |
-| `prod`                          | What is live (default branch)                     | Vercel Production                   | `ppidk-website-prod`    |
+There are exactly three branches. **Do not create other branches** (no feature/fix branches).
+
+| Branch    | Purpose                               | Deploys to                          | Firebase project        |
+| --------- | ------------------------------------- | ----------------------------------- | ----------------------- |
+| `dev`     | All day-to-day work is committed here | Vercel Preview (dev branch)         | `ppidk-website-staging` |
+| `staging` | Release candidate, tested by the team | Vercel Staging (custom environment) | `ppidk-website-staging` |
+| `prod`    | What is live (default branch)         | Vercel Production                   | `ppidk-website-prod`    |
 
 ```text
-feature/* ─PR─▶ dev ─PR─▶ staging ─PR─▶ prod
-              CI on every PR and push: format, lint+boundaries, typecheck, test, build, secrets, e2e
+commit + push to dev ─PR─▶ staging ─PR─▶ prod
+CI runs on every push and PR: format, lint+boundaries, typecheck, test, build, secrets, e2e
 ```
 
-- Changes only move forward by pull request: `feature → dev → staging → prod`. Never commit
-  directly to `dev`, `staging` or `prod`, and never merge `dev` straight into `prod`.
-- Hotfix: branch from `prod`, PR into `prod`, then merge `prod` back into `staging` and `dev`.
-- Protect `dev`, `staging` and `prod` on GitHub: require a PR, require the **CI** check, block
-  force pushes and deletion. `prod` additionally requires ≥ 1 approving review.
-- Dependabot PRs target `dev`.
+- Run `pnpm verify` before every push to `dev`; CI re-checks it.
+- `staging` and `prod` change only through a PR from the branch before them
+  (`dev → staging`, `staging → prod`). Never push directly to them.
+- Urgent fix: commit it to `dev`, then promote with the same two PRs.
+- GitHub protection: `staging` and `prod` require a PR + the **CI** check (plus ≥ 1 approval on
+  `prod`); all three block force pushes and deletion.
+- Dependency updates are done by hand (no Dependabot version-update branches).
 
 ## Rollback
 
