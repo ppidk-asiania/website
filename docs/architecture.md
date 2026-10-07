@@ -36,6 +36,7 @@ Internal Server Actions and Route Handlers in web/admin/shop are same-origin onl
 
 | Package         | Responsibility                                                                                          | Depends on                    |
 | --------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `security`      | Per-IP rate limiting, origin restriction, input sanitization, safe errors, private caching              | `zod` only                    |
 | `config`        | Zod env schemas, environment-isolation guard, shared tsconfigs                                          | —                             |
 | `contracts`     | External API DTOs, errors (RFC 9457), pagination, versions (Zod → OpenAPI)                              | —                             |
 | `domain`        | Business rules + ports, by module: `content`, `events`, `organizations`, `newsletter`, `shop`, `shared` | —                             |
@@ -64,17 +65,19 @@ Enforced by tooling, not just this document:
 Approved matrix:
 
 ```text
-web      → auth, config, contracts, db, domain(content|events|organizations|newsletter|members|shared), email, observability, permissions, ui
-admin    → audit, auth, config, db, domain, email, observability, permissions, ui
-shop     → auth, config, db, domain(shop|shared), email, observability, permissions, ui
-gateway  → apikeys, config, contracts, db, domain(content|events|organizations|shared), observability
-auth     → config
-db       → apikeys, config, domain
-others   → (none)
+web       → auth, config, contracts, db, domain(content|events|organizations|newsletter|members|shared), email, observability, permissions, security, ui
+admin     → audit, auth, config, db, domain, email, observability, permissions, security, ui
+shop      → auth, config, db, domain(shop|shared), email, observability, permissions, security, ui
+gateway   → apikeys, config, contracts, db, domain(content|events|organizations|shared), observability, security
+auth      → config, security
+db        → apikeys, config, domain, security
+domain    → security(validation)
+contracts → security(validation)
+others    → (none)
 ```
 
 Forbidden (fails lint): app → app, package → app, gateway → auth/permissions/audit/ui/email/domain-members (no personal data via the API),
-shop → non-shop domain, domain → React/Next/Hono/Vercel/Firebase/any workspace package,
+shop → non-shop domain, domain → React/Next/Hono/Vercel/Firebase/any workspace package except `@website/security/validation`,
 domain/shop ↔ other domain modules, any Firebase import outside `packages/db/src/firestore/**`
 and `packages/auth/src/firebase-admin.ts`, infrastructure (`@website/db`, `@website/email`,
 Firebase admin adapter) from app code outside `src/server/**`.

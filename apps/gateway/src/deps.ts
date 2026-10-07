@@ -1,10 +1,11 @@
-import { createInMemoryRateLimiter } from "@website/apikeys";
-import { baseEnv, gatewayEnv, loadEnv } from "@website/config/env";
+import { randomBytes } from "node:crypto";
+import { baseEnv, gatewayEnv, loadEnv, rateLimitEnv } from "@website/config/env";
 import { createMemoryGatewayRepositories } from "@website/db/memory";
 import { createLogger } from "@website/observability";
+import { createMemoryRateLimitStore } from "@website/security";
 import type { GatewayDeps } from "./types";
 
-const gatewayEnvSchema = baseEnv.extend(gatewayEnv.shape);
+const gatewayEnvSchema = baseEnv.extend(gatewayEnv.shape).extend(rateLimitEnv.shape);
 
 /**
  * Composition root. Development/test use in-memory adapters; staging/production refuse
@@ -22,7 +23,8 @@ export function createDepsFromEnv(
     logger: createLogger({ service: "gateway", level: env.LOG_LEVEL }),
     apiKeys: repos.apiKeys,
     events: repos.events,
-    rateLimiter: createInMemoryRateLimiter(),
+    rateLimitStore: createMemoryRateLimitStore(),
+    rateLimitSecret: env.RATE_LIMIT_SECRET ?? randomBytes(32).toString("hex"),
     apiKeyPepper: env.API_KEY_PEPPER,
     keyEnvironment: "test",
     defaultRateLimitPerMinute: env.GATEWAY_RATE_LIMIT_PER_MINUTE,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeText } from "@website/security/validation";
 import type { EntityMeta } from "../shared";
 
 /**
@@ -24,7 +25,8 @@ export const EDUCATION_LEVELS = [
 ] as const;
 export type EducationLevel = (typeof EDUCATION_LEVELS)[number];
 
-const trimmed = (max: number) => z.string().trim().min(1).max(max);
+/** Every free-text field is sanitized (Unicode-normalized, control characters removed, no HTML). */
+const trimmed = (max: number) => safeText(max);
 
 /** E.164, e.g. +6281234567890. WhatsApp and emergency numbers must include the country code. */
 export const PhoneE164Schema = z
@@ -54,10 +56,10 @@ export const TimezoneSchema = z
 export const AddressAbroadSchema = z
   .object({
     line1: trimmed(200),
-    line2: z.string().trim().max(200).optional(),
+    line2: trimmed(200).optional(),
     city: trimmed(100),
-    stateOrProvince: z.string().trim().max(100).optional(),
-    postalCode: z.string().trim().max(20).optional(),
+    stateOrProvince: trimmed(100).optional(),
+    postalCode: trimmed(20).optional(),
     countryCode: CountryCodeSchema,
   })
   .strict();
@@ -65,7 +67,7 @@ export const AddressAbroadSchema = z
 export const AddressIndonesiaSchema = z
   .object({
     line1: trimmed(200), // jalan, nomor, RT/RW
-    line2: z.string().trim().max(200).optional(), // kelurahan/desa, kecamatan
+    line2: trimmed(200).optional(), // kelurahan/desa, kecamatan
     city: trimmed(100), // kota/kabupaten
     province: trimmed(100),
     postalCode: z
@@ -79,8 +81,8 @@ export const AddressIndonesiaSchema = z
 export const EmergencyContactSchema = z
   .object({
     phone: PhoneE164Schema,
-    name: z.string().trim().max(200).optional(),
-    relationship: z.string().trim().max(100).optional(),
+    name: trimmed(200).optional(),
+    relationship: trimmed(100).optional(),
   })
   .strict();
 

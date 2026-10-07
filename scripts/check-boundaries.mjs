@@ -30,23 +30,46 @@ const ALLOWED = {
     "email",
     "observability",
     "permissions",
+    "security",
     "ui",
   ],
-  admin: ["audit", "auth", "config", "db", "domain", "email", "observability", "permissions", "ui"],
-  shop: ["auth", "config", "db", "domain", "email", "observability", "permissions", "ui"],
-  gateway: ["apikeys", "config", "contracts", "db", "domain", "observability"],
+  admin: [
+    "audit",
+    "auth",
+    "config",
+    "db",
+    "domain",
+    "email",
+    "observability",
+    "permissions",
+    "security",
+    "ui",
+  ],
+  shop: [
+    "auth",
+    "config",
+    "db",
+    "domain",
+    "email",
+    "observability",
+    "permissions",
+    "security",
+    "ui",
+  ],
+  gateway: ["apikeys", "config", "contracts", "db", "domain", "observability", "security"],
   // packages
   config: [],
-  contracts: [],
-  domain: [],
+  security: [],
+  contracts: ["security"],
+  domain: ["security"],
   permissions: [],
   audit: [],
   apikeys: [],
   email: [],
   observability: [],
   ui: [],
-  auth: ["config"],
-  db: ["apikeys", "config", "domain"],
+  auth: ["config", "security"],
+  db: ["apikeys", "config", "domain", "security"],
 };
 
 /** Subpath restrictions: workspace → package → allowed subpaths. @type {Record<string, Record<string, string[]>>} */
@@ -55,6 +78,9 @@ const SUBPATHS = {
   web: { domain: ["content", "events", "organizations", "newsletter", "members", "shared"] },
   // Personal data (domain/members) never leaves through the third-party API.
   gateway: { domain: ["content", "events", "organizations", "shared"] },
+  // The innermost layers may only use the framework-free sanitization helpers.
+  domain: { security: ["validation"] },
+  contracts: { security: ["validation"] },
 };
 
 /** Packages an app may never depend on, with the reason. @type {Record<string, Record<string, string>>} */

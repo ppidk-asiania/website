@@ -30,6 +30,11 @@ every request: cookie → verifySessionCookie(checkRevoked) → users/{uid} role
 - Same accounts everywhere, but **separate cookies per app** (`__Host-` = host-only):
   a session on `shop.` or `web.` is never sent to `admin.`.
 - Admin additionally requires a staff role (`canAccessAdmin`); members get "not authorized".
+- Endpoint (web, admin, shop): `POST /api/session` with `{ "idToken": "<Firebase ID token>" }` →
+  `204` + cookie; invalid body `400`; invalid/expired token `401` (reason not disclosed).
+  `DELETE /api/session` → revokes all sessions of the user and clears the cookie.
+  Implemented once in `packages/auth/src/session-routes.ts`; each app's `src/app/api/session/route.ts` wires it.
+- The body accepts only `idToken` — the uid always comes from the verified token.
 - Sign-out and role changes revoke refresh tokens (`revokeSessions`).
 - Sensitive actions require a recent sign-in (`isRecentSignIn`, ≤ 15 min).
 - `proxy.ts` (middleware) is never relied on for authentication or authorization.

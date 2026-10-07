@@ -20,6 +20,7 @@ Request and response schemas of the public API.
 
 - A breaking change needs a new API version; never edit `v1` shapes incompatibly.
 - DTOs list fields explicitly — internal fields must never leak.
+- Inputs use `safeText` / `safeId` from `@website/security/validation`.
 
 ## Commands
 

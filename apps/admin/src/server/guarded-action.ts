@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { toPublicError } from "@website/security";
 import {
   canAccessAdmin,
   requirePermission,
@@ -18,7 +19,7 @@ export type GuardedResult<T> =
   | { readonly ok: true; readonly data: T }
   | {
       readonly ok: false;
-      readonly error: "unauthenticated" | "forbidden" | "invalid_input";
+      readonly error: "unauthenticated" | "forbidden" | "invalid_input" | "conflict";
       readonly issues?: readonly string[];
     };
 
@@ -50,6 +51,12 @@ export function createGuardedAction<S extends z.ZodType, T>(definition: {
       } catch {
         return { ok: false, error: "forbidden" };
       }
-      return { ok: true, data: await definition.handler(parsed.data, principal) };
+      try {
+        return { ok: true, data: await definition.handler(parsed.data, principal) };
+      } catch (error) {
+        // Race condition: the document changed since it was read (optimistic concurrency).
+        if (toPublicError(error).code === "conflict") return { ok: false, error: "conflict" };
+        throw error; // unexpected: Next.js logs it and shows the client a generic error
+      }
     };
 }

@@ -98,3 +98,15 @@ describe("event registrations", () => {
     expect(nextRegistrationStatus({ capacity: null }, 999)).toBe("confirmed");
   });
 });
+
+describe("member profile sanitization", () => {
+  it("rejects HTML/script in free-text fields and strips control characters", () => {
+    expect(schema.safeParse({ ...valid, fullName: "<img src=x onerror=alert(1)>" }).success).toBe(
+      false,
+    );
+    expect(schema.safeParse({ ...valid, university: "Kyoto <b>University</b>" }).success).toBe(
+      false,
+    );
+    expect(schema.parse({ ...valid, fullName: "Siti\u0000 Rahma‮" }).fullName).toBe("Siti Rahma");
+  });
+});

@@ -41,24 +41,26 @@ Run one app: `pnpm --filter web dev` (or `admin`, `shop`, `gateway`).
 
 ## Commands
 
-| Command                        | What it does                                                        |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `pnpm dev`                     | All four apps in watch mode                                         |
-| `pnpm build`                   | Production build of every app (Turborepo-cached)                    |
-| `pnpm lint`                    | ESLint (type-aware) + architecture boundary check                   |
-| `pnpm lint:boundaries`         | Boundary check only (`--graph` to print)                            |
-| `pnpm typecheck`               | `tsc` in every workspace + root tests/scripts                       |
-| `pnpm test`                    | Vitest: `tests/unit` + `tests/integration`                          |
-| `pnpm test:e2e`                | Playwright smoke against production builds (run `pnpm build` first) |
-| `pnpm format` / `format:check` | Prettier                                                            |
-| `pnpm check:secrets`           | Secret scan of everything that would be committed                   |
-| `pnpm verify`                  | Everything above, in CI order                                       |
+| Command                        | What it does                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                     | All four apps in watch mode                                                                        |
+| `pnpm build`                   | Production build of every app (Turborepo-cached)                                                   |
+| `pnpm lint`                    | ESLint (type-aware) + architecture boundary check                                                  |
+| `pnpm lint:boundaries`         | Boundary check only (`--graph` to print)                                                           |
+| `pnpm typecheck`               | `tsc` in every workspace + root tests/scripts                                                      |
+| `pnpm test`                    | Vitest: `tests/unit`, `tests/integration`, `tests/security` + 100% coverage check on security code |
+| `pnpm test:security`           | Security tests only                                                                                |
+| `pnpm test:e2e`                | Playwright smoke against production builds (run `pnpm build` first)                                |
+| `pnpm format` / `format:check` | Prettier                                                                                           |
+| `pnpm check:secrets`           | Secret scan of everything that would be committed                                                  |
+| `pnpm verify`                  | Everything above, in CI order                                                                      |
 
 ## Tests
 
 ```text
 tests/unit         pure rules: permissions, audit/revert, env isolation, domain, api keys
 tests/integration  gateway over HTTP (in-process), admin guarded actions, boundary check
+tests/security     rate limit, origin, sanitization, sessions (OAuth), errors, race conditions, pooling, N+1
 tests/e2e          Playwright request-level smoke against built apps (no browser download needed)
 ```
 

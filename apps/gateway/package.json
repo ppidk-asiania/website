@@ -19,6 +19,7 @@
     "@website/db": "workspace:*",
     "@website/domain": "workspace:*",
     "@website/observability": "workspace:*",
+    "@website/security": "workspace:*",
     "hono": "4.13.13",
     "zod": "4.6.5"
   },

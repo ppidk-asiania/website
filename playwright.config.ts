@@ -21,7 +21,7 @@ export default defineConfig({
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
   projects: apps.map((app) => ({
     name: app.name,
-    testMatch: `${app.name}.spec.ts`,
+    testMatch: [`${app.name}.spec.ts`, "security.spec.ts"],
     use: { baseURL: `http://localhost:${app.port}` },
   })),
   webServer: apps.map((app) => ({

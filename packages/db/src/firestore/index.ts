@@ -15,6 +15,9 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { assertEnvironmentIsolation, type AppEnvironment } from "@website/config";
 import type { DatabaseRole } from "../roles";
 
+export { createFirestoreRateLimitStore } from "./rate-limit";
+export { getDocumentsByIds } from "./batch";
+
 if ("window" in globalThis) {
   throw new Error("@website/db must never be bundled into browser code.");
 }
@@ -29,6 +32,11 @@ export interface FirestoreConfig {
   readonly emulatorHost?: string | undefined;
 }
 
+/**
+ * Returns the Firestore client for a role. Connection pooling: the client is created once per
+ * role per server process and reused for every request; it keeps a pool of gRPC channels open,
+ * so requests never pay to connect/disconnect. Never create a client per request.
+ */
 export function getFirestoreForRole(config: FirestoreConfig): Firestore {
   assertEnvironmentIsolation({
     appEnv: config.appEnv,

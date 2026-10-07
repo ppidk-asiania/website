@@ -205,8 +205,9 @@ export default tseslint.config(
           message: "Domain must not depend on Firebase — declare a port instead.",
         },
         {
-          group: ["@website/*"],
-          message: "Domain is the innermost layer; it imports no other workspace package.",
+          regex: "^@website/(?!security/validation$)",
+          message:
+            "Domain is the innermost layer; it imports no other workspace package (except @website/security/validation).",
         },
         { regex: APPS, message: "Packages must never import apps." },
       ]),
@@ -235,7 +236,10 @@ export default tseslint.config(
         group: ["../content*", "../events*", "../organizations*", "../newsletter*", "../members*"],
         message: "domain/shop must stay self-contained (extraction boundary).",
       },
-      { group: ["@website/*"], message: "Domain imports no other workspace package." },
+      {
+        regex: "^@website/(?!security/validation$)",
+        message: "Domain imports no other workspace package (except @website/security/validation).",
+      },
       { group: FRAMEWORKS, message: "Domain must not depend on frameworks." },
       { regex: FIREBASE_ANY, message: "Domain must not depend on Firebase." },
       { regex: APPS, message: "Packages must never import apps." },
@@ -245,7 +249,10 @@ export default tseslint.config(
     files: ["packages/domain/src/{content,events,organizations,newsletter,members,shared}/**/*.ts"],
     rules: restrict([
       { group: ["../shop*"], message: "Only the shop app may depend on domain/shop." },
-      { group: ["@website/*"], message: "Domain imports no other workspace package." },
+      {
+        regex: "^@website/(?!security/validation$)",
+        message: "Domain imports no other workspace package (except @website/security/validation).",
+      },
       { group: FRAMEWORKS, message: "Domain must not depend on frameworks." },
       { regex: FIREBASE_ANY, message: "Domain must not depend on Firebase." },
       { regex: APPS, message: "Packages must never import apps." },

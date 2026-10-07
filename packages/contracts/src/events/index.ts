@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { safeId } from "@website/security/validation";
 import { CursorQuerySchema, pageOf } from "../pagination";
 
 /**
@@ -23,7 +24,7 @@ export const EventDtoSchema = z
 export type EventDto = z.infer<typeof EventDtoSchema>;
 
 export const ListEventsQuerySchema = CursorQuerySchema.extend({
-  chapterId: z.string().max(64).optional(),
+  chapterId: safeId.optional(),
   /** For polling integrations: only events changed after this instant. */
   updatedSince: z.iso.datetime().optional(),
 });

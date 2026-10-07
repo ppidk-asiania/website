@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createInMemoryRateLimiter, generateApiKey } from "@website/apikeys";
+import { generateApiKey } from "@website/apikeys";
 import { EventPageSchema, ProblemDetailsSchema } from "@website/contracts";
 import { createMemoryGatewayRepositories } from "@website/db/memory";
 import { createLogger } from "@website/observability";
+import { createMemoryRateLimitStore } from "@website/security";
 import { createGatewayApp } from "../../apps/gateway/src/app";
 
 const pepper = "integration-pepper-0123456789abcdef012345";
@@ -59,7 +60,8 @@ const app = createGatewayApp({
   logger: createLogger({ service: "gateway-test", level: "error", write: () => undefined }),
   apiKeys: repos.apiKeys,
   events: repos.events,
-  rateLimiter: createInMemoryRateLimiter(),
+  rateLimitStore: createMemoryRateLimitStore(),
+  rateLimitSecret: "integration-rate-limit-secret-0123456789",
   apiKeyPepper: pepper,
   keyEnvironment: "test",
   defaultRateLimitPerMinute: 60,

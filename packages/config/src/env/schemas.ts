@@ -37,6 +37,11 @@ export const sessionEnv = z.object({
   SESSION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(12).default(8),
 });
 
+/** HMAC key for per-IP rate-limit counters. Required in staging/production (checked at startup). */
+export const rateLimitEnv = z.object({
+  RATE_LIMIT_SECRET: nonEmpty.min(32).optional(),
+});
+
 export const resendEnv = z.object({
   RESEND_API_KEY: nonEmpty,
   EMAIL_FROM_TRANSACTIONAL: nonEmpty,

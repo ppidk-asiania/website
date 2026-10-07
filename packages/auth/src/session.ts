@@ -6,16 +6,6 @@
  */
 export const SESSION_COOKIE = "__Host-session";
 
-export function sessionCookieOptions(maxAgeHours: number) {
-  return {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: maxAgeHours * 60 * 60,
-  };
-}
-
 /** Verified identity. Says WHO someone is — never what they may do (that is RBAC, from Firestore). */
 export interface VerifiedIdentity {
   readonly uid: string;

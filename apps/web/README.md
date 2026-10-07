@@ -10,11 +10,13 @@ Public website of PPIDK Asia-Oseania and the member self-service area.
 
 ## Structure
 
-| Path           | Purpose                                                                          |
-| -------------- | -------------------------------------------------------------------------------- |
-| `src/app/`     | Pages (App Router). Public pages are static/ISR so they survive backend outages. |
-| `src/server/`  | Server-only code (`import "server-only"`): env, database and auth access.        |
-| `.env.example` | Variables this app needs.                                                        |
+| Path                           | Purpose                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `src/app/`                     | Pages (App Router). Public pages are static/ISR so they survive backend outages.                             |
+| `src/proxy.ts`                 | Runs before every request: origin check, per-IP rate limit, private caching (`src/server/request-guard.ts`). |
+| `src/app/api/session/route.ts` | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                      |
+| `src/server/`                  | Server-only code (`import "server-only"`): env, database and auth access.                                    |
+| `.env.example`                 | Variables this app needs.                                                                                    |
 
 ## Rules
 

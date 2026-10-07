@@ -61,23 +61,24 @@ Details: [docs/architecture.md](docs/architecture.md).
 
 ## Workspaces
 
-| Workspace                                                    | Responsibility                                       |
-| ------------------------------------------------------------ | ---------------------------------------------------- |
-| [`apps/web`](apps/web/README.md)                             | Public website and member self-service               |
-| [`apps/admin`](apps/admin/README.md)                         | Staff administration                                 |
-| [`apps/shop`](apps/shop/README.md)                           | Online shop                                          |
-| [`apps/gateway`](apps/gateway/README.md)                     | Third-party API                                      |
-| [`packages/domain`](packages/domain/README.md)               | Business rules (framework-free)                      |
-| [`packages/db`](packages/db/README.md)                       | Firestore access, per application role               |
-| [`packages/auth`](packages/auth/README.md)                   | Identity verification and sessions                   |
-| [`packages/permissions`](packages/permissions/README.md)     | Roles, permissions, authorization checks             |
-| [`packages/audit`](packages/audit/README.md)                 | Append-only audit log and revert rules               |
-| [`packages/contracts`](packages/contracts/README.md)         | Public API request/response schemas                  |
-| [`packages/apikeys`](packages/apikeys/README.md)             | API keys, scopes and rate limiting for the gateway   |
-| [`packages/email`](packages/email/README.md)                 | Email sending (Resend)                               |
-| [`packages/ui`](packages/ui/README.md)                       | Shared React components                              |
-| [`packages/observability`](packages/observability/README.md) | Structured logging and security events               |
-| [`packages/config`](packages/config/README.md)               | Environment validation and shared TypeScript configs |
+| Workspace                                                    | Responsibility                                          |
+| ------------------------------------------------------------ | ------------------------------------------------------- |
+| [`apps/web`](apps/web/README.md)                             | Public website and member self-service                  |
+| [`apps/admin`](apps/admin/README.md)                         | Staff administration                                    |
+| [`apps/shop`](apps/shop/README.md)                           | Online shop                                             |
+| [`apps/gateway`](apps/gateway/README.md)                     | Third-party API                                         |
+| [`packages/domain`](packages/domain/README.md)               | Business rules (framework-free)                         |
+| [`packages/db`](packages/db/README.md)                       | Firestore access, per application role                  |
+| [`packages/auth`](packages/auth/README.md)                   | Identity verification and sessions                      |
+| [`packages/permissions`](packages/permissions/README.md)     | Roles, permissions, authorization checks                |
+| [`packages/audit`](packages/audit/README.md)                 | Append-only audit log and revert rules                  |
+| [`packages/contracts`](packages/contracts/README.md)         | Public API request/response schemas                     |
+| [`packages/apikeys`](packages/apikeys/README.md)             | API keys, scopes and rate limiting for the gateway      |
+| [`packages/email`](packages/email/README.md)                 | Email sending (Resend)                                  |
+| [`packages/ui`](packages/ui/README.md)                       | Shared React components                                 |
+| [`packages/observability`](packages/observability/README.md) | Structured logging and security events                  |
+| [`packages/security`](packages/security/README.md)           | Rate limiting, origin checks, sanitization, safe errors |
+| [`packages/config`](packages/config/README.md)               | Environment validation and shared TypeScript configs    |
 
 ## Getting started
 
@@ -96,16 +97,17 @@ See [docs/development.md](docs/development.md).
 
 ## Commands
 
-| Command          | Purpose                                                                |
-| ---------------- | ---------------------------------------------------------------------- |
-| `pnpm dev`       | Run all applications in watch mode (`pnpm --filter web dev` for one)   |
-| `pnpm verify`    | Everything CI runs: format, lint, typecheck, tests, build, secret scan |
-| `pnpm test`      | Unit and integration tests (Vitest)                                    |
-| `pnpm test:e2e`  | Smoke tests against production builds (Playwright)                     |
-| `pnpm lint`      | ESLint and the architecture boundary check                             |
-| `pnpm typecheck` | TypeScript in every workspace                                          |
-| `pnpm build`     | Production build of every application                                  |
-| `pnpm format`    | Format with Prettier                                                   |
+| Command              | Purpose                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `pnpm dev`           | Run all applications in watch mode (`pnpm --filter web dev` for one)                 |
+| `pnpm verify`        | Everything CI runs: format, lint, typecheck, tests, build, secret scan               |
+| `pnpm test`          | Unit, integration and security tests (Vitest) + 100% coverage check on security code |
+| `pnpm test:security` | Security tests only                                                                  |
+| `pnpm test:e2e`      | Smoke tests against production builds (Playwright)                                   |
+| `pnpm lint`          | ESLint and the architecture boundary check                                           |
+| `pnpm typecheck`     | TypeScript in every workspace                                                        |
+| `pnpm build`         | Production build of every application                                                |
+| `pnpm format`        | Format with Prettier                                                                 |
 
 ## Branches and environments
 

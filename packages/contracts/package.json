@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@website/security": "workspace:*",
     "zod": "4.6.5"
   }
 }

@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createInMemoryRateLimiter,
-  generateApiKey,
-  parseApiKey,
-  verifyApiKey,
-  type ApiKeyRecord,
-} from "@website/apikeys";
+import { generateApiKey, parseApiKey, verifyApiKey, type ApiKeyRecord } from "@website/apikeys";
 
 const pepper = "unit-test-pepper-0123456789abcdef0123456789";
 const now = new Date("2026-10-07T00:00:00Z");
@@ -82,11 +76,5 @@ describe("api keys", () => {
     ).toMatchObject({
       reason: "wrong_environment",
     });
-  });
-
-  it("rate-limits per key per minute", async () => {
-    const limiter = createInMemoryRateLimiter();
-    expect((await limiter.consume("k", 1, now)).allowed).toBe(true);
-    expect((await limiter.consume("k", 1, now)).allowed).toBe(false);
   });
 });

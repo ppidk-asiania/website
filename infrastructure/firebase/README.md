@@ -21,4 +21,11 @@ firebase emulators:start --project demo-ppidk-website
 firebase deploy --only firestore:rules,storage --project staging
 ```
 
+Rate-limit counters expire automatically once a TTL policy exists (once per project):
+
+```bash
+gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl --project=ppidk-website-staging
+gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl --project=ppidk-website-prod
+```
+
 See `docs/environment.md` for the staging/production boundary and `docs/disaster-recovery.md` for backups.

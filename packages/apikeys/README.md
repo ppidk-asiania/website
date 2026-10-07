@@ -1,23 +1,21 @@
 # @website/apikeys
 
-API keys, scopes and rate limiting for the gateway.
+API keys and scopes for the gateway.
 
 ## Responsibilities
 
 - Key format `pk_<env>_<id>_<secret>`; only an HMAC of the secret is stored
 - Verification (revoked, expired, wrong environment) and scope checks
-- Rate-limiter port with an in-memory implementation for development
 
 ## Structure
 
-| File                | Contains                                                   |
-| ------------------- | ---------------------------------------------------------- |
-| `src/keys.ts`       | `generateApiKey`, `verifyApiKey`, `hasScope`, `API_SCOPES` |
-| `src/rate-limit.ts` | `RateLimiter` port, `createInMemoryRateLimiter`            |
+| File          | Contains                                                   |
+| ------------- | ---------------------------------------------------------- |
+| `src/keys.ts` | `generateApiKey`, `verifyApiKey`, `hasScope`, `API_SCOPES` |
 
 ## Rules
 
-- The in-memory limiter is per instance — use a managed store in production.
+- Rate limiting lives in `@website/security` (per IP and per key).
 
 ## Commands
 

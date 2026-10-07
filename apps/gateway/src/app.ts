@@ -6,6 +6,7 @@ import { CURRENT_API_VERSION } from "@website/contracts";
 import { problem } from "./http/problem";
 import { requireApiKey, requireScope } from "./middleware/api-key";
 import { requireIdempotencyKey } from "./middleware/idempotency";
+import { requestGuard } from "./middleware/request-guard";
 import { requestId } from "./middleware/request-id";
 import { eventRoutes } from "./routes/events";
 import { healthRoutes } from "./routes/health";
@@ -25,7 +26,8 @@ export function createGatewayApp(deps: GatewayDeps) {
   });
 
   app.use("*", requestId);
-  app.use("*", secureHeaders());
+  app.use("*", secureHeaders()); // includes Strict-Transport-Security (HTTPS only)
+  app.use("*", requestGuard(deps));
   app.use(
     "*",
     bodyLimit({

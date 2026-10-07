@@ -10,10 +10,10 @@ Identity: who the user is. Never what they may do.
 
 ## Structure
 
-| Import                         | Contains                                                                       |
-| ------------------------------ | ------------------------------------------------------------------------------ |
-| `@website/auth`                | `SESSION_COOKIE`, `sessionCookieOptions`, `IdentityProvider`, `isRecentSignIn` |
-| `@website/auth/firebase-admin` | `createFirebaseIdentityProvider()` (server only)                               |
+| Import                         | Contains                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `@website/auth`                | `SESSION_COOKIE`, `createSessionRoutes`, `IdentityProvider`, `isRecentSignIn` |
+| `@website/auth/firebase-admin` | `createFirebaseIdentityProvider()` (server only)                              |
 
 ## Rules
 

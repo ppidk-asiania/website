@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { hasScope, verifyApiKey, type ApiScope } from "@website/apikeys";
+import { DEFAULT_RATE_LIMIT } from "@website/security";
 import { problem } from "../http/problem";
 import type { GatewayDeps, GatewayVariables } from "../types";
 
@@ -22,8 +23,13 @@ export function requireApiKey(deps: GatewayDeps) {
       });
       return problem(c, "unauthorized");
     }
-    const limit = result.key.rateLimitPerMinute ?? deps.defaultRateLimitPerMinute;
-    const rate = await deps.rateLimiter.consume(`key:${result.key.keyId}`, limit, deps.now());
+    // Per-key limit on top of the per-IP limit (same policy shape, key-specific minute limit).
+    const perMinute = result.key.rateLimitPerMinute ?? deps.defaultRateLimitPerMinute;
+    const rate = await deps.rateLimitStore.consume(
+      `key_${result.key.keyId}`,
+      { ...DEFAULT_RATE_LIMIT, perMinute, throttledPerMinute: Math.ceil(perMinute / 2) },
+      deps.now(),
+    );
     if (!rate.allowed) {
       c.header("Retry-After", String(rate.retryAfterSeconds));
       return problem(c, "rateLimited");
