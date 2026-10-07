@@ -17,6 +17,7 @@ import type { DatabaseRole } from "../roles";
 
 export { createFirestoreRateLimitStore } from "./rate-limit";
 export { getDocumentsByIds } from "./batch";
+export { createFirestorePasskeyStore } from "./passkeys";
 
 if ("window" in globalThis) {
   throw new Error("@website/db must never be bundled into browser code.");

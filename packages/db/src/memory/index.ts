@@ -1,3 +1,4 @@
+export { createMemoryPasskeyStore } from "./passkeys";
 import type { ApiKeyRecord } from "@website/apikeys";
 import type { EventEntity } from "@website/domain/events";
 import type { GatewayRepositories } from "../roles";

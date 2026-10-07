@@ -7,3 +7,23 @@ test("web home responds with security headers", async ({ request }) => {
   expect(response.headers()["x-powered-by"]).toBeUndefined();
   expect(await response.text()).toContain("web: ok");
 });
+
+test("sign-in, sign-up and password-reset pages are available", async ({ request }) => {
+  for (const [path, text] of [
+    ["/login", "Sign in"],
+    ["/signup", "Create account"],
+    ["/forgot-password", "Reset your password"],
+  ] as const) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(text);
+    if (path === "/login") expect(html).toContain("Sign in with a passkey");
+  }
+});
+
+test("the account page requires a session", async ({ request }) => {
+  const response = await request.get("/account", { maxRedirects: 0 });
+  expect(response.status()).toBe(307);
+  expect(response.headers()["location"]).toContain("/login");
+});

@@ -6,8 +6,41 @@ is; _what_ they may do comes only from RBAC role assignments in Firestore (`user
 
 ## Sign-in methods
 
-- Google and email/password for all users (email must be verified before a profile can be saved).
+| Method           | Sign up                                                                     | Sign in                                                      | Where                 |
+| ---------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------- |
+| Google           | `/signup` or `/login` → "Continue with Google" (same action)                | same                                                         | Firebase popup        |
+| Email + password | `/signup` (8+ characters, confirmation; verification email sent)            | `/login`                                                     | Firebase              |
+| Passkey          | Added from `/account` after signing in (needs a sign-in in the last 15 min) | `/login` → "Sign in with a passkey"                          | Our server (WebAuthn) |
+| Forgot password  | —                                                                           | `/forgot-password` → Firebase reset email → back to `/login` | Firebase              |
+
+- Email must be verified before a member profile can be saved.
 - Staff accounts (any role with `admin.access`) must have MFA enabled before the role is granted.
+- Pages live in `apps/web/src/app/{login,signup,forgot-password,account}`; browser logic in
+  `apps/web/src/lib/auth-client.ts`. Firebase keeps nothing in the browser (in-memory persistence):
+  after each sign-in the ID token is exchanged for the session cookie and the browser signs out of Firebase.
+- Error messages never reveal whether an email has an account (`apps/web/src/lib/auth-errors.ts`);
+  the reset form always shows the same confirmation.
+
+## Passkeys
+
+Firebase Auth has no passkey support, so the web server verifies WebAuthn itself
+(`packages/auth/src/passkeys.ts`, library `@simplewebauthn/server`) and then hands Firebase a
+custom token:
+
+```text
+add:     /account → POST /api/passkeys/register-options (session + recent sign-in)
+         → browser creates passkey → POST /api/passkeys/register-verify → saved in passkeys/{hash}
+sign in: POST /api/passkeys/login-options → browser signs → POST /api/passkeys/login-verify
+         → { customToken } → signInWithCustomToken → POST /api/session (normal session cookie)
+```
+
+- Passkeys are bound to the hostname of `WEB_URL` and require user verification (biometric/PIN).
+- Each challenge is stored server-side (`webauthnChallenges`), referenced by an HttpOnly
+  `__Host-passkey-challenge` cookie, valid 5 minutes and **single-use** (atomic read-and-delete),
+  so assertions cannot be replayed even by concurrent requests.
+- The signature counter is updated atomically and must increase (0 → 0 allowed for synced
+  passkeys); a lower value is treated as a cloned authenticator and refused.
+- Failures always return the same `401` — the response never says why.
 
 ## Account lifecycle
 

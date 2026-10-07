@@ -23,14 +23,14 @@ and link to it from the others.
 
 ## Feature docs index
 
-| Feature          | Doc                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| Member profiles  | [packages/domain/docs/members.md](../packages/domain/docs/members.md)                       |
-| Database         | [packages/db/docs/database.md](../packages/db/docs/database.md)                             |
-| Authentication   | [packages/auth/docs/authentication.md](../packages/auth/docs/authentication.md)             |
-| Authorization    | [packages/permissions/docs/authorization.md](../packages/permissions/docs/authorization.md) |
-| Request security | [packages/security/docs/request-security.md](../packages/security/docs/request-security.md) |
-| Audit logging    | [packages/audit/docs/audit-logging.md](../packages/audit/docs/audit-logging.md)             |
+| Feature                                                  | Doc                                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Member profiles                                          | [packages/domain/docs/members.md](../packages/domain/docs/members.md)                       |
+| Database                                                 | [packages/db/docs/database.md](../packages/db/docs/database.md)                             |
+| Authentication (Google, email/password, passkeys, reset) | [packages/auth/docs/authentication.md](../packages/auth/docs/authentication.md)             |
+| Authorization                                            | [packages/permissions/docs/authorization.md](../packages/permissions/docs/authorization.md) |
+| Request security                                         | [packages/security/docs/request-security.md](../packages/security/docs/request-security.md) |
+| Audit logging                                            | [packages/audit/docs/audit-logging.md](../packages/audit/docs/audit-logging.md)             |
 
 Add a row here when you add a feature doc.
 

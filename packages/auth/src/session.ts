@@ -25,6 +25,8 @@ export interface IdentityProvider {
   /** Verifies the cookie AND checks revocation. Returns null when invalid/revoked. */
   verifySessionCookie(cookie: string): Promise<VerifiedIdentity | null>;
   revokeSessions(uid: string): Promise<void>;
+  /** Short-lived token the browser exchanges for a Firebase sign-in (used after a passkey login). */
+  createCustomToken(uid: string): Promise<string>;
 }
 
 /** Sensitive actions (role changes, exports, refunds) require a recent sign-in. */

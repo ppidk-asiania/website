@@ -15,7 +15,7 @@ function cookieHeader(value: string, maxAgeSeconds: number): string {
   return `${SESSION_COOKIE}=${value}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
-function readCookie(request: Request, name: string): string | null {
+export function readCookie(request: Request, name: string): string | null {
   for (const part of (request.headers.get("cookie") ?? "").split(";")) {
     const [key, ...rest] = part.trim().split("=");
     if (key === name) return rest.join("=");

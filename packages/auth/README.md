@@ -7,13 +7,14 @@ Identity: who the user is. Never what they may do.
 - Session cookie policy (`__Host-session`, one per app)
 - `IdentityProvider` port and the Firebase Admin adapter
 - Recent-sign-in check for sensitive actions
+- Session endpoints and passkey (WebAuthn) registration/sign-in
 
 ## Structure
 
-| Import                         | Contains                                                                      |
-| ------------------------------ | ----------------------------------------------------------------------------- |
-| `@website/auth`                | `SESSION_COOKIE`, `createSessionRoutes`, `IdentityProvider`, `isRecentSignIn` |
-| `@website/auth/firebase-admin` | `createFirebaseIdentityProvider()` (server only)                              |
+| Import                         | Contains                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `@website/auth`                | `SESSION_COOKIE`, `createSessionRoutes`, `createPasskeyRoutes`, `PasskeyStore`, `IdentityProvider`, `isRecentSignIn` |
+| `@website/auth/firebase-admin` | `createFirebaseIdentityProvider()` (server only)                                                                     |
 
 ## Rules
 

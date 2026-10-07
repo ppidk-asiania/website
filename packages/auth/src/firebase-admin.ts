@@ -75,5 +75,9 @@ export function createFirebaseIdentityProvider(config: FirebaseAdminConfig): Ide
     async revokeSessions(uid) {
       await auth().revokeRefreshTokens(uid);
     },
+    createCustomToken(uid) {
+      // Needs a service-account key (or the "Service Account Token Creator" role with ADC).
+      return auth().createCustomToken(uid);
+    },
   };
 }

@@ -35,11 +35,11 @@ and `infrastructure/firebase/.firebaserc` (tests cover the guard).
 Each app validates only the fragments it needs (`packages/config/src/env/schemas.ts`), lazily at
 first use — never at import or build time — and errors list variable names, never values.
 
-| File                        | Variables                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web/.env.example`     | APP_ENV, LOG_LEVEL, FIREBASE_* (read-only SA), RECAPTCHA_*                                                                       |
-| `apps/admin/.env.example`   | APP_ENV, FIREBASE__, NEXT_PUBLIC_FIREBASE__, SESSION_MAX_AGE_HOURS, RESEND__, EMAIL_FROM__, ZOOM_*, CALENDAR_FEED_SIGNING_SECRET |
-| `apps/shop/.env.example`    | APP_ENV, FIREBASE__, NEXT_PUBLIC_FIREBASE__, PAYMENT__, RESEND__                                                                 |
-| `apps/gateway/.env.example` | APP_ENV, PORT, API_KEY_PEPPER, GATEWAY__, FIREBASE__                                                                             |
+| File                        | Variables                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/.env.example`     | APP_ENV, LOG_LEVEL, FIREBASE__, NEXT_PUBLIC_FIREBASE__, SESSION_MAX_AGE_HOURS, WEB_URL (passkeys), RECAPTCHA_*, RATE_LIMIT_SECRET |
+| `apps/admin/.env.example`   | APP_ENV, FIREBASE__, NEXT_PUBLIC_FIREBASE__, SESSION_MAX_AGE_HOURS, RESEND__, EMAIL_FROM__, ZOOM_*, CALENDAR_FEED_SIGNING_SECRET  |
+| `apps/shop/.env.example`    | APP_ENV, FIREBASE__, NEXT_PUBLIC_FIREBASE__, PAYMENT__, RESEND__                                                                  |
+| `apps/gateway/.env.example` | APP_ENV, PORT, API_KEY_PEPPER, GATEWAY__, FIREBASE__                                                                              |
 
 `.env.example` files must contain placeholders only; `pnpm check:secrets` fails otherwise.

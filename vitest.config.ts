@@ -11,6 +11,10 @@ export default defineConfig({
       include: [
         "packages/security/src/**/*.ts",
         "packages/auth/src/session-routes.ts",
+        "packages/auth/src/passkeys.ts",
+        "packages/db/src/firestore/passkeys.ts",
+        "packages/db/src/memory/passkeys.ts",
+        "apps/web/src/lib/auth-errors.ts",
         "packages/db/src/firestore/rate-limit.ts",
         "packages/db/src/firestore/batch.ts",
         "apps/*/src/server/request-guard.ts",

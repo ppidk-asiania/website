@@ -26,6 +26,18 @@ Rate-limit counters expire automatically once a TTL policy exists (once per proj
 ```bash
 gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl --project=ppidk-website-staging
 gcloud firestore fields ttls update expiresAt --collection-group=rateLimits --enable-ttl --project=ppidk-website-prod
+# same for passkey challenges:
+gcloud firestore fields ttls update expiresAt --collection-group=webauthnChallenges --enable-ttl --project=ppidk-website-staging
+gcloud firestore fields ttls update expiresAt --collection-group=webauthnChallenges --enable-ttl --project=ppidk-website-prod
 ```
+
+Authentication settings (Firebase console → Authentication), per project:
+
+- Sign-in providers: enable **Google** and **Email/Password**.
+- Settings → **Email enumeration protection**: on. **Password policy**: minimum 8 characters.
+- Settings → **Authorized domains**: add the web domain (and `localhost` for development).
+- Templates: set the sender name and the password-reset / verification email text.
+- Passkeys need `createCustomToken`: give the web service account a key, or the
+  "Service Account Token Creator" role when using Workload Identity.
 
 See `docs/environment.md` for the staging/production boundary and `docs/disaster-recovery.md` for backups.

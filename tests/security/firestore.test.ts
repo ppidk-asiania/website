@@ -1,50 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createFirestoreRateLimitStore,
   getDocumentsByIds,
   getFirestoreForRole,
 } from "@website/db/firestore";
 import { DEFAULT_RATE_LIMIT } from "@website/security";
+import { fakeFirestore as createFakeFirestore } from "../support/fake-firestore";
 
 type Firestore = Parameters<typeof createFirestoreRateLimitStore>[0];
 
-/** Minimal in-memory stand-in for the parts of Firestore we use. Transactions run one at a time. */
 function fakeFirestore(options: { failWith?: Error } = {}) {
-  const docs = new Map<string, Record<string, unknown>>();
-  const writes: Array<{ path: string; data: Record<string, unknown> }> = [];
-  const getAll = vi.fn((...refs: Array<{ path: string; id: string }>) =>
-    Promise.resolve(
-      refs.map((ref) => ({
-        id: ref.id,
-        exists: docs.has(ref.path),
-        data: () => docs.get(ref.path),
-      })),
-    ),
-  );
-  let queue = Promise.resolve();
-  const db = {
-    collection: (name: string) => ({ doc: (id: string) => ({ id, path: `${name}/${id}` }) }),
-    getAll,
-    runTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
-      if (options.failWith) return Promise.reject(options.failWith);
-      const run = queue.then(() =>
-        fn({
-          get: (ref: { path: string }) =>
-            Promise.resolve({ exists: docs.has(ref.path), data: () => docs.get(ref.path) }),
-          set: (ref: { path: string }, data: Record<string, unknown>) => {
-            docs.set(ref.path, data);
-            writes.push({ path: ref.path, data });
-          },
-        }),
-      );
-      queue = run.then(
-        () => undefined,
-        () => undefined,
-      );
-      return run;
-    },
-  };
-  return { db: db as unknown as Firestore, docs, writes, getAll };
+  const fake = createFakeFirestore(options);
+  return { ...fake, db: fake.db as unknown as Firestore };
 }
 
 describe("Firestore rate-limit store (shared across server instances)", () => {

@@ -10,11 +10,11 @@ Firestore access, exposed per application role.
 
 ## Structure
 
-| Import                  | Contains                                                       |
-| ----------------------- | -------------------------------------------------------------- |
-| `@website/db`           | Role types and repository sets per role                        |
-| `@website/db/firestore` | `getFirestoreForRole()` — the only place Firestore is imported |
-| `@website/db/memory`    | In-memory repositories for tests and local development         |
+| Import                  | Contains                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `@website/db`           | Role types and repository sets per role                                                                            |
+| `@website/db/firestore` | `getFirestoreForRole()` (the only place Firestore is imported), rate-limit and passkey stores, `getDocumentsByIds` |
+| `@website/db/memory`    | In-memory repositories for tests and local development                                                             |
 
 ## Rules
 

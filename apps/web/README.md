@@ -5,18 +5,21 @@ Public website of PPIDK Asia-Oseania and the member self-service area.
 ## Responsibilities
 
 - Landing pages, news, articles, events, gallery, organization and chapters
-- Member sign-in and own-profile management (same user pool as admin and shop)
+- Member sign-up/sign-in (Google, email/password, passkeys), password reset, own-profile management (same user pool as admin and shop)
 - Public forms (newsletter, event registration) protected by reCAPTCHA
 
 ## Structure
 
-| Path                           | Purpose                                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `src/app/`                     | Pages (App Router). Public pages are static/ISR so they survive backend outages.                             |
-| `src/proxy.ts`                 | Runs before every request: origin check, per-IP rate limit, private caching (`src/server/request-guard.ts`). |
-| `src/app/api/session/route.ts` | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                      |
-| `src/server/`                  | Server-only code (`import "server-only"`): env, database and auth access.                                    |
-| `.env.example`                 | Variables this app needs.                                                                                    |
+| Path                                              | Purpose                                                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `src/app/`                                        | Pages (App Router). Public pages are static/ISR so they survive backend outages.                             |
+| `src/proxy.ts`                                    | Runs before every request: origin check, per-IP rate limit, private caching (`src/server/request-guard.ts`). |
+| `src/app/api/session/route.ts`                    | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                      |
+| `src/app/{login,signup,forgot-password,account}/` | Sign-in pages: Google, email/password, passkeys, password reset, account (add passkey, sign out).            |
+| `src/app/api/passkeys/[action]/route.ts`          | Passkey registration and sign-in endpoints (`src/server/passkeys.ts`).                                       |
+| `src/lib/auth-client.ts`                          | Browser sign-in flows (Firebase Auth SDK + WebAuthn); ends in the session cookie.                            |
+| `src/server/`                                     | Server-only code (`import "server-only"`): env, database and auth access.                                    |
+| `.env.example`                                    | Variables this app needs.                                                                                    |
 
 ## Rules
 

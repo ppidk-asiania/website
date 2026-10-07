@@ -277,6 +277,21 @@ export default tseslint.config(
   // same file, so each block below carries the complete pattern list for its files.
   ...appBoundaryBlocks(),
 
+  // The browser Firebase SDK is allowed in exactly these files, for sign-in only
+  // (Auth). Firestore/Storage/Database stay forbidden in the browser.
+  {
+    files: ["apps/web/src/lib/firebase-client.ts", "apps/web/src/lib/auth-client.ts"],
+    rules: restrict([
+      ...APP_RULES.web,
+      CROSS_APP,
+      SERVER_ONLY_INFRA,
+      {
+        regex: "^firebase(-admin|/(firestore|database|storage|functions))",
+        message: "Only firebase/app and firebase/auth may be used in the browser.",
+      },
+    ]),
+  },
+
   // ── Gateway ───────────────────────────────────────────────────────────────
   {
     files: ["apps/gateway/**/*.ts"],

@@ -16,6 +16,7 @@ function provider(over: Partial<IdentityProvider> = {}) {
       }),
     ),
     revokeSessions: vi.fn((_uid: string) => Promise.resolve()),
+    createCustomToken: vi.fn((_uid: string) => Promise.resolve("custom-token")),
   };
   const identity: IdentityProvider = { ...mocks, ...over };
   return { identity, mocks };

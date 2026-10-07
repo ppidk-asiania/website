@@ -1,0 +1,43 @@
+"use client";
+
+import Link from "next/link";
+import { signInWithEmail, signInWithPasskey } from "@/lib/auth-client";
+import {
+  Button,
+  Field,
+  formStyle,
+  formValues,
+  GoogleButton,
+  Message,
+  useAuthAction,
+} from "@/components/auth-form";
+
+export function LoginForm() {
+  const email = useAuthAction();
+  const passkey = useAuthAction();
+  return (
+    <div style={formStyle}>
+      <Button type="button" busy={passkey.busy} onClick={() => void passkey.run(signInWithPasskey)}>
+        Sign in with a passkey
+      </Button>
+      <Message text={passkey.error} />
+      <GoogleButton />
+      <form
+        style={formStyle}
+        onSubmit={(event) => {
+          const v = formValues(event, "email", "password");
+          void email.run(() => signInWithEmail(v["email"] ?? "", v["password"] ?? ""));
+        }}
+      >
+        <Field label="Email" name="email" type="email" autoComplete="username webauthn" />
+        <Field label="Password" name="password" type="password" autoComplete="current-password" />
+        <Message text={email.error} />
+        <Button busy={email.busy}>Sign in</Button>
+      </form>
+      <p>
+        <Link href="/forgot-password">Forgot password?</Link> ·{" "}
+        <Link href="/signup">Create account</Link>
+      </p>
+    </div>
+  );
+}
