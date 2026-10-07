@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { jsonError } from "./errors";
 import {
   createMemoryRateLimitStore,
@@ -20,6 +21,8 @@ export interface GuardOptions {
   readonly privatePrefixes: readonly string[];
   readonly policy?: RateLimitPolicy;
   readonly now?: () => Date;
+  /** Waits before continuing a throttled request (injectable for tests). */
+  readonly sleep?: (ms: number) => Promise<unknown>;
   /** Called when the counter store fails; the request is then allowed (fail-open). */
   readonly onStoreError?: (error: unknown) => void;
 }
@@ -70,13 +73,10 @@ export async function guardRequest(request: Request, options: GuardOptions): Pro
     return { blocked: jsonError("forbidden"), headers };
   }
 
+  const policy = options.policy ?? DEFAULT_RATE_LIMIT;
   const key = `ip_${createHmac("sha256", options.secret).update(clientIp(request.headers)).digest("hex")}`;
   try {
-    const decision = await options.store.consume(
-      key,
-      options.policy ?? DEFAULT_RATE_LIMIT,
-      options.now?.() ?? new Date(),
-    );
+    const decision = await options.store.consume(key, policy, options.now?.() ?? new Date());
     headers["RateLimit-Limit"] = String(decision.limit);
     headers["RateLimit-Remaining"] = String(decision.remaining);
     if (!decision.allowed) {
@@ -88,6 +88,8 @@ export async function guardRequest(request: Request, options: GuardOptions): Pro
         headers,
       };
     }
+    // Past the daily quota: still served, but slowed down.
+    if (decision.throttled) await (options.sleep ?? delay)(policy.throttleDelayMs);
   } catch (error) {
     options.onStoreError?.(error);
   }

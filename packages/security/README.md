@@ -5,7 +5,7 @@ sanitization, safe error responses and private caching headers.
 
 ## Responsibilities
 
-- Per-IP rate limit: **100 requests/minute**, **10,000/day**, then **50% slower** (50/minute) until 00:00 UTC
+- Per-IP rate limit: **100 requests/minute**, **10,000/day**, then every request is **delayed by 500 ms** until 00:00 UTC (not blocked)
 - Origin restriction: internal APIs and form posts only from our own site
 - `Cache-Control: private, no-store` on private paths
 - Input sanitization for every free-text field and every document id

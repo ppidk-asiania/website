@@ -104,6 +104,48 @@ describe("per-IP rate limiting", () => {
     expect((await guardRequest(from("198.51.100.7"), o)).blocked).toBeNull();
   });
 
+  it("after the daily quota each request is delayed (slowed down), not refused", async () => {
+    const sleep = vi.fn(() => Promise.resolve());
+    const throttledStore: RateLimitStore = {
+      consume: () =>
+        Promise.resolve({
+          allowed: true,
+          limit: 100,
+          remaining: 50,
+          retryAfterSeconds: 0,
+          throttled: true,
+        }),
+    };
+    const r = await guardRequest(req("/news"), opts({ store: throttledStore, sleep }));
+    expect(r.blocked).toBeNull();
+    expect(sleep).toHaveBeenCalledWith(500);
+  });
+
+  it("does not delay requests below the daily quota", async () => {
+    const sleep = vi.fn(() => Promise.resolve());
+    await guardRequest(req("/news"), opts({ sleep }));
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("delays by default with a real timer", async () => {
+    const throttledStore: RateLimitStore = {
+      consume: () =>
+        Promise.resolve({
+          allowed: true,
+          limit: 100,
+          remaining: 50,
+          retryAfterSeconds: 0,
+          throttled: true,
+        }),
+    };
+    const started = Date.now();
+    await guardRequest(
+      req("/news"),
+      opts({ store: throttledStore, policy: { perMinute: 100, perDay: 1, throttleDelayMs: 50 } }),
+    );
+    expect(Date.now() - started).toBeGreaterThanOrEqual(45);
+  });
+
   it("exposes RateLimit headers", async () => {
     const r = await guardRequest(req("/news"), opts());
     expect(r.headers).toMatchObject({ "RateLimit-Limit": "100", "RateLimit-Remaining": "99" });

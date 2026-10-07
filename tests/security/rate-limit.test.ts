@@ -8,9 +8,9 @@ import {
 
 const at = (iso: string) => new Date(iso);
 
-describe("rate limit policy (100/min, 10k/day, then 50% slower)", () => {
-  it("defaults to 100 per minute, 10,000 per day, 50 per minute after the daily quota", () => {
-    expect(DEFAULT_RATE_LIMIT).toEqual({ perMinute: 100, perDay: 10_000, throttledPerMinute: 50 });
+describe("rate limit policy (100/min, 10k/day, then slowed down)", () => {
+  it("defaults to 100 per minute, 10,000 per day, then a 500 ms delay per request", () => {
+    expect(DEFAULT_RATE_LIMIT).toEqual({ perMinute: 100, perDay: 10_000, throttleDelayMs: 500 });
   });
 
   it("allows 100 requests in a minute, then denies with Retry-After until the next minute", () => {
@@ -44,7 +44,7 @@ describe("rate limit policy (100/min, 10k/day, then 50% slower)", () => {
     });
   });
 
-  it("after 10,000 requests in a day the per-minute limit drops by 50%", () => {
+  it("after 10,000 requests in a day requests are marked throttled (slowed), not blocked", () => {
     const state: RateLimitState = {
       day: "2026-10-07",
       dayCount: 10_000,
@@ -53,15 +53,26 @@ describe("rate limit policy (100/min, 10k/day, then 50% slower)", () => {
     };
     let s: RateLimitState | null = state;
     const now = at("2026-10-07T18:00:00Z");
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 100; i++) {
       const r = applyRateLimit(s, DEFAULT_RATE_LIMIT, now);
-      expect(r.decision).toMatchObject({ allowed: true, throttled: true, limit: 50 });
+      expect(r.decision).toMatchObject({ allowed: true, throttled: true, limit: 100 });
       s = r.state;
     }
+    // The per-minute limit still applies.
     expect(applyRateLimit(s, DEFAULT_RATE_LIMIT, now).decision).toMatchObject({
       allowed: false,
       throttled: true,
     });
+  });
+
+  it("the 10,000th request of the day is still at full speed", () => {
+    const state: RateLimitState = { day: "2026-10-07", dayCount: 9_999, minute: 0, minuteCount: 0 };
+    const first = applyRateLimit(state, DEFAULT_RATE_LIMIT, at("2026-10-07T18:00:00Z"));
+    expect(first.decision.throttled).toBe(false);
+    expect(
+      applyRateLimit(first.state, DEFAULT_RATE_LIMIT, at("2026-10-07T18:00:00Z")).decision
+        .throttled,
+    ).toBe(true);
   });
 
   it("the daily quota resets at 00:00 UTC", () => {

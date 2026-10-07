@@ -27,7 +27,7 @@ export function requireApiKey(deps: GatewayDeps) {
     const perMinute = result.key.rateLimitPerMinute ?? deps.defaultRateLimitPerMinute;
     const rate = await deps.rateLimitStore.consume(
       `key_${result.key.keyId}`,
-      { ...DEFAULT_RATE_LIMIT, perMinute, throttledPerMinute: Math.ceil(perMinute / 2) },
+      { ...DEFAULT_RATE_LIMIT, perMinute },
       deps.now(),
     );
     if (!rate.allowed) {

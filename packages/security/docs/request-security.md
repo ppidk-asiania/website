@@ -9,10 +9,11 @@ action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gatew
    (`Origin` header or `Sec-Fetch-Site: same-origin`); otherwise `403`. Page navigation from other
    sites (links, search engines) is allowed. The gateway is the public API: server-to-server calls
    are allowed, browser calls from other websites are refused.
-2. **Per-IP rate limit** — 100 requests/minute and 10,000 requests/day per client IP. After
-   10,000 requests the client is slowed by 50% (50/minute) until 00:00 UTC. Over the limit:
-   `429` with `Retry-After`. Responses carry `RateLimit-Limit` and `RateLimit-Remaining`.
-   Gateway API keys also have their own per-key minute limit.
+2. **Per-IP rate limit** — 100 requests/minute and 10,000 requests/day per client IP.
+   10,000/day is far beyond normal use, so after it the client is **not blocked**: every further
+   request that day is delayed by **500 ms** (`throttleDelayMs`) until 00:00 UTC. The 100/minute
+   limit always applies: over it the response is `429` with `Retry-After`. Responses carry
+   `RateLimit-Limit` and `RateLimit-Remaining`. Gateway API keys also have their own per-key minute limit.
 3. **Private caching** — private paths get `Cache-Control: private, no-store`
    (web: `/api/`, `/account`; shop: `/api/`, `/account`, `/cart`, `/checkout`; admin and gateway: everything).
 
@@ -40,6 +41,7 @@ action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gatew
 - **Errors**: clients receive `{ "error": "<code>", "message": "<generic text>" }` (or RFC 9457 in
   the gateway). Stack traces and internal messages are only logged.
 - Cost: each guarded request performs one Firestore transaction in staging/production (~1 read + 1 write).
+  A delayed request keeps its server function running for the extra 500 ms (billed time).
 
 ## Configuration
 

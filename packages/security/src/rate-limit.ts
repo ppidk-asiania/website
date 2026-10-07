@@ -1,17 +1,19 @@
 /**
  * Per-client rate limiting: 100 requests/minute and 10,000 requests/day. After the daily
- * quota the client is not blocked but slowed down by 50% (50 requests/minute) until 00:00 UTC.
+ * quota (far beyond normal use) the client is not blocked: every request is slowed down by a
+ * fixed delay until 00:00 UTC. The per-minute limit keeps applying.
  */
 export interface RateLimitPolicy {
   readonly perMinute: number;
   readonly perDay: number;
-  readonly throttledPerMinute: number;
+  /** Delay added to each request once the daily quota is used up. */
+  readonly throttleDelayMs: number;
 }
 
 export const DEFAULT_RATE_LIMIT: RateLimitPolicy = {
   perMinute: 100,
   perDay: 10_000,
-  throttledPerMinute: 50,
+  throttleDelayMs: 500,
 };
 
 /** Counter state stored per client key. */
@@ -27,7 +29,7 @@ export interface RateLimitDecision {
   readonly limit: number;
   readonly remaining: number;
   readonly retryAfterSeconds: number;
-  /** True once the daily quota is used up (reduced per-minute limit). */
+  /** True once the daily quota is used up: the request is delayed by `throttleDelayMs`. */
   readonly throttled: boolean;
 }
 
@@ -44,7 +46,7 @@ export function applyRateLimit(
     previous?.minute === minute && previous.day === day ? previous.minuteCount : 0;
 
   const throttled = dayCount >= policy.perDay;
-  const limit = throttled ? policy.throttledPerMinute : policy.perMinute;
+  const limit = policy.perMinute;
 
   if (minuteCount >= limit) {
     const retryAfterSeconds = Math.ceil(((minute + 1) * 60_000 - now.getTime()) / 1000);
