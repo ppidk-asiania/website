@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { safeId, safeText } from "@website/security/validation";
 
 export const CreateRegistrationRequestSchema = z
   .object({
-    eventId: z.string().min(1).max(64),
-    fullName: z.string().trim().min(1).max(200),
+    eventId: safeId,
+    fullName: safeText(200),
     email: z.email().max(320),
-    chapterId: z.string().max(64).optional(),
+    chapterId: safeId.optional(),
   })
   .strict()
   .meta({ id: "CreateRegistrationRequest" });

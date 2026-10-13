@@ -1,7 +1,7 @@
 export {
   APP_ENVIRONMENTS,
-  PRODUCTION_FIREBASE_PROJECT_IDS,
-  STAGING_FIREBASE_PROJECT_IDS,
+  FIREBASE_EMULATOR_VARIABLES,
+  WEBSITE_FIREBASE_PROJECT_ID,
   assertEnvironmentIsolation,
   EnvironmentIsolationError,
   type AppEnvironment,

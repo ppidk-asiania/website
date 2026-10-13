@@ -2,10 +2,11 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
-import { CURRENT_API_VERSION } from "@platform/contracts";
+import { CURRENT_API_VERSION } from "@website/contracts";
 import { problem } from "./http/problem";
 import { requireApiKey, requireScope } from "./middleware/api-key";
 import { requireIdempotencyKey } from "./middleware/idempotency";
+import { requestGuard } from "./middleware/request-guard";
 import { requestId } from "./middleware/request-id";
 import { eventRoutes } from "./routes/events";
 import { healthRoutes } from "./routes/health";
@@ -25,7 +26,8 @@ export function createGatewayApp(deps: GatewayDeps) {
   });
 
   app.use("*", requestId);
-  app.use("*", secureHeaders());
+  app.use("*", secureHeaders()); // includes Strict-Transport-Security (HTTPS only)
+  app.use("*", requestGuard(deps));
   app.use(
     "*",
     bodyLimit({
@@ -41,7 +43,7 @@ export function createGatewayApp(deps: GatewayDeps) {
 
   app.doc31(`/${CURRENT_API_VERSION}/openapi.json`, {
     openapi: "3.1.0",
-    info: { title: "Platform API", version: CURRENT_API_VERSION },
+    info: { title: "PPIDK Website API", version: CURRENT_API_VERSION },
     servers: [{ url: "https://api.example.org" }],
   });
   app.openAPIRegistry.registerComponent("securitySchemes", "ApiKey", {

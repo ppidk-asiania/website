@@ -1,5 +1,5 @@
 {
-  "extends": "@platform/config/tsconfig/library.json",
+  "extends": "@website/config/tsconfig/library.json",
   "compilerOptions": {
     // No DOM, no Node types: the domain cannot reach browser or runtime APIs.
     "lib": ["ES2023"],

@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { GatewayVariables } from "../types";
-import { PROBLEM_CONTENT_TYPE, ProblemTypes, type ProblemDetails } from "@platform/contracts";
+import { PROBLEM_CONTENT_TYPE, ProblemTypes, type ProblemDetails } from "@website/contracts";
 
 type ProblemKey = keyof typeof ProblemTypes;
 
@@ -8,6 +8,7 @@ const TITLES: Record<ProblemKey, string> = {
   validation: "Request validation failed",
   unauthorized: "Missing or invalid API key",
   forbidden: "API key lacks the required scope",
+  originNotAllowed: "Browser requests from other websites are not allowed",
   notFound: "Resource not found",
   rateLimited: "Rate limit exceeded",
   idempotencyKeyRequired: "Idempotency-Key header required",
@@ -18,6 +19,7 @@ const STATUS: Record<ProblemKey, 400 | 401 | 403 | 404 | 429 | 500> = {
   validation: 400,
   unauthorized: 401,
   forbidden: 403,
+  originNotAllowed: 403,
   notFound: 404,
   rateLimited: 429,
   idempotencyKeyRequired: 400,

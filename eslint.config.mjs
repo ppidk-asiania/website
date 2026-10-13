@@ -21,7 +21,7 @@ const FRAMEWORKS = [
   "@hono/*",
   "@vercel/*",
 ];
-// Regexes (not gitignore globs) so "@platform/auth/firebase-admin" is not mistaken for "firebase-admin".
+// Regexes (not gitignore globs) so "@website/auth/firebase-admin" is not mistaken for "firebase-admin".
 const FIREBASE_ANY = "^firebase(-admin)?(/.*)?$";
 const APPS = "^(web|admin|shop|gateway)(/.*)?$|(^|/)apps/";
 
@@ -35,20 +35,13 @@ const CROSS_APP = {
 const APP_RULES = {
   web: [
     {
-      group: [
-        "@platform/permissions",
-        "@platform/audit",
-        "@platform/apikeys",
-        "@platform/auth/firebase-admin",
-        "@platform/domain/shop",
-      ],
-      message:
-        "The public site has no staff/admin capabilities and does not depend on the shop domain.",
+      group: ["@website/audit", "@website/apikeys", "@website/domain/shop"],
+      message: "The public site has no admin tooling and does not depend on the shop domain.",
     },
   ],
   admin: [
     {
-      group: ["@platform/domain/shop", "@platform/apikeys"],
+      group: ["@website/domain/shop", "@website/apikeys"],
       message: "Not part of the admin's approved dependencies yet.",
     },
     {
@@ -59,15 +52,16 @@ const APP_RULES = {
   shop: [
     {
       group: [
-        "@platform/domain/content",
-        "@platform/domain/events",
-        "@platform/domain/organizations",
-        "@platform/domain/newsletter",
+        "@website/domain/content",
+        "@website/domain/events",
+        "@website/domain/organizations",
+        "@website/domain/newsletter",
+        "@website/domain/members",
       ],
-      message: "Shop depends only on @platform/domain/shop (extraction boundary).",
+      message: "Shop depends only on @website/domain/shop (extraction boundary).",
     },
     {
-      group: ["@platform/audit", "@platform/apikeys"],
+      group: ["@website/audit", "@website/apikeys"],
       message: "Not part of the shop's approved dependencies.",
     },
   ],
@@ -75,7 +69,7 @@ const APP_RULES = {
 
 /** Outside src/server/**, app code may not touch server-only infrastructure. */
 const SERVER_ONLY_INFRA = {
-  group: ["@platform/db", "@platform/db/*", "@platform/auth/firebase-admin", "@platform/email"],
+  group: ["@website/db", "@website/db/*", "@website/auth/firebase-admin", "@website/email"],
   message:
     'Infrastructure is only reachable from src/server/** (modules that import "server-only").',
 };
@@ -89,7 +83,7 @@ function appBoundaryBlocks() {
         CROSS_APP,
         {
           regex: FIREBASE_ANY,
-          message: "Firebase is only accessed via @platform/db or @platform/auth adapters.",
+          message: "Firebase is only accessed via @website/db or @website/auth adapters.",
         },
       ]),
     },
@@ -102,7 +96,7 @@ function appBoundaryBlocks() {
         SERVER_ONLY_INFRA,
         {
           regex: FIREBASE_ANY,
-          message: "Firebase is only accessed via @platform/db or @platform/auth adapters.",
+          message: "Firebase is only accessed via @website/db or @website/auth adapters.",
         },
       ]),
     },
@@ -151,7 +145,7 @@ export default tseslint.config(
         {
           regex: FIREBASE_ANY,
           message:
-            "Firebase is only accessed via @platform/db/firestore or @platform/auth/firebase-admin.",
+            "Firebase is only accessed via @website/db/firestore or @website/auth/firebase-admin.",
         },
       ]),
     },
@@ -180,7 +174,7 @@ export default tseslint.config(
       {
         regex: FIREBASE_ANY,
         message:
-          "Firebase is only accessed via @platform/db/firestore or @platform/auth/firebase-admin.",
+          "Firebase is only accessed via @website/db/firestore or @website/auth/firebase-admin.",
       },
     ]),
   },
@@ -211,8 +205,9 @@ export default tseslint.config(
           message: "Domain must not depend on Firebase — declare a port instead.",
         },
         {
-          group: ["@platform/*"],
-          message: "Domain is the innermost layer; it imports no other workspace package.",
+          regex: "^@website/(?!security/validation$)",
+          message:
+            "Domain is the innermost layer; it imports no other workspace package (except @website/security/validation).",
         },
         { regex: APPS, message: "Packages must never import apps." },
       ]),
@@ -238,20 +233,26 @@ export default tseslint.config(
     files: ["packages/domain/src/shop/**/*.ts"],
     rules: restrict([
       {
-        group: ["../content*", "../events*", "../organizations*", "../newsletter*"],
+        group: ["../content*", "../events*", "../organizations*", "../newsletter*", "../members*"],
         message: "domain/shop must stay self-contained (extraction boundary).",
       },
-      { group: ["@platform/*"], message: "Domain imports no other workspace package." },
+      {
+        regex: "^@website/(?!security/validation$)",
+        message: "Domain imports no other workspace package (except @website/security/validation).",
+      },
       { group: FRAMEWORKS, message: "Domain must not depend on frameworks." },
       { regex: FIREBASE_ANY, message: "Domain must not depend on Firebase." },
       { regex: APPS, message: "Packages must never import apps." },
     ]),
   },
   {
-    files: ["packages/domain/src/{content,events,organizations,newsletter,shared}/**/*.ts"],
+    files: ["packages/domain/src/{content,events,organizations,newsletter,members,shared}/**/*.ts"],
     rules: restrict([
       { group: ["../shop*"], message: "Only the shop app may depend on domain/shop." },
-      { group: ["@platform/*"], message: "Domain imports no other workspace package." },
+      {
+        regex: "^@website/(?!security/validation$)",
+        message: "Domain imports no other workspace package (except @website/security/validation).",
+      },
       { group: FRAMEWORKS, message: "Domain must not depend on frameworks." },
       { regex: FIREBASE_ANY, message: "Domain must not depend on Firebase." },
       { regex: APPS, message: "Packages must never import apps." },
@@ -276,28 +277,47 @@ export default tseslint.config(
   // same file, so each block below carries the complete pattern list for its files.
   ...appBoundaryBlocks(),
 
+  // The browser Firebase SDK is allowed in exactly these files, for sign-in only
+  // (Auth). Firestore/Storage/Database stay forbidden in the browser.
+  {
+    files: ["apps/web/src/lib/firebase-client.ts", "apps/web/src/lib/auth-client.ts"],
+    rules: restrict([
+      ...APP_RULES.web,
+      CROSS_APP,
+      SERVER_ONLY_INFRA,
+      {
+        regex: "^firebase(-admin|/(firestore|database|storage|functions))",
+        message: "Only firebase/app and firebase/auth may be used in the browser.",
+      },
+    ]),
+  },
+
   // ── Gateway ───────────────────────────────────────────────────────────────
   {
     files: ["apps/gateway/**/*.ts"],
     rules: restrict([
       {
         group: [
-          "@platform/auth",
-          "@platform/auth/*",
-          "@platform/permissions",
-          "@platform/audit",
-          "@platform/ui",
-          "@platform/email",
+          "@website/auth",
+          "@website/auth/*",
+          "@website/permissions",
+          "@website/audit",
+          "@website/ui",
+          "@website/email",
         ],
         message:
           "The gateway must not import staff auth/session, admin authorization, admin audit or UI.",
+      },
+      {
+        group: ["@website/domain/members", "@website/domain/shop"],
+        message: "Personal data and shop internals never leave through the third-party API.",
       },
       {
         group: ["react", "react-dom", "next", "next/*"],
         message: "The gateway is not a Next.js/React app.",
       },
       CROSS_APP,
-      { regex: FIREBASE_ANY, message: "Use @platform/db." },
+      { regex: FIREBASE_ANY, message: "Use @website/db." },
     ]),
   },
 

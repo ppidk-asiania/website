@@ -24,7 +24,7 @@ export interface ApiKeyRecord {
   readonly rateLimitPerMinute: number | null;
 }
 
-/** Storage port. Implemented in @platform/db. */
+/** Storage port. Implemented in @website/db. */
 export interface ApiKeyStore {
   findByKeyId(keyId: string): Promise<ApiKeyRecord | null>;
 }
