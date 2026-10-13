@@ -1,5 +1,5 @@
 {
-  "extends": "@platform/config/tsconfig/node.json",
+  "extends": "@website/config/tsconfig/node.json",
   "compilerOptions": { "lib": ["ES2023", "DOM"] },
   "include": ["src", "tsup.config.ts"]
 }

@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { EnvironmentIsolationError } from "@platform/config";
-import { baseEnv, EnvValidationError, firebaseAdminEnv, loadEnv } from "@platform/config/env";
+import {
+  APP_ENVIRONMENTS,
+  assertEnvironmentIsolation,
+  EnvironmentIsolationError,
+  FIREBASE_EMULATOR_VARIABLES,
+} from "@website/config";
+import {
+  baseEnv,
+  EnvValidationError,
+  firebaseAdminEnv,
+  loadEnv,
+  sessionEnv,
+} from "@website/config/env";
 
 const schema = baseEnv.extend(firebaseAdminEnv.shape);
 
@@ -11,35 +22,88 @@ describe("environment validation", () => {
     );
   });
 
-  it("never lets staging/development use the production Firebase project", () => {
-    for (const appEnv of ["development", "test", "staging"]) {
+  it("uses ONE Firebase project for every environment", () => {
+    for (const appEnv of ["development", "test", "staging", "production"]) {
+      expect(
+        loadEnv(schema, { APP_ENV: appEnv, FIREBASE_PROJECT_ID: "ppidk-website-prod" })
+          .FIREBASE_PROJECT_ID,
+      ).toBe("ppidk-website-prod");
+    }
+  });
+
+  it("deployed environments refuse any other project", () => {
+    for (const appEnv of ["staging", "production"]) {
       expect(() =>
-        loadEnv(schema, { APP_ENV: appEnv, FIREBASE_PROJECT_ID: "ppidk-platform-prod" }),
+        loadEnv(schema, { APP_ENV: appEnv, FIREBASE_PROJECT_ID: "someone-elses-project" }),
       ).toThrow(EnvironmentIsolationError);
     }
   });
 
-  it("requires production to use a registered production project and no emulators", () => {
-    expect(() =>
-      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-platform-staging" }),
-    ).toThrow(EnvironmentIsolationError);
-    expect(() =>
-      loadEnv(schema, {
-        APP_ENV: "production",
-        FIREBASE_PROJECT_ID: "ppidk-platform-prod",
-        FIRESTORE_EMULATOR_HOST: "localhost:8080",
-      }),
-    ).toThrow(EnvironmentIsolationError);
-    expect(
-      loadEnv(schema, { APP_ENV: "production", FIREBASE_PROJECT_ID: "ppidk-platform-prod" })
-        .APP_ENV,
-    ).toBe("production");
+  it("refuses Firebase emulator variables in every environment (emulators are not used)", () => {
+    for (const appEnv of APP_ENVIRONMENTS) {
+      for (const variable of FIREBASE_EMULATOR_VARIABLES) {
+        expect(() =>
+          loadEnv(schema, {
+            APP_ENV: appEnv,
+            FIREBASE_PROJECT_ID: "ppidk-website-prod",
+            [variable]: "127.0.0.1:8080",
+          }),
+        ).toThrow(EnvironmentIsolationError);
+        expect(() =>
+          assertEnvironmentIsolation({
+            appEnv,
+            firebaseProjectId: "ppidk-website-prod",
+            env: { [variable]: "127.0.0.1:8080" },
+          }),
+        ).toThrow(EnvironmentIsolationError);
+      }
+    }
   });
 
-  it("accepts staging with the staging project", () => {
-    expect(
-      loadEnv(schema, { APP_ENV: "staging", FIREBASE_PROJECT_ID: "ppidk-platform-staging" })
-        .FIREBASE_PROJECT_ID,
-    ).toBe("ppidk-platform-staging");
+  it("refuses emulator variables even when no Firebase project is configured", () => {
+    expect(() =>
+      loadEnv(baseEnv, { APP_ENV: "development", FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" }),
+    ).toThrow(EnvironmentIsolationError);
+  });
+
+  it("ignores emulator variables that are present but blank", () => {
+    expect(() =>
+      assertEnvironmentIsolation({
+        appEnv: "production",
+        firebaseProjectId: "ppidk-website-prod",
+        env: { FIRESTORE_EMULATOR_HOST: "  " },
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("shared session cookie domain", () => {
+  const session = baseEnv.extend(sessionEnv.shape);
+
+  it("is optional (host-only cookie; localhost apps share it across ports anyway)", () => {
+    expect(loadEnv(session, { APP_ENV: "development" }).SESSION_COOKIE_DOMAIN).toBeUndefined();
+  });
+
+  it("accepts a parent domain, normalised to lower case without a leading dot", () => {
+    for (const value of ["ppiasiania.id", ".PPIAsiania.id"]) {
+      expect(
+        loadEnv(session, { APP_ENV: "production", SESSION_COOKIE_DOMAIN: value })
+          .SESSION_COOKIE_DOMAIN,
+      ).toBe("ppiasiania.id");
+    }
+  });
+
+  it("rejects anything that is not a plain domain (scheme, port, path, single label)", () => {
+    for (const value of [
+      "https://ppiasiania.id",
+      "ppiasiania.id:443",
+      "ppiasiania.id/x",
+      "localhost",
+      "a;b.id",
+    ]) {
+      expect(() =>
+        loadEnv(session, { APP_ENV: "production", SESSION_COOKIE_DOMAIN: value }),
+      ).toThrow(EnvValidationError);
+    }
   });
 });

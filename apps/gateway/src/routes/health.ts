@@ -1,5 +1,5 @@
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { HealthResponseSchema } from "@platform/contracts";
+import { HealthResponseSchema } from "@website/contracts";
 import type { GatewayVariables } from "../types";
 
 const healthRoute = createRoute({

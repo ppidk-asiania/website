@@ -25,6 +25,7 @@ export const ProblemTypes = {
   validation: "https://api.example.org/problems/validation",
   unauthorized: "https://api.example.org/problems/unauthorized",
   forbidden: "https://api.example.org/problems/forbidden",
+  originNotAllowed: "https://api.example.org/problems/origin-not-allowed",
   notFound: "https://api.example.org/problems/not-found",
   rateLimited: "https://api.example.org/problems/rate-limited",
   idempotencyKeyRequired: "https://api.example.org/problems/idempotency-key-required",

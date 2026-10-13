@@ -11,11 +11,11 @@ import {
   type App,
 } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { assertEnvironmentIsolation, type AppEnvironment } from "@platform/config";
+import { assertEnvironmentIsolation, type AppEnvironment } from "@website/config";
 import type { IdentityProvider, VerifiedIdentity } from "./session";
 
 if ("window" in globalThis) {
-  throw new Error("@platform/auth/firebase-admin must never be bundled into browser code.");
+  throw new Error("@website/auth/firebase-admin must never be bundled into browser code.");
 }
 
 export interface FirebaseAdminConfig {
@@ -23,16 +23,15 @@ export interface FirebaseAdminConfig {
   readonly projectId: string;
   readonly clientEmail?: string | undefined;
   readonly privateKey?: string | undefined;
-  readonly authEmulatorHost?: string | undefined;
 }
 
-const APP_NAME = "platform-auth";
+const APP_NAME = "website-auth";
 
 function adminApp(config: FirebaseAdminConfig): App {
   assertEnvironmentIsolation({
     appEnv: config.appEnv,
     firebaseProjectId: config.projectId,
-    emulatorHost: config.authEmulatorHost,
+    env: process.env,
   });
   if (getApps().some((a) => a.name === APP_NAME)) return getApp(APP_NAME);
   // Prefer Workload Identity Federation / ADC; JSON key fields are a fallback.
@@ -64,6 +63,7 @@ export function createFirebaseIdentityProvider(config: FirebaseAdminConfig): Ide
         return {
           uid: decoded.uid,
           email: decoded.email ?? null,
+          name: typeof decoded["name"] === "string" ? decoded["name"] : null,
           emailVerified: decoded.email_verified ?? false,
           signInProvider: decoded.firebase.sign_in_provider ?? null,
           authTime: decoded.auth_time,
@@ -74,6 +74,10 @@ export function createFirebaseIdentityProvider(config: FirebaseAdminConfig): Ide
     },
     async revokeSessions(uid) {
       await auth().revokeRefreshTokens(uid);
+    },
+    createCustomToken(uid) {
+      // Needs a service-account key (or the "Service Account Token Creator" role with ADC).
+      return auth().createCustomToken(uid);
     },
   };
 }

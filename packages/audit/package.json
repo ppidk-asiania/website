@@ -1,5 +1,5 @@
 {
-  "name": "@platform/audit",
+  "name": "@website/audit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
