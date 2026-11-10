@@ -98,7 +98,8 @@ export function MinutesPanel({
               {canApprove && minutes && !locked ? (
                 <Button
                   size="sm"
-                  variant="success"
+                  icon="lock"
+                  variant="primary"
                   onClick={() => run(approveMinutesAction({ id: meetingId, version }))}
                 >
                   Approve and lock
@@ -155,7 +156,8 @@ export function MinutesPanel({
                 {runs || a.mine ? (
                   <Button
                     size="sm"
-                    variant="ghost"
+                    icon={a.done ? "undo" : "check"}
+                    variant="outline"
                     onClick={() =>
                       void run(
                         setActionItemDoneAction({ id: a.id, version: a.version, done: !a.done }),
@@ -167,12 +169,12 @@ export function MinutesPanel({
                 ) : null}
                 {runs ? (
                   <>
-                    <Button size="sm" variant="ghost" icon="edit" onClick={() => setItem(a)}>
+                    <Button size="sm" variant="outline" icon="edit" onClick={() => setItem(a)}>
                       Edit
                     </Button>
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
                       icon="trash"
                       onClick={() =>
                         void run(removeActionItemAction({ id: a.id, version: a.version }))

@@ -358,7 +358,7 @@ export function AuditPage({
 
   return (
     <div className="admin-audit">
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Audit Log</h1>
           <p className="admin-page-header__desc">

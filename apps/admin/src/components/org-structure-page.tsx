@@ -102,7 +102,7 @@ export function OrgStructurePage({ period, periods, units, canEdit }: Props) {
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Organizations &gt; Period &gt; Structure</h1>
           <p className="admin-page-header__desc">

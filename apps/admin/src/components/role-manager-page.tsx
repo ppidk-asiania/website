@@ -233,7 +233,7 @@ export function RoleManagerPeople({
 
   return (
     <div className="admin-role-manager">
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Role Manager</h1>
           <p className="admin-page-header__desc">PPIDK Asiania Role Management System</p>
@@ -743,8 +743,9 @@ function PersonModal({
       {canEdit ? (
         <div>
           <Button
-            variant={row.status === "active" ? "danger" : "success"}
+            variant={row.status === "active" ? "danger" : "primary"}
             size="sm"
+            icon={row.status === "active" ? "lock" : "key"}
             disabled={busy}
             onClick={() => setConfirm(true)}
           >
@@ -907,7 +908,7 @@ export function RoleManagerRoles({
 
   return (
     <div className="admin-role-manager">
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title admin-role-title">
             {canSeePeople ? <Link href="/roles">Role Manager</Link> : "Role Manager"}

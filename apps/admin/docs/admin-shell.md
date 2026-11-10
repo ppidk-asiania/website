@@ -128,6 +128,15 @@ router.push("/things"); router.refresh();
   (`.admin-table__sub`: links, e-mails) breaks anywhere, so a table is never wider than its card
   and never scrolls sideways. Do not add `white-space: nowrap`, ellipsis or a `min-width` to
   table rules (same test).
+- **Header.** Every page starts with `.admin-page-header`: a `<div>` with the `h1`
+  (`admin-page-header__title`, "Section > Page" for sub-pages) and the `p` description, then
+  `.admin-page-header__actions` on the right in this order: other buttons, the `admin-fab` group
+  (Export / Add), dropdowns (period, status, country), `SortMenu`, `SearchBox`.
+- **Buttons.** Page and row buttons are `size="sm"` and always have an icon: `outline` for most,
+  `primary` for the step forward, `danger` for destructive ones. `ghost` is only for icon-only
+  buttons (`size="icon"`); there is no `success` colour. Popup footers use the default size.
+  Dropdowns are `Select` with `className="admin-select"` (the pager and Audit Log pills keep
+  their own classes). Test: `tests/unit/design-tokens.test.ts`, "admin pages share one header".
 - **Control height.** Buttons (every size), fields, dropdowns (`Select`), the URL slug box and
   the search box are one height: `--admin-control-height` in `globals.css` (34 px, 40 px under
   768 px). Do not set a control's height elsewhere (test "admin controls" in

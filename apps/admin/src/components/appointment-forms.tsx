@@ -57,7 +57,7 @@ export function UnitPeople(props: {
             {a.title} — {a.name}
           </span>
           {props.canEdit ? (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => end(a)}>
+            <Button size="sm" icon="x" variant="outline" disabled={busy} onClick={() => end(a)}>
               End
             </Button>
           ) : null}

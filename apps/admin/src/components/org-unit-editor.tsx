@@ -266,7 +266,7 @@ export function OrgUnitEditor({ periodId, unit }: { periodId: string; unit: OrgU
           <Select
             id="unit-type"
             required
-            className="admin-input"
+            className="admin-select"
             value={type}
             onChange={(e) => setType(e.target.value as OrgUnitType)}
             aria-invalid={errors["type"] ? true : undefined}

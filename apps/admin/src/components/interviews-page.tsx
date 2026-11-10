@@ -177,7 +177,7 @@ export function InterviewsPage(props: {
                     <>
                       {" "}
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         icon="trash"
                         disabled={busy}

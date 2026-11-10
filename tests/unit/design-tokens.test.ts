@@ -723,7 +723,7 @@ describe("admin list headers", () => {
   it("the forms list lays out its header actions like every other list page", () => {
     const forms = readFileSync(join(ROOT, "apps/admin/src/components/forms-page.tsx"), "utf8");
     expect(forms).toMatch(
-      /className="admin-page-header admin-events-header">\s*<div>\s*<h1 className="admin-page-header__title">Forms</,
+      /className="admin-page-header">\s*<div>\s*<h1 className="admin-page-header__title">Forms</,
     );
   });
 
@@ -731,15 +731,13 @@ describe("admin list headers", () => {
     for (const name of ["programs", "lpj", "meetings", "zoom"]) {
       const path = `apps/admin/src/components/${name}-page.tsx`;
       const source = readFileSync(join(ROOT, path), "utf8");
-      expect(source, path).toContain('className="admin-page-header admin-events-header"');
+      expect(source, path).toContain('className="admin-page-header"');
       expect(source, path).toMatch(/useListTable\(/);
       expect(source, path).toMatch(/<ListCard\b/);
       expect(source, path).toMatch(/<SortMenu\b/);
       expect(source, path).not.toMatch(/<DataTable\b/);
       // Export CSV and Add buttons sit inside the floating admin-fab wrapper.
-      const header = source.slice(
-        source.lastIndexOf('className="admin-page-header admin-events-header"'),
-      );
+      const header = source.slice(source.lastIndexOf('className="admin-page-header"'));
       const fab = header.slice(
         header.indexOf('className="admin-fab"'),
         header.indexOf("<SortMenu"),
@@ -762,6 +760,70 @@ describe("admin list headers", () => {
     const source = readFileSync(join(ROOT, path), "utf8");
     expect(source, path).not.toMatch(/<table\b/);
     expect(source, path).toMatch(/<DataTable\b/);
+  });
+});
+
+describe("admin pages share one header, button and dropdown style", () => {
+  const sources = files("apps/admin/src", [".tsx"]).map((path) => ({
+    path,
+    source: readFileSync(join(ROOT, path), "utf8"),
+  }));
+  const tags = (source: string, name: string) =>
+    [
+      ...source.matchAll(
+        new RegExp(`<${name}\\b((?:[^>"{]|"[^"]*"|\\{(?:[^{}]|\\{[^{}]*\\})*\\})*)>`, "g"),
+      ),
+    ].map((m) => ({ props: m[1] ?? "", line: source.slice(0, m.index).split("\n").length }));
+
+  it("lays out every page header the same way: title block, then the actions on the right", () => {
+    const actions = adminRules.find((r) => r.selector === ".admin-page-header__actions");
+    expect(actions?.body).toMatch(/display:\s*flex/);
+    expect(actions?.body).toMatch(/justify-content:\s*flex-end/);
+    for (const { path, source } of sources) {
+      expect(source, path).not.toContain("admin-events-header");
+      for (const m of source.matchAll(/className="admin-page-header">\s*(<\w+)/g)) {
+        expect(m[1], `${path}: header starts with a <div> title block`).toBe("<div");
+      }
+    }
+  });
+
+  it("orders header actions: buttons, the admin-fab group, then dropdowns, sort and search", () => {
+    for (const { path, source } of sources) {
+      for (const fab of source.matchAll(/className="admin-fab"/g)) {
+        const actions = source.lastIndexOf("admin-page-header__actions", fab.index);
+        if (actions < 0) continue;
+        // a header helper call or the other branch of a ternary starts a new set of actions
+        const start = Math.max(
+          actions,
+          source.lastIndexOf("header(", fab.index),
+          source.lastIndexOf(") : (", fab.index),
+        );
+        expect(source.slice(start, fab.index), path).not.toMatch(
+          /<(PeriodSwitch|StatusMenu|SortMenu|SearchBox|Select)\b/,
+        );
+      }
+    }
+  });
+
+  it("gives every small button an icon; ghost only for icon buttons; no success colour", () => {
+    for (const { path, source } of sources) {
+      for (const { props, line } of tags(source, "Button")) {
+        const where = `${path}:${line}`;
+        if (/size="sm"/.test(props)) expect(props, where).toMatch(/\bicon=/);
+        if (/variant="ghost"/.test(props)) expect(props, where).toMatch(/size="icon"/);
+        expect(props, where).not.toMatch(/variant=(?:"success"|\{[^}]*"success")/);
+      }
+    }
+  });
+
+  it("styles every dropdown as admin-select (pager and Audit Log pills keep their own look)", () => {
+    for (const { path, source } of sources) {
+      for (const { props, line } of tags(source, "Select")) {
+        expect(props, `${path}:${line}`).toMatch(
+          /className="(admin-select|admin-darkbar__select|admin-audit-pick)"/,
+        );
+      }
+    }
   });
 });
 

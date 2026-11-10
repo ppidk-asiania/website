@@ -63,10 +63,10 @@ export function ChapterRecordsPage(props: {
         </div>
         {props.canEdit ? (
           <div className="admin-page-header__actions">
-            <Button size="sm" variant="outline" onClick={() => setForm("officers")}>
+            <Button size="sm" icon="edit" variant="outline" onClick={() => setForm("officers")}>
               Edit officers
             </Button>
-            <Button size="sm" onClick={() => setForm("report")}>
+            <Button size="sm" icon="send" onClick={() => setForm("report")}>
               Submit quarterly report
             </Button>
           </div>

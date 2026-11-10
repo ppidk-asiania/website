@@ -105,7 +105,7 @@ export function CashbookPage({
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Finance &gt; Cash book</h1>
           <p className="admin-page-header__desc">

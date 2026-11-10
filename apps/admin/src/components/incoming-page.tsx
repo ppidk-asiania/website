@@ -374,8 +374,9 @@ function IncomingList({
                     {canDispose && !archived && d.status !== "done" ? (
                       <div className="admin-table__actions">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
+                          icon="send"
                           onClick={() =>
                             setDisposing({
                               parentId: d.id,
@@ -388,8 +389,9 @@ function IncomingList({
                           Forward
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
+                          icon="check"
                           onClick={() => setCompleting({ id: d.id, response: "" })}
                         >
                           Mark done
@@ -436,6 +438,7 @@ function IncomingList({
                 <Button
                   variant="primary"
                   size="sm"
+                  icon="cornerDownRight"
                   disabled={busy}
                   onClick={() =>
                     setDisposing({ parentId: null, target: "", instruction: "", dueDate: "" })
@@ -448,6 +451,7 @@ function IncomingList({
                 <Button
                   variant="primary"
                   size="sm"
+                  icon="inbox"
                   disabled={busy}
                   onClick={() => setArchiving(true)}
                 >
@@ -612,7 +616,7 @@ function IncomingList({
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Letter &gt; Incoming</h1>
           <p className="admin-page-header__desc">

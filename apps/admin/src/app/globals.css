@@ -1419,7 +1419,7 @@ a.admin-stat-card:hover {
   line-height: var(--size-control-sm);
 }
 
-.admin-events-header .admin-page-header__actions {
+.admin-page-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -1427,7 +1427,7 @@ a.admin-stat-card:hover {
   justify-content: flex-end;
 }
 
-.admin-events-header .admin-searchbox {
+.admin-page-header .admin-searchbox {
   flex: 0 1 auto;
   min-width: 200px;
 }

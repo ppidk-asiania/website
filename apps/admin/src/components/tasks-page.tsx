@@ -79,6 +79,11 @@ export function TasksPage({
           <p className="admin-page-header__desc">{description}</p>
         </div>
         <div className="admin-page-header__actions">
+          {share ? (
+            <Button size="sm" variant="outline" icon="users" onClick={() => setSharing(true)}>
+              Share ({share.with.length})
+            </Button>
+          ) : null}
           {boards.length > 0 ? (
             <Select
               aria-label="Open a unit board"
@@ -95,11 +100,6 @@ export function TasksPage({
                 </option>
               ))}
             </Select>
-          ) : null}
-          {share ? (
-            <Button size="sm" variant="outline" icon="users" onClick={() => setSharing(true)}>
-              Share ({share.with.length})
-            </Button>
           ) : null}
         </div>
       </div>
@@ -132,7 +132,7 @@ export function TasksPage({
             {share.with.length ? ` Shared with: ${share.with.map((w) => w.email).join(", ")}.` : ""}
           </p>
           <Field label="Account e-mail" name="email" type="email" required />
-          <Button size="sm" variant="ghost" onClick={() => setSharing(!sharing)}>
+          <Button size="sm" icon="users" variant="outline" onClick={() => setSharing(!sharing)}>
             {sharing ? "Stop sharing instead" : "Share instead"}
           </Button>
         </FormModal>

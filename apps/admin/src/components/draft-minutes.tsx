@@ -121,7 +121,7 @@ export function DraftMinutes({
                 {p.title} — {p.pic ? (names.get(p.pic) ?? p.pic) : "no PIC (add it by hand)"}
                 {p.dueOn ? `, due ${p.dueOn}` : ""}{" "}
                 {p.pic ? (
-                  <Button size="sm" variant="ghost" icon="plus" onClick={() => add(p, i)}>
+                  <Button size="sm" variant="outline" icon="plus" onClick={() => add(p, i)}>
                     Add
                   </Button>
                 ) : null}

@@ -160,7 +160,12 @@ export function MeetingPage({
             header: "",
             align: "right" as const,
             render: (p: P) => (
-              <Button size="sm" variant="outline" onClick={() => tick(p.uid, !p.presentAt)}>
+              <Button
+                size="sm"
+                icon={p.presentAt ? "x" : "check"}
+                variant="outline"
+                onClick={() => tick(p.uid, !p.presentAt)}
+              >
                 {p.presentAt ? "Remove" : "Mark present"}
               </Button>
             ),
@@ -211,7 +216,7 @@ export function MeetingPage({
             </Button>
           ) : null}
           {runs && m.status === "scheduled" ? (
-            <Button size="sm" variant="danger" onClick={() => setCancelling(true)}>
+            <Button size="sm" icon="x" variant="danger" onClick={() => setCancelling(true)}>
               Cancel meeting
             </Button>
           ) : null}

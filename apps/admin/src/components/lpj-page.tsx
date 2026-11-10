@@ -97,7 +97,7 @@ export function LpjListPage({
   ];
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">LPJ</h1>
           <p className="admin-page-header__desc">
@@ -179,7 +179,7 @@ export function LpjReportPage({ lpj, can }: ReportProps) {
   const { plan, input } = lpj;
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">LPJ · {plan.name}</h1>
           <p className="admin-page-header__desc">

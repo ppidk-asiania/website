@@ -1057,7 +1057,7 @@ function NewsletterList({
 
   return (
     <div className="admin-newsletter">
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">
             {isCampaign ? "Newsletter > Campaigns" : "Newsletter > Subscribers"}

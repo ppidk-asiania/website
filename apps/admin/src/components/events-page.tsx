@@ -974,7 +974,7 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Event</h1>
           <p className="admin-page-header__desc">

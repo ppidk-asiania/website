@@ -80,8 +80,10 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
   if (!period) {
     return (
       <div className="admin-page-header">
-        <h1 className="admin-page-header__title">OKR</h1>
-        <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        <div>
+          <h1 className="admin-page-header__title">OKR</h1>
+          <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        </div>
       </div>
     );
   }
@@ -164,7 +166,7 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">OKR</h1>
           <p className="admin-page-header__desc">
@@ -173,7 +175,6 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
           </p>
         </div>
         <div className="admin-page-header__actions">
-          <PeriodSwitch path="/okr" current={period.id} periods={periods} />
           <div className="admin-fab">
             {unitOptions.length > 0 ? (
               <Button
@@ -186,6 +187,7 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
               </Button>
             ) : null}
           </div>
+          <PeriodSwitch path="/okr" current={period.id} periods={periods} />
         </div>
       </div>
 

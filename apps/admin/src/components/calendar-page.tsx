@@ -156,6 +156,7 @@ export function CalendarPage({
               <input className="admin-input" readOnly value={feedUrl} aria-label="Feed link" />
               <Button
                 size="sm"
+                icon="refresh"
                 variant="danger"
                 onClick={() =>
                   void run(revokeFeedAction({}), "Old links revoked; a new link is shown")
@@ -186,7 +187,7 @@ export function CalendarPage({
                   {h.date} {h.name}{" "}
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     icon="trash"
                     onClick={() => run(removeHolidayAction({ id: h.id }), "Holiday removed")}
                   >

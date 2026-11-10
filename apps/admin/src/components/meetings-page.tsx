@@ -192,8 +192,10 @@ export function MeetingsPage({
   if (!period) {
     return (
       <div className="admin-page-header">
-        <h1 className="admin-page-header__title">Meetings</h1>
-        <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        <div>
+          <h1 className="admin-page-header__title">Meetings</h1>
+          <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        </div>
       </div>
     );
   }
@@ -234,13 +236,12 @@ export function MeetingsPage({
   ];
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Meetings</h1>
           <p className="admin-page-header__desc">Meetings of period {period.name}</p>
         </div>
         <div className="admin-page-header__actions">
-          <PeriodSwitch path="/meetings" current={period.id} periods={periods} />
           <div className="admin-fab">
             {units.length > 0 ? (
               <Button variant="outline" size="sm" icon="plus" onClick={() => setAdding(true)}>
@@ -248,6 +249,7 @@ export function MeetingsPage({
               </Button>
             ) : null}
           </div>
+          <PeriodSwitch path="/meetings" current={period.id} periods={periods} />
           <SortMenu columns={columns} />
         </div>
       </div>

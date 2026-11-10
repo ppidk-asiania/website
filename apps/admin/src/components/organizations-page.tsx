@@ -301,7 +301,7 @@ function OrganizationsList({
 
   const header = (title: string, actions: ReactNode) => (
     <>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">{title}</h1>
           <p className="admin-page-header__desc">{ORG_SUBTITLE}</p>
@@ -532,7 +532,30 @@ function OrganizationsList({
       <div>
         {header(
           "Organizations > Universities",
-          <div className="admin-fab">
+          <>
+            <div className="admin-fab">
+              <Button
+                variant="outline"
+                size="sm"
+                icon="inbox"
+                onClick={() => setUniversityModal("requests")}
+              >
+                Requested ({universities.requests.length})
+              </Button>
+              {universities.canEdit && universities.country ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon="plus"
+                  onClick={() => {
+                    setUniversityErrors({});
+                    setUniversityModal("add");
+                  }}
+                >
+                  Add University
+                </Button>
+              ) : null}
+            </div>
             <Select
               className="admin-select"
               aria-label="Country"
@@ -547,28 +570,7 @@ function OrganizationsList({
                 </option>
               ))}
             </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              icon="inbox"
-              onClick={() => setUniversityModal("requests")}
-            >
-              Requested ({universities.requests.length})
-            </Button>
-            {universities.canEdit && universities.country ? (
-              <Button
-                variant="outline"
-                size="sm"
-                icon="plus"
-                onClick={() => {
-                  setUniversityErrors({});
-                  setUniversityModal("add");
-                }}
-              >
-                Add University
-              </Button>
-            ) : null}
-          </div>,
+          </>,
         )}
 
         <Card className="admin-events-card admin-list-card admin-org-card">

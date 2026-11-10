@@ -31,7 +31,7 @@ export default async function ReportCardPage({
   const { okr, programmes, budget, lpj } = card;
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Report card</h1>
           <p className="admin-page-header__desc">
@@ -39,19 +39,6 @@ export default async function ReportCardPage({
           </p>
         </div>
         <div className="admin-page-header__actions">
-          <PeriodSwitch
-            path="/programs/report"
-            current={period.id}
-            periods={periods.map((p) => ({ id: p.id, name: p.name }))}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            icon="download"
-            href={`/api/programs/report?period=${period.id}`}
-          >
-            PDF
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -60,6 +47,19 @@ export default async function ReportCardPage({
           >
             Back
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            icon="download"
+            href={`/api/programs/report?period=${period.id}`}
+          >
+            PDF
+          </Button>
+          <PeriodSwitch
+            path="/programs/report"
+            current={period.id}
+            periods={periods.map((p) => ({ id: p.id, name: p.name }))}
+          />
         </div>
       </div>
       <div className="admin-stat-grid">

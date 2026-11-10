@@ -161,7 +161,7 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">{program.name}</h1>
           <p className="admin-page-header__desc">
@@ -190,17 +190,25 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
             </Button>
           ) : null}
           {can.manage && status === "approved" ? (
-            <Button size="sm" onClick={() => run(startProgramAction(ref), "Started")}>
+            <Button
+              size="sm"
+              icon="chevronRight"
+              onClick={() => run(startProgramAction(ref), "Started")}
+            >
               Start
             </Button>
           ) : null}
           {can.manage && status === "running" ? (
-            <Button size="sm" onClick={() => run(finishProgramAction(ref), "Finished")}>
+            <Button
+              size="sm"
+              icon="check"
+              onClick={() => run(finishProgramAction(ref), "Finished")}
+            >
               Finish
             </Button>
           ) : null}
           {can.approve && status !== "finished" && status !== "cancelled" ? (
-            <Button variant="danger" size="sm" onClick={() => setDialog("cancel")}>
+            <Button variant="danger" size="sm" icon="x" onClick={() => setDialog("cancel")}>
               Cancel programme
             </Button>
           ) : null}

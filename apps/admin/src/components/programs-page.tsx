@@ -191,8 +191,10 @@ export function ProgramsPage({
   if (!period) {
     return (
       <div className="admin-page-header">
-        <h1 className="admin-page-header__title">Programmes</h1>
-        <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        <div>
+          <h1 className="admin-page-header__title">Programmes</h1>
+          <p className="admin-page-header__desc">Create a board period first (Organizations).</p>
+        </div>
       </div>
     );
   }
@@ -236,7 +238,7 @@ export function ProgramsPage({
   ];
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Programmes</h1>
           <p className="admin-page-header__desc">
@@ -245,7 +247,6 @@ export function ProgramsPage({
           </p>
         </div>
         <div className="admin-page-header__actions">
-          <PeriodSwitch path="/programs" current={period.id} periods={periods} />
           <Button
             variant="outline"
             size="sm"
@@ -269,6 +270,7 @@ export function ProgramsPage({
               </Button>
             ) : null}
           </div>
+          <PeriodSwitch path="/programs" current={period.id} periods={periods} />
           <SortMenu columns={columns} />
         </div>
       </div>

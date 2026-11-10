@@ -70,7 +70,8 @@ export function ReviewQueue({ rows, canEdit }: { rows: ProposalRow[]; canEdit: b
                   <div className="admin-table__actions">
                     <Button
                       size="sm"
-                      variant="success"
+                      icon="check"
+                      variant="primary"
                       disabled={busy}
                       onClick={() => void decide(row, { type: "approve" }, "Campus accepted")}
                     >
@@ -93,6 +94,7 @@ export function ReviewQueue({ rows, canEdit }: { rows: ProposalRow[]; canEdit: b
                     </Select>
                     <Button
                       size="sm"
+                      icon="link"
                       variant="outline"
                       disabled={busy || !targets[row.id]}
                       onClick={() =>
@@ -114,6 +116,7 @@ export function ReviewQueue({ rows, canEdit }: { rows: ProposalRow[]; canEdit: b
                     />
                     <Button
                       size="sm"
+                      icon="x"
                       variant="danger"
                       disabled={busy || !notes[row.id]?.trim()}
                       onClick={() =>

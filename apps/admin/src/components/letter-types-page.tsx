@@ -348,7 +348,7 @@ function LetterTypesList({
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Letter &gt; Letter types</h1>
           <p className="admin-page-header__desc">

@@ -463,8 +463,9 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                       {fileLink(d.path, d.name)}
                       {editable ? (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
+                          icon="trash"
                           disabled={busy}
                           onClick={() =>
                             void run(removeFinanceFileAction, { path: d.path }, "Document removed")
@@ -511,6 +512,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
+                    icon="trash"
                     disabled={busy}
                     onClick={() => setRemoving(true)}
                   >
@@ -519,6 +521,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="primary"
                     size="sm"
+                    icon="send"
                     disabled={busy}
                     onClick={() => run(submitFinanceAction, {}, "Request submitted")}
                   >
@@ -531,6 +534,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
+                    icon="undo"
                     onClick={() =>
                       ask({
                         title: "Return to the requester",
@@ -545,6 +549,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
+                    icon="x"
                     onClick={() =>
                       ask({
                         title: "Reject the request",
@@ -559,6 +564,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="primary"
                     size="sm"
+                    icon="check"
                     onClick={() =>
                       ask({
                         title: "Review the numbers (treasurer)",
@@ -577,6 +583,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
+                    icon="undo"
                     onClick={() =>
                       ask({
                         title: "Return to the requester",
@@ -591,6 +598,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="outline"
                     size="sm"
+                    icon="x"
                     onClick={() =>
                       ask({
                         title: "Reject the request",
@@ -605,6 +613,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                   <Button
                     variant="primary"
                     size="sm"
+                    icon="check"
                     onClick={() =>
                       ask({
                         title: "Authorise (coordinator)",
@@ -622,6 +631,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                 <Button
                   variant="primary"
                   size="sm"
+                  icon="check"
                   onClick={() =>
                     setPaying({ amount: amountText(r.amountMinor, r.currency), file: null })
                   }
@@ -633,6 +643,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                 <Button
                   variant="primary"
                   size="sm"
+                  icon="check"
                   disabled={busy}
                   onClick={() => run(completeFinanceAction, {}, "Request done")}
                 >

@@ -76,7 +76,13 @@ export function CertificateSendPanel({
           Send links
         </Button>
         {progress["failed"] ? (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => retry()}>
+          <Button
+            size="sm"
+            icon="refresh"
+            variant="outline"
+            disabled={busy}
+            onClick={() => retry()}
+          >
             Retry failed
           </Button>
         ) : null}

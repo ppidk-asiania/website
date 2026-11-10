@@ -673,6 +673,7 @@ function LettersList(props: Props) {
                     key={key}
                     variant="primary"
                     size="sm"
+                    icon={key === "cancel" ? "x" : key === "return" ? "undo" : "check"}
                     disabled={busy}
                     onClick={() => runAction(key)}
                   >
@@ -771,7 +772,7 @@ function LettersList(props: Props) {
 
   return (
     <div>
-      <div className="admin-page-header admin-events-header">
+      <div className="admin-page-header">
         <div>
           <h1 className="admin-page-header__title">Letter &gt; Outgoing</h1>
           <p className="admin-page-header__desc">

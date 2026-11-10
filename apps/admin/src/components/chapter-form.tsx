@@ -190,7 +190,7 @@ export function ChapterForm(props: {
           </label>
           <Select
             id="chapter-active"
-            className="admin-input"
+            className="admin-select"
             disabled={props.contactOnly}
             value={form.active ? "active" : "inactive"}
             onChange={(e) => set("active", e.target.value === "active")}
@@ -205,7 +205,7 @@ export function ChapterForm(props: {
           </label>
           <Select
             id="chapter-region"
-            className="admin-input"
+            className="admin-select"
             disabled={props.contactOnly}
             value={form.region}
             onChange={(e) => set("region", e.target.value)}
@@ -240,7 +240,7 @@ export function ChapterForm(props: {
           </label>
           <Select
             id="chapter-risk"
-            className="admin-input"
+            className="admin-select"
             disabled={props.contactOnly}
             value={form.risk}
             onChange={(e) => set("risk", e.target.value as ChapterRisk)}
@@ -384,7 +384,7 @@ export function ChapterForm(props: {
               {form.logo ? "Replace logo" : "Upload logo"}
             </Button>
             {form.logo && !props.contactOnly && (
-              <Button variant="ghost" size="sm" onClick={() => set("logo", null)}>
+              <Button variant="outline" size="sm" icon="trash" onClick={() => set("logo", null)}>
                 Remove
               </Button>
             )}
