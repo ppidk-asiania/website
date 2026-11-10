@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendImage } from "../../apps/admin/src/components/image-upload";
+import { sendImage } from "../../../apps/admin/src/components/image-upload";
 
 /** A stand-in for the browser's XMLHttpRequest that the test drives by hand. */
 class FakeXhr {
@@ -79,7 +79,7 @@ describe("image upload with progress and cancel (admin)", () => {
   });
 
   it("shows the upload bar (progress and X) in every image upload section", () => {
-    const admin = join(import.meta.dirname, "../../apps/admin/src/components");
+    const admin = join(import.meta.dirname, "../../../apps/admin/src/components");
     const bar = readFileSync(join(admin, "ui/upload-bar.tsx"), "utf8");
     expect(bar).toMatch(/<progress/);
     expect(bar).toMatch(/aria-label="Cancel upload"/);

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import type { PublicChapter } from "@website/domain/organizations";
 import { DICTIONARIES, LANG_COOKIE, languageFrom, type Language } from "@/i18n/dictionaries";
+import { Localized } from "@/i18n/localized";
 import { REGION_ORDER, chapterAlias, countryName } from "@/lib/country-names";
 import { activeChapters } from "@/server/chapters";
 
@@ -13,6 +14,14 @@ export default function MapPage() {
   return (
     <main className="site-lists site-lists--news">
       <div className="site-lists__inner">
+        <Localized
+          render={(t) => (
+            <>
+              <h1 className="site-lists__title">{t.map.title}</h1>
+              <p className="site-lists__tagline">{t.map.tagline}</p>
+            </>
+          )}
+        />
         <Suspense fallback={null}>
           <LocalizedMapPage />
         </Suspense>
@@ -50,8 +59,6 @@ async function LocalizedMapPage() {
   })).filter((group) => group.rows.length > 0);
   return (
     <>
-      <h1 className="site-lists__title">{t.title}</h1>
-      <p className="site-lists__tagline">{t.tagline}</p>
       <div className="site-map">
         <div className="site-map__map">
           {/* eslint-disable-next-line @next/next/no-img-element -- design asset, sized by CSS */}
