@@ -22,8 +22,16 @@ import { formatInZone } from "@/components/format";
 import { ChoiceField, Field, FormModal, num, text } from "@/components/program-ui";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  MenuDivider,
+  MenuItem,
+  RowMenu,
+  SortMenu,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 
@@ -52,6 +60,16 @@ interface Row {
   canCancel: boolean;
 }
 
+type SortKey = "topic" | "when" | "status";
+const sortValue = (r: Row, key: SortKey): string =>
+  key === "topic"
+    ? r.topic.toLowerCase()
+    : key === "when"
+      ? r.startsAt
+      : ZOOM_STATUS_LABELS[r.status];
+const filterText = (r: Row, key: SortKey): string =>
+  key === "when" ? formatInZone(r.startsAt, r.timeZone) : String(sortValue(r, key));
+
 interface SettingsView {
   version: number | null;
   licences: number;
@@ -71,15 +89,26 @@ function Invitation({ row, onClose }: { row: Row; onClose: () => void }) {
     }
   }, [row.joinUrl]);
   return (
-    <Modal open title="Invitation" onClose={onClose}>
+    <Modal
+      open
+      title="Invitation"
+      onClose={onClose}
+      footer={
+        <div className="admin-modal__footer-row">
+          <Button variant="outline" icon="chevronLeft" onClick={onClose}>
+            Back
+          </Button>
+          <Button
+            variant="primary"
+            icon="copy"
+            onClick={() => navigator.clipboard?.writeText(row.invitation ?? "")}
+          >
+            Copy text
+          </Button>
+        </div>
+      }
+    >
       <pre style={{ whiteSpace: "pre-wrap" }}>{row.invitation}</pre>
-      <Button
-        size="sm"
-        icon="copy"
-        onClick={() => navigator.clipboard?.writeText(row.invitation ?? "")}
-      >
-        Copy text
-      </Button>
       {qr ? (
         // eslint-disable-next-line @next/next/no-img-element -- a data: URL, nothing to optimise
         <img src={qr} alt="QR code of the join link" width={220} height={220} />
@@ -105,6 +134,7 @@ export function ZoomPage({
   const [editingSettings, setEditingSettings] = useState(false);
   const [deciding, setDeciding] = useState<{ row: Row; approve: boolean } | null>(null);
   const [invite, setInvite] = useState<Row | null>(null);
+  const table = useListTable(rows, sortValue, undefined, filterText);
 
   const run = async (action: Promise<{ ok: true } | ActionFailure>, done: string) => {
     const result = await action;
@@ -115,7 +145,7 @@ export function ZoomPage({
   const columns: Column<Row>[] = [
     {
       key: "topic",
-      header: "Booking",
+      header: table.header("topic", "Booking"),
       width: "35%",
       render: (r) => (
         <div>
@@ -131,63 +161,63 @@ export function ZoomPage({
     },
     {
       key: "when",
-      header: "When",
+      header: table.header("when", "When"),
       render: (r) => `${formatInZone(r.startsAt, r.timeZone)} (${r.timeZone})`,
     },
     {
       key: "status",
-      header: "Status",
+      header: table.header("status", "Status"),
       render: (r) => <Badge tone={TONE[r.status]}>{ZOOM_STATUS_LABELS[r.status]}</Badge>,
     },
     {
       key: "actions",
       header: "",
       align: "right",
-      render: (r) => (
-        <div className="admin-table__actions">
-          {r.invitation ? (
-            <Button size="sm" variant="outline" icon="qr" onClick={() => setInvite(r)}>
-              Invitation
-            </Button>
-          ) : null}
-          {r.canDecide ? (
-            <>
-              <Button
-                size="sm"
-                variant="success"
-                onClick={() => setDeciding({ row: r, approve: true })}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => setDeciding({ row: r, approve: false })}
-              >
-                Reject
-              </Button>
-            </>
-          ) : null}
-          {r.canCancel ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                void run(cancelZoomAction({ id: r.id, version: r.version }), "Booking cancelled")
-              }
-            >
-              Cancel
-            </Button>
-          ) : null}
-        </div>
-      ),
+      render: (r) =>
+        r.invitation || r.canDecide || r.canCancel ? (
+          <div className="admin-table__actions">
+            <RowMenu>
+              {r.invitation ? (
+                <MenuItem icon="qr" onClick={() => setInvite(r)}>
+                  Invitation
+                </MenuItem>
+              ) : null}
+              {r.canDecide ? (
+                <>
+                  <MenuItem icon="check" onClick={() => setDeciding({ row: r, approve: true })}>
+                    Approve
+                  </MenuItem>
+                  <MenuItem icon="x" danger onClick={() => setDeciding({ row: r, approve: false })}>
+                    Reject
+                  </MenuItem>
+                </>
+              ) : null}
+              {r.canCancel ? (
+                <>
+                  {r.invitation || r.canDecide ? <MenuDivider /> : null}
+                  <MenuItem
+                    icon="undo"
+                    danger
+                    onClick={() =>
+                      void run(
+                        cancelZoomAction({ id: r.id, version: r.version }),
+                        "Booking cancelled",
+                      )
+                    }
+                  >
+                    Cancel<span className="admin-long"> Booking</span>
+                  </MenuItem>
+                </>
+              ) : null}
+            </RowMenu>
+          </div>
+        ) : null,
     },
   ];
 
   return (
     <div>
-      <ToastBanner message={toast.message} />
-      <div className="admin-page-header">
+      <div className="admin-page-header admin-events-header">
         <div>
           <h1 className="admin-page-header__title">Zoom</h1>
           <p className="admin-page-header__desc">
@@ -197,14 +227,6 @@ export function ZoomPage({
           </p>
         </div>
         <div className="admin-page-header__actions">
-          <Button
-            size="sm"
-            variant="outline"
-            icon="download"
-            onClick={() => downloadCsv("zoom-bookings", zoomCsv(rows))}
-          >
-            Export CSV
-          </Button>
           {settings ? (
             <Button
               size="sm"
@@ -215,18 +237,38 @@ export function ZoomPage({
               Settings
             </Button>
           ) : null}
-          {canRequest ? (
-            <Button size="sm" variant="outline" icon="plus" onClick={() => setRequesting(true)}>
-              Book Zoom
+          <div className="admin-fab">
+            <Button
+              size="sm"
+              variant="outline"
+              icon="download"
+              onClick={() => downloadCsv("zoom-bookings", zoomCsv(rows))}
+            >
+              Export CSV
             </Button>
-          ) : null}
+            {canRequest ? (
+              <Button size="sm" variant="outline" icon="plus" onClick={() => setRequesting(true)}>
+                Book Zoom
+              </Button>
+            ) : null}
+          </div>
+          <SortMenu columns={columns} />
         </div>
       </div>
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} emptyText="No bookings." />
-        </CardBody>
-      </Card>
+      <ListCard
+        table={table}
+        noun="booking"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="booking"
+            query=""
+            filters={table.filterCount}
+            emptyHint="No bookings from 30 days ago to 180 days ahead."
+            onClear={table.clearFilters}
+          />
+        }
+      />
       <FormModal
         open={requesting}
         title="Book Zoom"
@@ -389,6 +431,7 @@ export function ZoomPage({
         </FormModal>
       ) : null}
       {invite ? <Invitation row={invite} onClose={() => setInvite(null)} /> : null}
+      <ToastBanner message={toast.message} />
     </div>
   );
 }

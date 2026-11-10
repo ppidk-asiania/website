@@ -17,8 +17,8 @@ import { downloadCsv } from "@/components/csv";
 import { programsCsv } from "@/components/exports-model";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ListCard, ListEmpty, SortMenu, useListTable } from "@/components/ui/list-controls";
 import { HEALTH_STATUS_LABELS, label, PROGRAM_STATUS_LABELS } from "@/labels";
 
 export const HEALTH_TONE: Record<HealthStatus, BadgeTone> = {
@@ -26,6 +26,18 @@ export const HEALTH_TONE: Record<HealthStatus, BadgeTone> = {
   at_risk: "warn",
   off_track: "danger",
 };
+
+type SortKey = "name" | "status" | "progress" | "health";
+const sortValue = (r: Row, key: SortKey): string | number =>
+  key === "name"
+    ? r.name.toLowerCase()
+    : key === "progress"
+      ? r.progress
+      : key === "status"
+        ? label(PROGRAM_STATUS_LABELS, r.status)
+        : r.health
+          ? label(HEALTH_STATUS_LABELS, r.health)
+          : "—";
 
 interface Row {
   id: string;
@@ -175,6 +187,7 @@ export function ProgramsPage({
   plan: PlanOptions | null;
 }) {
   const [adding, setAdding] = useState(false);
+  const table = useListTable(rows, sortValue);
   if (!period) {
     return (
       <div className="admin-page-header">
@@ -186,7 +199,7 @@ export function ProgramsPage({
   const columns: Column<Row>[] = [
     {
       key: "name",
-      header: "Programme",
+      header: table.header("name", "Programme"),
       width: "40%",
       render: (r) => (
         <div>
@@ -202,17 +215,17 @@ export function ProgramsPage({
     },
     {
       key: "status",
-      header: "Status",
+      header: table.header("status", "Status"),
       render: (r) => <Badge>{label(PROGRAM_STATUS_LABELS, r.status)}</Badge>,
     },
     {
       key: "progress",
-      header: "Progress",
+      header: table.header("progress", "Progress"),
       render: (r) => <span className="admin-table__title">{r.progress}%</span>,
     },
     {
       key: "health",
-      header: "Health",
+      header: table.header("health", "Health"),
       render: (r) =>
         r.health ? (
           <Badge tone={HEALTH_TONE[r.health]}>{label(HEALTH_STATUS_LABELS, r.health)}</Badge>
@@ -241,33 +254,38 @@ export function ProgramsPage({
           >
             Report card
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            icon="download"
-            onClick={() => downloadCsv(`programmes-${period.id}`, programsCsv(rows))}
-          >
-            Export CSV
-          </Button>
           <div className="admin-fab">
+            <Button
+              variant="outline"
+              size="sm"
+              icon="download"
+              onClick={() => downloadCsv(`programmes-${period.id}`, programsCsv(rows))}
+            >
+              Export CSV
+            </Button>
             {plan ? (
               <Button variant="outline" size="sm" icon="plus" onClick={() => setAdding(true)}>
                 Add New Programme
               </Button>
             ) : null}
           </div>
+          <SortMenu columns={columns} />
         </div>
       </div>
-      <Card className="admin-events-card admin-list-card">
-        <CardBody flush>
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.id}
-            emptyText="No programmes in this period yet."
+      <ListCard
+        table={table}
+        noun="programme"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="programme"
+            query=""
+            filters={table.filterCount}
+            emptyHint="Nothing in this period yet."
+            onClear={table.clearFilters}
           />
-        </CardBody>
-      </Card>
+        }
+      />
       {plan ? (
         <PlanForm
           open={adding}

@@ -26,7 +26,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ListCard, ListEmpty, SortMenu, useListTable } from "@/components/ui/list-controls";
 import { Icon } from "@/components/ui/icon";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import { label, LPJ_DESK_LABELS, LPJ_STATUS_LABELS } from "@/labels";
@@ -41,6 +42,18 @@ interface Row {
   desks: number;
 }
 
+type SortKey = "name" | "status" | "due" | "desks";
+const sortValue = (r: Row, key: SortKey): string | number =>
+  key === "name"
+    ? r.name.toLowerCase()
+    : key === "status"
+      ? label(LPJ_STATUS_LABELS, r.status)
+      : key === "due"
+        ? r.dueOn
+        : r.desks;
+const filterText = (r: Row, key: SortKey): string =>
+  key === "desks" ? `${r.desks} / 3` : String(sortValue(r, key));
+
 export function LpjListPage({
   period,
   periods,
@@ -50,10 +63,11 @@ export function LpjListPage({
   periods: Array<{ id: string; name: string }>;
   rows: Row[];
 }) {
+  const table = useListTable(rows, sortValue, undefined, filterText);
   const columns: Column<Row>[] = [
     {
       key: "name",
-      header: "LPJ",
+      header: table.header("name", "LPJ"),
       width: "45%",
       render: (r) => (
         <div>
@@ -66,16 +80,20 @@ export function LpjListPage({
     },
     {
       key: "status",
-      header: "Status",
+      header: table.header("status", "Status"),
       render: (r) => <Badge>{label(LPJ_STATUS_LABELS, r.status)}</Badge>,
     },
     {
       key: "due",
-      header: "Due",
+      header: table.header("due", "Due"),
       render: (r) =>
         r.overdue ? <Badge tone="danger">Overdue · {r.dueOn}</Badge> : <span>{r.dueOn}</span>,
     },
-    { key: "desks", header: "Desks", render: (r) => <span>{r.desks} / 3</span> },
+    {
+      key: "desks",
+      header: table.header("desks", "Desks"),
+      render: (r) => <span>{r.desks} / 3</span>,
+    },
   ];
   return (
     <div>
@@ -88,13 +106,23 @@ export function LpjListPage({
         </div>
         <div className="admin-page-header__actions">
           {period ? <PeriodSwitch path="/lpj" current={period.id} periods={periods} /> : null}
+          <SortMenu columns={columns} />
         </div>
       </div>
-      <Card className="admin-events-card admin-list-card">
-        <CardBody flush>
-          <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} emptyText="No LPJ yet." />
-        </CardBody>
-      </Card>
+      <ListCard
+        table={table}
+        noun="LPJ"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="LPJ"
+            query=""
+            filters={table.filterCount}
+            emptyHint="An LPJ starts when a programme finishes."
+            onClear={table.clearFilters}
+          />
+        }
+      />
     </div>
   );
 }

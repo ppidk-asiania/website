@@ -726,6 +726,43 @@ describe("admin list headers", () => {
       /className="admin-page-header admin-events-header">\s*<div>\s*<h1 className="admin-page-header__title">Forms</,
     );
   });
+
+  it("builds the Planning lists like the Event list (ListCard, sort menu, Add/Export in admin-fab)", () => {
+    for (const name of ["programs", "lpj", "meetings", "zoom"]) {
+      const path = `apps/admin/src/components/${name}-page.tsx`;
+      const source = readFileSync(join(ROOT, path), "utf8");
+      expect(source, path).toContain('className="admin-page-header admin-events-header"');
+      expect(source, path).toMatch(/useListTable\(/);
+      expect(source, path).toMatch(/<ListCard\b/);
+      expect(source, path).toMatch(/<SortMenu\b/);
+      expect(source, path).not.toMatch(/<DataTable\b/);
+      // Export CSV and Add buttons sit inside the floating admin-fab wrapper.
+      const header = source.slice(
+        source.lastIndexOf('className="admin-page-header admin-events-header"'),
+      );
+      const fab = header.slice(
+        header.indexOf('className="admin-fab"'),
+        header.indexOf("<SortMenu"),
+      );
+      for (const label of ["Export CSV", "Add New", "Schedule meeting", "Book Zoom"]) {
+        if (header.includes(label)) expect(fab, `${path} ${label}`).toContain(label);
+      }
+    }
+  });
+
+  it("puts a row's extra actions in the row menu (Zoom bookings, OKR key results)", () => {
+    for (const name of ["zoom", "okr"]) {
+      const path = `apps/admin/src/components/${name}-page.tsx`;
+      expect(readFileSync(join(ROOT, path), "utf8"), path).toMatch(/<RowMenu\b/);
+    }
+  });
+
+  it("draws the cash book with DataTable, not a hand-made table", () => {
+    const path = "apps/admin/src/components/cashbook-page.tsx";
+    const source = readFileSync(join(ROOT, path), "utf8");
+    expect(source, path).not.toMatch(/<table\b/);
+    expect(source, path).toMatch(/<DataTable\b/);
+  });
 });
 
 describe("admin form modals (built like Article Settings)", () => {

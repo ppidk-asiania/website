@@ -184,7 +184,8 @@ router.push("/things"); router.refresh();
   The bulk bar is fixed at the bottom; `Pagination` shows Prev / page /
   Next. Adding a page: use `ListCard` or `DataTable`, give columns these keys, and wrap its header
   buttons.
-- **Dark list pages** (Event, Gallery, Article, Newsletter, Audit Log) share one set of parts —
+- **Dark list pages** (Event, Gallery, Article, Newsletter, Audit Log, Programmes, LPJ, Meetings,
+  Zoom) share one set of parts —
   add a new list page with them instead of copying markup:
   - `useListTable(rows, sortValue, initialSort?, filterText?)`: sort, column filters, page, page
     size and row selection. Define `sortValue` and `filterText` (a cell's text in its column's

@@ -13,11 +13,27 @@ import { toMinor } from "@website/domain/shared";
 import { addCashEntryAction } from "@/app/(panel)/finance/actions";
 import { actionMessage } from "@/components/action-message";
 import { Button } from "@/components/ui/button";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldError } from "@/components/ui/field-error";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import type { CashSection } from "./finance-model";
+
+type CashRow = CashSection["rows"][number];
+const CASH_COLUMNS: Column<CashRow>[] = [
+  { key: "date", header: "Date", render: (r) => r.date },
+  { key: "category", header: "Category", render: (r) => r.category },
+  {
+    key: "description",
+    header: "Description",
+    render: (r) => `${r.description}${r.fromRequest ? " (request)" : ""}`,
+  },
+  { key: "in", header: "In", render: (r) => r.amountIn },
+  { key: "out", header: "Out", render: (r) => r.amountOut },
+  { key: "balance", header: "Balance", render: (r) => r.balance },
+];
 
 interface Props {
   periodName: string | null;
@@ -89,7 +105,7 @@ export function CashbookPage({
 
   return (
     <div>
-      <div className="admin-page-header">
+      <div className="admin-page-header admin-events-header">
         <div>
           <h1 className="admin-page-header__title">Finance &gt; Cash book</h1>
           <p className="admin-page-header__desc">
@@ -99,49 +115,57 @@ export function CashbookPage({
           </p>
         </div>
         <div className="admin-page-header__actions">
-          {canWrite ? (
-            <Button
-              variant="outline"
-              size="sm"
-              icon="plus"
-              disabled={!periodName}
-              onClick={() => {
-                setFieldErrors({});
-                setDraft({
-                  date: today(),
-                  kind: "in",
-                  category: "opening_balance",
-                  description: "",
-                  amount: "",
-                  currency: "IDR",
-                });
-              }}
-            >
-              Manual entry
-            </Button>
-          ) : null}
+          <div className="admin-fab">
+            {canWrite ? (
+              <Button
+                variant="outline"
+                size="sm"
+                icon="plus"
+                disabled={!periodName}
+                onClick={() => {
+                  setFieldErrors({});
+                  setDraft({
+                    date: today(),
+                    kind: "in",
+                    category: "opening_balance",
+                    description: "",
+                    amount: "",
+                    currency: "IDR",
+                  });
+                }}
+              >
+                Manual entry
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
       <div className="admin-dark-form">
         <div className="admin-form-grid">
-          <label className="admin-field">
-            <span className="admin-field__label">From</span>
+          <div className="admin-field">
+            <label className="admin-field__label" htmlFor="cash-from">
+              From
+            </label>
             <input
+              id="cash-from"
               className="admin-input"
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
             />
-          </label>
-          <label className="admin-field">
-            <span className="admin-field__label">To</span>
+          </div>
+          <div className="admin-field">
+            <label className="admin-field__label" htmlFor="cash-to">
+              To
+            </label>
             <input
+              id="cash-to"
               className="admin-input"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
             />
-          </label>
+          </div>
         </div>
         {rangeError ? <p className="admin-card__subtitle">{rangeError}</p> : null}
         <div className="admin-form-actions">
@@ -159,10 +183,20 @@ export function CashbookPage({
           </Button>
           {canExport ? (
             <div className="admin-form-actions__right">
-              <Button variant="outline" size="sm" href={`/api/finance/report?${query}&format=csv`}>
+              <Button
+                variant="outline"
+                size="sm"
+                icon="download"
+                href={`/api/finance/report?${query}&format=csv`}
+              >
                 Download CSV
               </Button>
-              <Button variant="outline" size="sm" href={`/api/finance/report?${query}&format=pdf`}>
+              <Button
+                variant="outline"
+                size="sm"
+                icon="download"
+                href={`/api/finance/report?${query}&format=pdf`}
+              >
                 Download PDF
               </Button>
             </div>
@@ -173,41 +207,15 @@ export function CashbookPage({
         <p className="admin-card__subtitle">No cash book entries in this range.</p>
       ) : null}
       {sections.map((s) => (
-        <div key={s.currency} className="admin-dark-form">
-          <h2 className="admin-field__label">
-            {s.currency} · opening {s.opening} · in {s.totalIn} · out {s.totalOut} · closing{" "}
-            {s.closing}
-          </h2>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Category</th>
-                  <th>Description</th>
-                  <th>In</th>
-                  <th>Out</th>
-                  <th>Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.date}</td>
-                    <td>{r.category}</td>
-                    <td>
-                      {r.description}
-                      {r.fromRequest ? " (request)" : ""}
-                    </td>
-                    <td>{r.amountIn}</td>
-                    <td>{r.amountOut}</td>
-                    <td>{r.balance}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Card key={s.currency} className="admin-events-card">
+          <CardHeader
+            title={s.currency}
+            subtitle={`Opening ${s.opening} · in ${s.totalIn} · out ${s.totalOut} · closing ${s.closing}`}
+          />
+          <CardBody flush>
+            <DataTable columns={CASH_COLUMNS} rows={s.rows} rowKey={(r) => r.id} />
+          </CardBody>
+        </Card>
       ))}
       <Modal
         asForm

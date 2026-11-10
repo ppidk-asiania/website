@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { MenuItem, RowMenu } from "@/components/ui/list-controls";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 
 interface KeyResultItem {
@@ -139,20 +140,20 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
             <Button
               variant="ghost"
               size="icon"
-              icon="trash"
-              className="admin-btn--icon-danger"
-              title="Delete"
-              aria-label={`Delete ${kr.title}`}
-              onClick={() => setRemoving({ kind: "keyResult", objective: o, keyResult: kr })}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
               icon="edit"
               title="Edit"
               aria-label={`Edit ${kr.title}`}
               onClick={() => setEditing({ kind: "keyResult", objective: o, keyResult: kr })}
             />
+            <RowMenu>
+              <MenuItem
+                icon="trash"
+                danger
+                onClick={() => setRemoving({ kind: "keyResult", objective: o, keyResult: kr })}
+              >
+                Delete<span className="admin-long"> Key Result</span>
+              </MenuItem>
+            </RowMenu>
           </div>
         ) : null,
     },

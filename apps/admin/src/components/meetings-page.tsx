@@ -12,8 +12,8 @@ import { formatInZone } from "@/components/format";
 import { ChoiceField, Field, FormModal, num, PeriodSwitch, text } from "@/components/program-ui";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ListCard, ListEmpty, SortMenu, useListTable } from "@/components/ui/list-controls";
 
 export const MEETING_STATUS_TONE: Record<MeetingStatus, BadgeTone> = {
   scheduled: "primary",
@@ -32,6 +32,22 @@ interface Row {
   present: number;
   mine: boolean;
 }
+
+type SortKey = "title" | "when" | "status" | "present";
+const sortValue = (r: Row, key: SortKey): string | number =>
+  key === "title"
+    ? r.title.toLowerCase()
+    : key === "when"
+      ? r.startsAt
+      : key === "status"
+        ? MEETING_STATUS_LABELS[r.status]
+        : r.present;
+const filterText = (r: Row, key: SortKey): string =>
+  key === "when"
+    ? formatInZone(r.startsAt, r.timeZone)
+    : key === "present"
+      ? `${r.present} / ${r.participants}`
+      : String(sortValue(r, key));
 
 export interface MeetingValues {
   id: string;
@@ -172,6 +188,7 @@ export function MeetingsPage({
   units: Array<{ id: string; name: string }>;
 }) {
   const [adding, setAdding] = useState(false);
+  const table = useListTable(rows, sortValue, undefined, filterText);
   if (!period) {
     return (
       <div className="admin-page-header">
@@ -183,7 +200,7 @@ export function MeetingsPage({
   const columns: Column<Row>[] = [
     {
       key: "title",
-      header: "Meeting",
+      header: table.header("title", "Meeting"),
       width: "40%",
       render: (r) => (
         <div>
@@ -197,15 +214,23 @@ export function MeetingsPage({
         </div>
       ),
     },
-    { key: "when", header: "When", render: (r) => formatInZone(r.startsAt, r.timeZone) },
+    {
+      key: "when",
+      header: table.header("when", "When"),
+      render: (r) => formatInZone(r.startsAt, r.timeZone),
+    },
     {
       key: "status",
-      header: "Status",
+      header: table.header("status", "Status"),
       render: (r) => (
         <Badge tone={MEETING_STATUS_TONE[r.status]}>{MEETING_STATUS_LABELS[r.status]}</Badge>
       ),
     },
-    { key: "present", header: "Present", render: (r) => `${r.present} / ${r.participants}` },
+    {
+      key: "present",
+      header: table.header("present", "Present"),
+      render: (r) => `${r.present} / ${r.participants}`,
+    },
   ];
   return (
     <div>
@@ -223,18 +248,23 @@ export function MeetingsPage({
               </Button>
             ) : null}
           </div>
+          <SortMenu columns={columns} />
         </div>
       </div>
-      <Card className="admin-events-card admin-list-card">
-        <CardBody flush>
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.id}
-            emptyText="No meetings in this period yet."
+      <ListCard
+        table={table}
+        noun="meeting"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="meeting"
+            query=""
+            filters={table.filterCount}
+            emptyHint="Nothing in this period yet."
+            onClear={table.clearFilters}
           />
-        </CardBody>
-      </Card>
+        }
+      />
       {units.length > 0 ? (
         <MeetingForm
           open={adding}
