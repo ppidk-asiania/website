@@ -1433,6 +1433,10 @@ a.admin-stat-card:hover {
   min-width: 0;
 }
 
+.admin-page-header__actions .admin-btn {
+  white-space: nowrap;
+}
+
 .admin-page-header .admin-searchbox {
   flex: 0 1 auto;
   min-width: 200px;

@@ -132,7 +132,7 @@ router.push("/things"); router.refresh();
 - **Header.** Every page starts with `.admin-page-header`: a `<div>` with the `h1`
   (`admin-page-header__title`, "Section > Page" for sub-pages) and the `p` description, then
   `.admin-page-header__actions` on the right, on one line (it never wraps; the title block
-  shrinks), in this order: other buttons, the `admin-fab` group (Export / Add), dropdowns
+  shrinks, and a button label never breaks onto two lines), in this order: other buttons, the `admin-fab` group (Export / Add), dropdowns
   (period, status, country), `SortMenu`, `SearchBox`. The description is `--text-xs`.
 - **Buttons.** Page and row buttons are `size="sm"` and always have an icon: `outline` for most,
   `primary` for the step forward and for every Add button (`icon="plus"`), `danger` for

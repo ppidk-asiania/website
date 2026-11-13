@@ -791,6 +791,9 @@ describe("admin pages share one header, button and dropdown style", () => {
     const actions = adminRules.find((r) => r.selector === ".admin-page-header__actions");
     expect(actions?.body).toMatch(/flex-wrap:\s*nowrap/);
     expect(actions?.body).toMatch(/flex:\s*none/);
+    // a label never breaks inside its button (no "Report / card" stacked in two lines)
+    const label = adminRules.find((r) => r.selector === ".admin-page-header__actions .admin-btn");
+    expect(label?.body).toMatch(/white-space:\s*nowrap/);
     for (const rule of adminRules.filter((r) => r.selector.includes(".admin-page-header__desc"))) {
       const size = /font-size:\s*([^;]+)/.exec(rule.body)?.[1]?.trim();
       if (size) expect(size, rule.selector).toBe("var(--text-xs)");
