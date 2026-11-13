@@ -787,6 +787,51 @@ describe("admin pages share one header, button and dropdown style", () => {
     }
   });
 
+  it("keeps the header buttons on one line and the description small", () => {
+    const actions = adminRules.find((r) => r.selector === ".admin-page-header__actions");
+    expect(actions?.body).toMatch(/flex-wrap:\s*nowrap/);
+    expect(actions?.body).toMatch(/flex:\s*none/);
+    for (const rule of adminRules.filter((r) => r.selector.includes(".admin-page-header__desc"))) {
+      const size = /font-size:\s*([^;]+)/.exec(rule.body)?.[1]?.trim();
+      if (size) expect(size, rule.selector).toBe("var(--text-xs)");
+    }
+  });
+
+  it("shows white text on the accent colour (primary buttons, current side panel page)", () => {
+    const primary = adminRules.find((r) => r.selector === ".admin-btn--primary");
+    expect(primary?.body).toMatch(/color:\s*var\(--color-white\)/);
+    const current = adminRules.find((r) => r.selector === '.admin-nav-link[aria-current="page"]');
+    expect(current?.body).toMatch(/background:\s*var\(--color-highlight\)/);
+    expect(current?.body).toMatch(/[^-]color:\s*var\(--color-white\)/);
+  });
+
+  it("makes every Add button the accent (primary) button", () => {
+    for (const { path, source } of sources) {
+      if (/ui[\\/]editable-list\.tsx$/.test(path)) continue; // adds a form row, not a record
+      for (const { props, line } of tags(source, "Button")) {
+        if (/icon="plus"/.test(props)) {
+          expect(props, `${path}:${line}`).not.toMatch(/variant="(outline|ghost|danger)"/);
+        }
+      }
+    }
+  });
+
+  it("draws every dropdown button like the field dropdown", () => {
+    const shared = adminRules.find(
+      (r) =>
+        r.selector.includes(".admin-select") &&
+        r.selector.includes(".admin-audit-pick") &&
+        r.selector.includes(".admin-newsletter-status"),
+    );
+    expect(shared?.body).toMatch(/background:\s*var\(--admin-field-bg\)/);
+    expect(shared?.body).toMatch(/color:\s*var\(--admin-field-ink\)/);
+    for (const name of [".admin-audit-pick", ".admin-newsletter-status"]) {
+      const own = adminRules.find((r) => r.selector === name);
+      expect(own?.body, name).not.toMatch(/font-size:\s*var\(--text-xs\)/);
+      expect(own?.body, name).not.toMatch(/font-weight/);
+    }
+  });
+
   it("orders header actions: buttons, the admin-fab group, then dropdowns, sort and search", () => {
     for (const { path, source } of sources) {
       for (const fab of source.matchAll(/className="admin-fab"/g)) {

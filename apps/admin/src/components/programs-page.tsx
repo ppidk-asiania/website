@@ -265,7 +265,7 @@ export function ProgramsPage({
               Export CSV
             </Button>
             {plan ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => setAdding(true)}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => setAdding(true)}>
                 Add New Programme
               </Button>
             ) : null}

@@ -292,7 +292,7 @@ export function OrgUnitEditor({ periodId, unit }: { periodId: string; unit: OrgU
             <p className="admin-unit-section__desc">Heads of unit and members without divisions</p>
           </div>
           <Button
-            variant="outline"
+            variant="primary"
             size="sm"
             icon="plus"
             onClick={() => setMembers((rows) => [...rows, newMember()])}
@@ -315,7 +315,7 @@ export function OrgUnitEditor({ periodId, unit }: { periodId: string; unit: OrgU
             <p className="admin-unit-section__desc">Add a division if the unit has division</p>
           </div>
           <Button
-            variant="outline"
+            variant="primary"
             size="sm"
             icon="plus"
             onClick={() => setDivisions((ds) => [...ds, { key: nextKey++, name: "", members: [] }])}

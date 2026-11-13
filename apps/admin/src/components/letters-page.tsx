@@ -795,7 +795,7 @@ function LettersList(props: Props) {
             ) : null}
             {canWrite ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 disabled={!periodName || types.length === 0 || units.length === 0}

@@ -81,7 +81,8 @@ router.push("/things"); router.refresh();
   …): cream fields and buttons on the dark canvas, dark ones on cream surfaces (cards, rows,
   menus — the list is at the top of "Dark admin pages"; add a new cream surface there).
   `primary` buttons are champagne gold (`--color-highlight`, also the active nav item and
-  focus ring), `outline` is cream, `danger` is red. Popups use `Modal` without a
+  focus ring) with white text (the current side panel page too), `outline` is cream, `danger`
+  is red. Popups use `Modal` without a
   theme class: big title, fields, then **Back** (`outline`, `chevronLeft`) and the action at the
   bottom right (`ConfirmDialog` does this for confirmations). Every popup is centred on the page;
   `className="admin-modal--side"` only makes it a cream surface.
@@ -130,13 +131,16 @@ router.push("/things"); router.refresh();
   table rules (same test).
 - **Header.** Every page starts with `.admin-page-header`: a `<div>` with the `h1`
   (`admin-page-header__title`, "Section > Page" for sub-pages) and the `p` description, then
-  `.admin-page-header__actions` on the right in this order: other buttons, the `admin-fab` group
-  (Export / Add), dropdowns (period, status, country), `SortMenu`, `SearchBox`.
+  `.admin-page-header__actions` on the right, on one line (it never wraps; the title block
+  shrinks), in this order: other buttons, the `admin-fab` group (Export / Add), dropdowns
+  (period, status, country), `SortMenu`, `SearchBox`. The description is `--text-xs`.
 - **Buttons.** Page and row buttons are `size="sm"` and always have an icon: `outline` for most,
-  `primary` for the step forward, `danger` for destructive ones. `ghost` is only for icon-only
+  `primary` for the step forward and for every Add button (`icon="plus"`), `danger` for
+  destructive ones. `ghost` is only for icon-only
   buttons (`size="icon"`); there is no `success` colour. Popup footers use the default size.
-  Dropdowns are `Select` with `className="admin-select"` (the pager and Audit Log pills keep
-  their own classes). Test: `tests/unit/design-tokens.test.ts`, "admin pages share one header".
+  Dropdowns are `Select` with `className="admin-select"`; the Audit Log pills
+  (`admin-audit-pick`) and `StatusMenu` share the same field colours, border, size and text
+  (only the pager keeps its compact look). Test: `tests/unit/design-tokens.test.ts`, "admin pages share one header".
 - **Control height.** Buttons (every size), fields, dropdowns (`Select`), the URL slug box and
   the search box are one height: `--admin-control-height` in `globals.css` (34 px, 40 px under
   768 px). Do not set a control's height elsewhere (test "admin controls" in

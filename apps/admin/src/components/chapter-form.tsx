@@ -356,7 +356,7 @@ export function ChapterForm(props: {
           ))}
           {form.socials.length < 5 && (
             <Button
-              variant="outline"
+              variant="primary"
               size="sm"
               icon="plus"
               onClick={() => set("socials", [...form.socials, { label: "", url: "" }])}

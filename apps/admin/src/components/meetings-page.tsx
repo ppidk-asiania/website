@@ -244,7 +244,7 @@ export function MeetingsPage({
         <div className="admin-page-header__actions">
           <div className="admin-fab">
             {units.length > 0 ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => setAdding(true)}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => setAdding(true)}>
                 Schedule meeting
               </Button>
             ) : null}

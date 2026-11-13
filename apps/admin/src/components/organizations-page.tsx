@@ -416,7 +416,7 @@ function OrganizationsList({
             </Button>
             {canEditPeriods ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 onClick={() => {
@@ -544,7 +544,7 @@ function OrganizationsList({
               </Button>
               {universities.canEdit && universities.country ? (
                 <Button
-                  variant="outline"
+                  variant="primary"
                   size="sm"
                   icon="plus"
                   onClick={() => {
@@ -781,7 +781,7 @@ function OrganizationsList({
             Export CSV
           </Button>
           {canEdit ? (
-            <Button variant="outline" size="sm" icon="plus" onClick={() => setChapterForm("new")}>
+            <Button variant="primary" size="sm" icon="plus" onClick={() => setChapterForm("new")}>
               Add New PPI
             </Button>
           ) : null}

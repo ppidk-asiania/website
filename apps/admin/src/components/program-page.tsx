@@ -274,7 +274,7 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
           actions={
             can.manage ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 onClick={() => setDialog({ milestone: null })}
@@ -300,7 +300,7 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
           subtitle="One per week (weeks start Monday 00:00 UTC); sending again updates this week's."
           actions={
             can.checkIn ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => setDialog("checkin")}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => setDialog("checkin")}>
                 Check in this week
               </Button>
             ) : null

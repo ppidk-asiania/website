@@ -246,7 +246,7 @@ export function RoleManagerPeople({
           ) : null}
           <div className="admin-fab">
             {canEdit ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => setAdding(true)}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => setAdding(true)}>
                 Add New People
               </Button>
             ) : null}
@@ -920,7 +920,7 @@ export function RoleManagerRoles({
         <div className="admin-page-header__actions">
           <div className="admin-fab">
             {canEdit ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => setEditing("new")}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => setEditing("new")}>
                 Add New Role
               </Button>
             ) : null}

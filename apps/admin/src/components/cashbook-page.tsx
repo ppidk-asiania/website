@@ -118,7 +118,7 @@ export function CashbookPage({
           <div className="admin-fab">
             {canWrite ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 disabled={!periodName}

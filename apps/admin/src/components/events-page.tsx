@@ -993,7 +993,7 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
               Export CSV
             </Button>
             {canEdit ? (
-              <Button variant="outline" size="sm" icon="plus" onClick={() => toForm("create")}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => toForm("create")}>
                 Add New Event
               </Button>
             ) : null}

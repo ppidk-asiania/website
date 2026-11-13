@@ -834,7 +834,7 @@ function ArticleList({
           <div className="admin-page-header__actions">
             <div className="admin-fab">
               {canEdit ? (
-                <Button variant="outline" size="sm" icon="plus" onClick={() => toForm("create")}>
+                <Button variant="primary" size="sm" icon="plus" onClick={() => toForm("create")}>
                   Add New Article
                 </Button>
               ) : null}

@@ -782,7 +782,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
             ) : null}
             {desks.edit ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 disabled={!periodName || units.length === 0}

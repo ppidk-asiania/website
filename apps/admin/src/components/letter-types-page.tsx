@@ -367,7 +367,7 @@ function LetterTypesList({
               >
                 Letterhead
               </Button>
-              <Button variant="outline" size="sm" icon="plus" onClick={() => open()}>
+              <Button variant="primary" size="sm" icon="plus" onClick={() => open()}>
                 Add type
               </Button>
             </div>

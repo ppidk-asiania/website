@@ -140,7 +140,7 @@ export function MinutesPanel({
           title="Action items"
           actions={
             runs ? (
-              <Button size="sm" variant="outline" icon="plus" onClick={() => setItem("new")}>
+              <Button size="sm" variant="primary" icon="plus" onClick={() => setItem("new")}>
                 Add
               </Button>
             ) : null

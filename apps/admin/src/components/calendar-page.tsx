@@ -175,7 +175,7 @@ export function CalendarPage({
           <CardHeader
             title="Holidays"
             actions={
-              <Button size="sm" variant="outline" icon="plus" onClick={() => setAdding(true)}>
+              <Button size="sm" variant="primary" icon="plus" onClick={() => setAdding(true)}>
                 Add
               </Button>
             }

@@ -178,7 +178,7 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
           <div className="admin-fab">
             {unitOptions.length > 0 ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 onClick={() => setEditing({ kind: "objective", objective: null })}
@@ -233,7 +233,7 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
               o.canEdit ? (
                 <div className="admin-table__actions">
                   <Button
-                    variant="outline"
+                    variant="primary"
                     size="sm"
                     icon="plus"
                     onClick={() => setEditing({ kind: "keyResult", objective: o, keyResult: null })}

@@ -1073,7 +1073,7 @@ function NewsletterList({
             <>
               <div className="admin-fab">
                 {canEdit ? (
-                  <Button variant="outline" size="sm" icon="plus" onClick={() => toForm("create")}>
+                  <Button variant="primary" size="sm" icon="plus" onClick={() => toForm("create")}>
                     Add New Campaign
                   </Button>
                 ) : null}
@@ -1113,7 +1113,7 @@ function NewsletterList({
                       if (file) void importCsv(file);
                     }}
                   />
-                  <Button variant="outline" size="sm" icon="plus" onClick={() => setAddOpen(true)}>
+                  <Button variant="primary" size="sm" icon="plus" onClick={() => setAddOpen(true)}>
                     Add New Subscriber
                   </Button>
                 </>

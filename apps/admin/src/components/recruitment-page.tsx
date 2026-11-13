@@ -502,7 +502,7 @@ function RecruitmentList({ initial: items, periods, unitsByPeriod, forms, canEdi
           <div className="admin-fab">
             {canEdit ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 disabled={periods.length === 0 || forms.length === 0}

@@ -216,7 +216,7 @@
 
 .admin-nav-link[aria-current="page"] {
   background: var(--color-highlight);
-  color: var(--color-on-highlight);
+  color: var(--color-white);
   font-weight: var(--font-semibold);
 }
 
@@ -751,7 +751,7 @@ a.admin-stat-card:hover {
 
 .admin-btn--primary {
   background: var(--color-highlight);
-  color: var(--color-on-highlight);
+  color: var(--color-white);
 }
 
 @media (hover: hover) {
@@ -1419,12 +1419,18 @@ a.admin-stat-card:hover {
   line-height: var(--size-control-sm);
 }
 
+/* one line of header buttons; the title block shrinks instead */
 .admin-page-header__actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+}
+
+.admin-page-header > :first-child {
+  min-width: 0;
 }
 
 .admin-page-header .admin-searchbox {
@@ -2440,11 +2446,6 @@ html:has(.admin-dark-page) {
   color: var(--admin-ink);
 }
 
-.admin-dark-page .admin-page-header__desc {
-  font-size: var(--text-sm);
-  line-height: var(--leading-sm);
-}
-
 .admin-dark-page .admin-card__subtitle {
   color: var(--admin-ink-muted);
 }
@@ -2488,7 +2489,15 @@ html:has(.admin-dark-page) {
   }
 }
 
-.admin-dark-page :is(.admin-input, .admin-select, .admin-textarea, .admin-url-slug) {
+.admin-dark-page
+  :is(
+    .admin-input,
+    .admin-select,
+    .admin-textarea,
+    .admin-url-slug,
+    .admin-audit-pick,
+    .admin-newsletter-status
+  ) {
   background: var(--admin-field-bg);
   border-color: var(--admin-field-bg);
   color: var(--admin-field-ink);
@@ -3638,12 +3647,8 @@ form.admin-toolbar::before {
   cursor: pointer;
 }
 
-.admin-newsletter-status:hover {
-  background: var(--color-brand-200);
-}
-
 .admin-newsletter-status strong {
-  font-weight: var(--font-semibold);
+  font-weight: inherit;
 }
 
 /* every label shares one grid cell, so the button keeps the longest one's width */
@@ -4018,13 +4023,8 @@ form.admin-toolbar::before {
   border-radius: var(--radius-md);
   background: var(--color-brand-50);
   color: var(--color-brand-950);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
   -webkit-tap-highlight-color: transparent;
-}
-
-.admin-audit-pick .admin-combo__value {
-  font-weight: var(--font-semibold);
 }
 
 .admin-audit-tabbar {

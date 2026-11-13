@@ -639,7 +639,7 @@ function IncomingList({
             ) : null}
             {canEdit ? (
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 icon="plus"
                 disabled={!periodName}

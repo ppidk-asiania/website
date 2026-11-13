@@ -147,7 +147,7 @@ export function OrgStructurePage({ period, periods, units, canEdit }: Props) {
           </div>
           <div className="admin-fab">
             {canEdit ? (
-              <Button variant="outline" size="sm" icon="plus" href={`${unitsPath}/new`}>
+              <Button variant="primary" size="sm" icon="plus" href={`${unitsPath}/new`}>
                 Add New Unit
               </Button>
             ) : null}

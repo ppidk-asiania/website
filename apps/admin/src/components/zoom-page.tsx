@@ -247,7 +247,7 @@ export function ZoomPage({
               Export CSV
             </Button>
             {canRequest ? (
-              <Button size="sm" variant="outline" icon="plus" onClick={() => setRequesting(true)}>
+              <Button size="sm" variant="primary" icon="plus" onClick={() => setRequesting(true)}>
                 Book Zoom
               </Button>
             ) : null}
