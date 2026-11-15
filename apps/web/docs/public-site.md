@@ -8,7 +8,10 @@ logo and tagline; Explore (Home … Map) and Services (E-Commerce = `SHOP_URL`, 
 Our Community (five PPIs, linking to `/map`); address and social icons (new tab); copyright year,
 Terms of Use, Privacy Policy. All labels come from the dictionaries, so they follow the page
 language. The header has no language switch; on the right it streams a **Log in** chip for
-signed-out visitors, or the signed-in member's account menu (Profile, Account, Log out). Visitors
+signed-out visitors, or the signed-in member's account menu (Profile, Account, Log out). The
+sign-in, sign-up and password-reset pages are the exception: one centred card (`AuthCard` in
+`src/components/auth-form.tsx`: title, form, "Or" separator, Google / passkey buttons) with no header or
+footer — `globals.css` hides both when the page contains `.auth-page`. Visitors
 read the site in Indonesian unless the `lang` cookie says `en` (kept for a year). Home
 keeps the purpose statement, the newsletter sign-up and the Google data notice (Google's OAuth
 review fetches "/" as a guest) around the design sections; About, Terms and Privacy are

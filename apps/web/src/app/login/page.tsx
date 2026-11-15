@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { safeReturnUrl } from "@website/auth";
-import { AppShell } from "@website/ui";
+import { AuthCard } from "@/components/auth-form";
 import { getAppUrls } from "@/server/env";
 import { LoginForm } from "./login-form";
 
@@ -11,11 +11,11 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default function LoginPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <AppShell title="Sign in">
+    <AuthCard title="Welcome back" subtitle="Sign in to your account">
       <Suspense fallback={<LoginForm next={null} />}>
         <LoginWithReturn searchParams={searchParams} />
       </Suspense>
-    </AppShell>
+    </AuthCard>
   );
 }
 

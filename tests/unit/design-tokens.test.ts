@@ -935,3 +935,31 @@ describe("admin form modals (built like Article Settings)", () => {
     }
   });
 });
+
+describe("web sign-in pages", () => {
+  const web = (path: string) => readFileSync(join(ROOT, "apps/web/src", path), "utf8");
+  const authPages = ["app/login/page.tsx", "app/signup/page.tsx", "app/forgot-password/page.tsx"];
+
+  it("sign-in, sign-up and password reset share one centred card (AuthCard)", () => {
+    for (const path of authPages) {
+      expect(web(path), path).toContain("<AuthCard");
+      expect(web(path), path).not.toContain("AppShell");
+    }
+    expect(web("components/auth-form.tsx")).toContain('className="auth-page"');
+  });
+
+  it("show no site header or footer", () => {
+    expect(web("app/globals.css")).toMatch(
+      /body:has\(\.auth-page\)\s*:is\(\.site-header,\s*\.site-footer\)\s*\{[^}]*display:\s*none/,
+    );
+  });
+
+  it("offer Google (and the passkey) under an 'Or continue with' separator, after the form", () => {
+    for (const path of ["app/login/login-form.tsx", "app/signup/signup-form.tsx"]) {
+      const source = web(path);
+      const separator = source.indexOf("<AuthSeparator");
+      expect(separator, path).toBeGreaterThan(source.indexOf("</form>"));
+      expect(source.indexOf("<GoogleButton"), path).toBeGreaterThan(separator);
+    }
+  });
+});

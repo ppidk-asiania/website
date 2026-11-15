@@ -26,7 +26,6 @@ export function ForgotPasswordForm() {
         );
       }}
     >
-      <p>Enter your email and we will send you a link to choose a new password.</p>
       <Field label="Email" name="email" type="email" autoComplete="email" />
       <Message text={error} />
       <Message
@@ -34,7 +33,7 @@ export function ForgotPasswordForm() {
         text={sent ? "If an account exists for that email, a reset link is on its way." : ""}
       />
       <Button busy={busy}>Send reset link</Button>
-      <p>
+      <p className="auth-footer">
         <Link href="/login">Back to sign in</Link>
       </p>
     </form>
