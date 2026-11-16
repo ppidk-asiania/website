@@ -22,6 +22,19 @@ and unit agendas can never appear (`tests/integration/highlights.test.ts`). **Ac
 (`/activities`, M4, linked from the panel and the footer) is the same read model
 (`src/components/highlights.tsx`) without the limit of 3.
 
+**PPI slider** (Home, `src/components/ppi-slider.tsx`): a full-screen section that PINS
+(`position: sticky`, one screen of page scroll per country) while the page scroll moves the 17
+country texts sideways over ONE still scenery photo. Each country is ONE block (no copies): the
+current one sits at 63% of the width, and as the next one slides in from the right it moves 37%
+left and fades to 45% (the faded "previous country" in the design), then out (on phones the
+blocks slide a full screen, one at a time). Each country holds still for the first 40% of its
+scroll step, then slides; the photo fades (ease-in-out) to the next country's only once
+that country's text is fully in view. The page scrolls on past the section after the last
+country; the invisible side arrows scroll the page one country back or forward. Each entry names its photo by `mapNo`
+(`public/home/{mapNo}.png`, the same files as the chapter logos), not by its position in the
+slider — the slider order (Selandia Baru, Australia, Malaysia, Singapura, …) is not the map order
+(`tests/unit/ppi-slider.test.ts`).
+
 **News**: `/news` lists visible news as cards, newest first, filtered by the category pills
 (Semua · Umum · Akademik · Komunitas · Pengumuman · Internasional, over the news `category`
 field), search, tag and time (`?category=academic&tag=riset&q=riset&time=month&page=2`, 12 per
