@@ -158,9 +158,9 @@ describe("who is told (contacts and desk holders)", () => {
   it("contacts: the account e-mail and the profile's WhatsApp number", async () => {
     const contacts = await createSqlContactReader(db()).contacts(["ari", "sekre", "nobody"]);
     expect(Object.fromEntries(contacts)).toEqual({
-      ari: { email: "ari@example.org", phone: "+6281234567890" },
-      sekre: { email: "sekre@example.org", phone: null },
-      nobody: { email: null, phone: null },
+      ari: { email: "ari@example.org", phone: "+6281234567890", active: true, timeZone: null },
+      sekre: { email: "sekre@example.org", phone: null, active: true, timeZone: null },
+      nobody: { email: null, phone: null, active: false, timeZone: null },
     });
   });
 

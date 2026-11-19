@@ -55,7 +55,28 @@ scheduled ──(end time passes, read-time)──→ finished
 - **Reminders** (cron `meeting-reminders`): start reminder in the 15 minutes before the start,
   end reminder in the hour after the end, to every participant on their channel (WhatsApp when
   a number exists, else e-mail), keys `meeting:{id}:start:{uid}` and `meeting:{id}:end:{uid}`,
-  so a job interval up to 15 minutes works and a repeated call sends nothing twice.
+  so a job interval up to 15 minutes works and a repeated call sends nothing twice. The start
+  reminder adds the unit, the link and the Zoom passcode, and the chair and secretary get one
+  more line ("open the attendance"). Its key carries the start time
+  (`meeting:{id}:start:{uid}:{startsAtMs}`), so a moved meeting reminds again.
+
+## Notices (step 12.1)
+
+All texts are Indonesian + English, show the time in the recipient's own zone (profile
+`timezone`, else the meeting's zone) and skip inactive accounts. The person who saves is never
+told about their own change.
+
+| Notice     | When                                                                                                                                                       | Key                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Invitation | a participant is added (or the meeting is created) and the meeting has not started: title, time, unit, link + passcode, first five agenda items, page link | `meeting:{id}:invite:{uid}`           |
+| Change     | the edit form (switch "Tell participants about the change", on by default) or the room form changed start, end, link or passcode: old → new                | `meeting:{id}:change:{uid}:{version}` |
+| Cancel     | switch "Tell participants" (on by default), with the reason                                                                                                | `meeting:{id}:cancel:{uid}`           |
+
+- Someone added in the same save gets only the invitation. A save with no change, or one that
+  only relabels the time zone (same instants), sends nothing.
+- "Link" is the external link or the Zoom booking's join link; the passcode is the booking's.
+  There is no separate "place" field on a meeting yet.
+- Not yet: skipping people marked excused or sick (needs the attendance states of step 12.2).
 
 ## Minutes and action items (F5)
 

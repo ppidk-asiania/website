@@ -39,10 +39,12 @@ const people: Record<string, string> = {
   "chair@example.org": "chair",
   "member@example.org": "member",
   "sec@example.org": "sec",
+  "gone@example.org": "gone",
 };
 
 let fake: ReturnType<typeof fakeDb>;
 let sent: string[];
+let bodies: Record<string, string>;
 let seed = 0;
 let currentMeeting = "";
 const db = () => fake.db as unknown as Db;
@@ -51,13 +53,22 @@ const actions = () =>
   createMeetingActions({
     meetings: store(),
     unitPath: (id) => Promise.resolve(id === "media" ? ["dirs", "media"] : null),
+    unitName: (id) => Promise.resolve(id === "media" ? "Media team" : null),
     findUserId: (email) => Promise.resolve(people[email] ?? null),
     contacts: (uids) =>
       Promise.resolve(
         new Map(
           uids
             .filter((uid) => uid !== "member")
-            .map((uid) => [uid, { email: `${uid}@example.org`, phone: null }]),
+            .map((uid) => [
+              uid,
+              {
+                email: `${uid}@example.org`,
+                phone: null,
+                active: uid !== "gone",
+                timeZone: uid === "sec" ? "America/New_York" : null,
+              },
+            ]),
         ),
       ),
     send: async (message, key) => {
@@ -69,7 +80,10 @@ const actions = () =>
         testRecipients: [],
         now: () => clock,
       }).send(message, key);
-      if (result !== "duplicate") sent.push(key);
+      if (result !== "duplicate") {
+        sent.push(key);
+        bodies[key] = message.text;
+      }
       return result;
     },
     adminUrl: "https://admin.example.org",
@@ -78,7 +92,13 @@ const actions = () =>
     zoomBooking: (id) =>
       Promise.resolve(
         id === "z-ok"
-          ? { status: "approved", meetingId: currentMeeting }
+          ? {
+              status: "approved",
+              meetingId: currentMeeting,
+              passcode: "pw123",
+              joinUrl: "https://zoom.example/j/1",
+              shortUrl: null,
+            }
           : id === "z-other"
             ? { status: "approved", meetingId: "elsewhere" }
             : null,
@@ -114,6 +134,7 @@ async function create(extra: Record<string, unknown> = {}, who = planner) {
 beforeEach(() => {
   fake = fakeDb();
   sent = [];
+  bodies = {};
   clock = new Date("2026-11-10T01:00:00Z");
 });
 
@@ -299,6 +320,7 @@ describe("meetings (F4)", () => {
 
   it("reminders go out once per person, however often the cron job runs", async () => {
     const m = await create();
+    sent.length = 0;
     clock = new Date("2026-11-10T09:50:00Z");
     expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 2 });
     clock = new Date("2026-11-10T09:55:00Z");
@@ -307,8 +329,8 @@ describe("meetings (F4)", () => {
     expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 2 });
     expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 0 });
     expect(sent).toEqual([
-      `meeting:${m.id}:start:chair`,
-      `meeting:${m.id}:start:member`,
+      `meeting:${m.id}:start:chair:${start}`,
+      `meeting:${m.id}:start:member:${start}`,
       `meeting:${m.id}:end:chair`,
       `meeting:${m.id}:end:member`,
     ]);
@@ -316,6 +338,8 @@ describe("meetings (F4)", () => {
     expect(await actions().sendReminders()).toEqual({ meetings: 0, messages: 0 });
   });
 });
+
+const start = new Date("2026-11-10T10:00:00Z").getTime();
 
 describe("meeting edits and lists (F4)", () => {
   it("two agenda items with the same title keep two ids", async () => {
@@ -493,5 +517,164 @@ describe("meeting edits and lists (F4)", () => {
     await actions().cancel(...as(chair))({ ...m, reason: "Moved" });
     clock = new Date("2026-11-10T09:50:00Z");
     expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 0 });
+  });
+});
+
+describe("meeting notices (12.1)", () => {
+  const edit = (
+    m: { id: string; version: number },
+    extra: Record<string, unknown> = {},
+    who = planner,
+  ) =>
+    actions().save(...as(who))({
+      ...input,
+      id: m.id,
+      version: m.version,
+      periodId: "p1",
+      ...extra,
+    });
+
+  it("adding a participant sends one invitation, in their zone, with unit, link and agenda", async () => {
+    const m = await create({
+      participants: [
+        { email: "chair@example.org", role: "chair" },
+        { email: "member@example.org", role: "member" },
+        { email: "gone@example.org", role: "member" },
+      ],
+    });
+    // the inactive account is skipped
+    expect(sent).toEqual([`meeting:${m.id}:invite:chair`, `meeting:${m.id}:invite:member`]);
+
+    const edited = await edit(m, {
+      agenda: ["A", "B", "C", "D", "E", "F"],
+      participants: [
+        { email: "chair@example.org", role: "chair" },
+        { email: "member@example.org", role: "member" },
+        { email: "sec@example.org", role: "secretary" },
+      ],
+    });
+    if (!edited.ok) throw new Error(JSON.stringify(edited));
+    expect(sent.slice(2)).toEqual([`meeting:${m.id}:invite:sec`]);
+    const body = bodies[`meeting:${m.id}:invite:sec`] ?? "";
+    expect(body).toContain("Rapat kerja");
+    expect(body).toContain("05:00"); // 10:00 UTC in New York
+    expect(body).toContain("Media team");
+    expect(body).toContain("5. E");
+    expect(body).not.toContain("6. F");
+    expect(body).toContain(`https://admin.example.org/meetings/${m.id}`);
+  });
+
+  it("the saver is not told about their own change; a meeting that has started invites nobody", async () => {
+    const withSec = [
+      { email: "chair@example.org", role: "chair" },
+      { email: "sec@example.org", role: "secretary" },
+    ];
+    const m = await create({ participants: withSec });
+    sent.length = 0;
+    const own = await edit(
+      m,
+      { startsAtLocal: "2026-11-10T20:00", participants: withSec },
+      staff("sec", ["meetings.edit"]),
+    );
+    if (!own.ok) throw new Error(JSON.stringify(own));
+    expect(sent).toEqual([`meeting:${m.id}:change:chair:${own.data.version}`]);
+
+    sent.length = 0;
+    clock = new Date("2026-11-10T11:30:00Z"); // 20:00 Tokyo = 11:00Z has started
+    const late = await edit(own.data, {
+      startsAtLocal: "2026-11-10T20:00",
+      participants: [...withSec, { email: "member@example.org", role: "member" }],
+    });
+    expect(late.ok).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  it("a change goes out only when start, end, link or passcode changed, once per version", async () => {
+    const m = await create();
+    sent.length = 0;
+    // nothing changed, or only the zone label: nothing is sent
+    expect((await edit(m)).ok).toBe(true);
+    const relabelled = await edit(
+      { id: m.id, version: m.version + 1 },
+      { timeZone: "Asia/Seoul", startsAtLocal: "2026-11-10T19:00" },
+    );
+    expect(relabelled.ok).toBe(true);
+    expect(sent).toEqual([]);
+
+    const v = m.version + 2;
+    const moved = await edit({ id: m.id, version: v }, { startsAtLocal: "2026-11-10T20:00" });
+    if (!moved.ok) throw new Error(JSON.stringify(moved));
+    expect(sent).toEqual([
+      `meeting:${m.id}:change:chair:${moved.data.version}`,
+      `meeting:${m.id}:change:member:${moved.data.version}`,
+    ]);
+    expect(bodies[`meeting:${m.id}:change:chair:${moved.data.version}`]).toMatch(/→/);
+
+    sent.length = 0;
+    const quiet = await edit(
+      { id: m.id, version: moved.data.version },
+      { startsAtLocal: "2026-11-10T21:00", notify: false },
+    );
+    expect(quiet.ok).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  it("a room change tells about the new link and passcode", async () => {
+    const m = await create();
+    currentMeeting = m.id;
+    sent.length = 0;
+    const room = await actions().saveRoom(...as(planner))({
+      id: m.id,
+      version: m.version,
+      room: { kind: "zoom", zoomRequestId: "z-ok" },
+    });
+    if (!room.ok) throw new Error(JSON.stringify(room));
+    expect(sent).toHaveLength(2);
+    const body = bodies[`meeting:${m.id}:change:chair:${room.data.version}`] ?? "";
+    expect(body).toContain("https://zoom.example/j/1");
+    expect(body).toContain("pw123");
+  });
+
+  it("cancelling tells everyone once, unless switched off", async () => {
+    const m = await create();
+    sent.length = 0;
+    const cancelled = await actions().cancel(...as(planner))({ ...m, reason: "Moved" });
+    expect(cancelled.ok).toBe(true);
+    expect(sent).toEqual([`meeting:${m.id}:cancel:chair`, `meeting:${m.id}:cancel:member`]);
+    expect(bodies[`meeting:${m.id}:cancel:chair`]).toContain("Moved");
+
+    const second = await create();
+    sent.length = 0;
+    await actions().cancel(...as(planner))({ ...second, reason: "Moved", notify: false });
+    expect(sent).toEqual([]);
+  });
+
+  it("the start reminder carries the link and passcode, asks the chair to open the attendance, and repeats for a moved meeting", async () => {
+    const m = await create();
+    currentMeeting = m.id;
+    const room = await actions().saveRoom(...as(planner))({
+      id: m.id,
+      version: m.version,
+      room: { kind: "zoom", zoomRequestId: "z-ok" },
+    });
+    if (!room.ok) throw new Error(JSON.stringify(room));
+    sent.length = 0;
+    clock = new Date("2026-11-10T09:50:00Z");
+    await actions().sendReminders();
+    const chairBody = bodies[`meeting:${m.id}:start:chair:${start}`] ?? "";
+    expect(chairBody).toContain("pw123");
+    expect(chairBody).toContain("https://zoom.example/j/1");
+    expect(chairBody).toContain("presensi");
+    expect(bodies[`meeting:${m.id}:start:member:${start}`]).not.toContain("Open the attendance");
+
+    const moved = await edit(
+      { id: m.id, version: room.data.version },
+      { startsAtLocal: "2026-11-10T19:30" },
+    );
+    if (!moved.ok) throw new Error(JSON.stringify(moved));
+    sent.length = 0;
+    clock = new Date("2026-11-10T10:20:00Z");
+    expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 2 });
+    expect(sent[0]).toBe(`meeting:${m.id}:start:chair:${start + 30 * 60_000}`);
   });
 });

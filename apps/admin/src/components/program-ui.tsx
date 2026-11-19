@@ -170,6 +170,17 @@ export function PeriodSwitch({
   );
 }
 
+export function NotifyField({ label }: { label: string }) {
+  return (
+    <div className="admin-field">
+      <label className="admin-check-label">
+        <input type="checkbox" name="notify" defaultChecked />
+        {label}
+      </label>
+    </div>
+  );
+}
+
 export const text = (form: FormData, name: string): string => {
   const value = form.get(name);
   return typeof value === "string" ? value.trim() : "";

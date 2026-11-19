@@ -50,6 +50,10 @@ export interface MessageLogStore {
 export interface Contact {
   readonly email: string | null;
   readonly phone: string | null;
+  /** false = inactive account: nothing is sent. Absent = unknown, treated as active. */
+  readonly active?: boolean;
+  /** The person's own IANA zone, for texts that show a time. */
+  readonly timeZone?: string | null;
 }
 
 export function messageTo(

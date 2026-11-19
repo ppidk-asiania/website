@@ -23,7 +23,7 @@ import { formatInZone } from "@/components/format";
 import { MeetingForm, MEETING_STATUS_TONE, type MeetingValues } from "@/components/meetings-page";
 import { DraftMinutes } from "@/components/draft-minutes";
 import { MinutesPanel, type ActionItemView, type MinutesView } from "@/components/minutes-panel";
-import { ChoiceField, Field, FormModal, text } from "@/components/program-ui";
+import { ChoiceField, Field, FormModal, NotifyField, text } from "@/components/program-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -297,6 +297,7 @@ export function MeetingPage({
           return saveRoomAction({
             id: m.id,
             version: m.version,
+            notify: form.has("notify"),
             room: zoom
               ? { kind: "zoom", zoomRequestId: zoom }
               : url
@@ -321,6 +322,7 @@ export function MeetingPage({
             ...m.zoomBookings.map((b) => ({ value: b.id, label: b.label })),
           ]}
         />
+        <NotifyField label="Tell participants about the change" />
       </FormModal>
       <FormModal
         open={cancelling}
@@ -328,10 +330,16 @@ export function MeetingPage({
         submitLabel="Cancel meeting"
         onClose={() => setCancelling(false)}
         onSubmit={(form) =>
-          cancelMeetingAction({ id: m.id, version: m.version, reason: text(form, "reason") })
+          cancelMeetingAction({
+            id: m.id,
+            version: m.version,
+            reason: text(form, "reason"),
+            notify: form.has("notify"),
+          })
         }
       >
         <Field label="Reason" name="reason" rows={2} required maxLength={500} />
+        <NotifyField label="Tell participants" />
       </FormModal>
     </div>
   );

@@ -50,6 +50,14 @@ same key always means the same message. Web server code (newsletter, step 2.8) u
 (`memberProfiles.whatsappNumber`, E.164), else the account e-mail, else `skipped`. The number is
 read by the system only to deliver; the Email page shows only its last four digits.
 
+`Contact` also carries `active` (false = inactive account: callers skip the person) and
+`timeZone` (the profile's own zone, for texts that show a time); both are optional.
+
+Meeting notices (step 12.1) use this: `meeting:{id}:invite:{uid}`,
+`meeting:{id}:start:{uid}:{startsAtMs}`, `meeting:{id}:end:{uid}`,
+`meeting:{id}:change:{uid}:{version}`, `meeting:{id}:cancel:{uid}`
+(`packages/domain/docs/meetings.md` → Notices).
+
 ## Notification sources (J2)
 
 Sent after the action's transaction committed; a failure is logged (`notice failed`) and never

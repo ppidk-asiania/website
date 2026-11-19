@@ -122,7 +122,12 @@ export function createSqlContactReader(db: Database) {
       return new Map(
         [...users].map(([uid, user]) => [
           uid,
-          { email: text(user?.["email"]), phone: text(profiles.get(uid)?.["whatsappNumber"]) },
+          {
+            email: text(user?.["email"]),
+            phone: text(profiles.get(uid)?.["whatsappNumber"]),
+            active: user?.["status"] === "active",
+            timeZone: text(profiles.get(uid)?.["timezone"]),
+          },
         ]),
       );
     },

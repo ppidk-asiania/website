@@ -7,6 +7,7 @@ import {
   assertScheduled,
   attendanceCode,
   cancelMeeting,
+  changeKey,
   CODE_LIFETIME_MS,
   dueReminder,
   markAttendance,
@@ -14,11 +15,13 @@ import {
   MEETING_ROLES,
   MeetingInputSchema,
   meetingTimes,
+  noticeKey,
   reminderKey,
   runsMeeting,
   setRoom,
   unmarkAttendance,
   type Meeting,
+  type MeetingRoom,
 } from "@website/domain/meetings";
 import { messageTo, type Contact, type Messenger } from "@website/domain/messaging";
 import { RuleViolationError } from "@website/domain/shared";
@@ -29,15 +32,20 @@ import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 export interface MeetingDeps {
   readonly meetings: Pick<SqlMeetingStore, "get" | "write" | "saveCode" | "dueForReminders">;
   readonly unitPath: (orgUnitId: string) => Promise<readonly string[] | null>;
+  readonly unitName: (orgUnitId: string) => Promise<string | null>;
   readonly findUserId: (email: string) => Promise<string | null>;
   readonly contacts: (uids: readonly string[]) => Promise<Map<string, Contact>>;
   readonly send: Messenger["send"];
   readonly adminUrl: string;
   readonly webUrl: string;
   readonly randomBytes: (n: number) => Uint8Array;
-  readonly zoomBooking: (
-    id: string,
-  ) => Promise<{ status: string; meetingId: string | null } | null>;
+  readonly zoomBooking: (id: string) => Promise<{
+    status: string;
+    meetingId: string | null;
+    passcode?: string;
+    joinUrl?: string | null;
+    shortUrl?: string | null;
+  } | null>;
   readonly now: () => Date;
   readonly uuid: () => string;
 }
@@ -65,6 +73,7 @@ const Ref = z.object({ id: safeId, version }).strict();
 const SaveMeeting = MeetingInputSchema.extend({
   id: safeId.optional(),
   version: version.nullable(),
+  notify: z.boolean().default(true),
   periodId: safeId,
   participants: z
     .array(
@@ -79,13 +88,17 @@ const SaveMeeting = MeetingInputSchema.extend({
     .max(MAX_PARTICIPANTS),
 }).strict();
 const SetRoom = Ref.extend({
+  notify: z.boolean().default(true),
   room: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("link"), url: z.url("Enter the meeting link.").max(500) }).strict(),
     z.object({ kind: z.literal("none") }).strict(),
     z.object({ kind: z.literal("zoom"), zoomRequestId: safeId }).strict(),
   ]),
 }).strict();
-const Cancel = Ref.extend({ reason: safeText(500).pipe(z.string().min(2, "Give a reason.")) });
+const Cancel = Ref.extend({
+  reason: safeText(500).pipe(z.string().min(2, "Give a reason.")),
+  notify: z.boolean().default(true),
+});
 const Mark = Ref.extend({ uid: safeId, present: z.boolean() }).strict();
 
 const meetingAudit =
@@ -106,6 +119,29 @@ const meetingAudit =
 
 const both = (id: string, en: string) => `${id}\n\n${en}`;
 const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+const when = (at: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "short",
+  }).format(at);
+
+interface Change {
+  readonly label: string;
+  readonly from: (zone: string) => string;
+  readonly to: (zone: string) => string;
+}
+const instantChange = (label: string, from: Date, to: Date): Change[] =>
+  from.getTime() === to.getTime()
+    ? []
+    : [{ label, from: (z) => when(from, z), to: (z) => when(to, z) }];
+const textChange = (label: string, from: string | null, to: string | null): Change[] =>
+  from === to ? [] : [{ label, from: () => from ?? "-", to: () => to ?? "-" }];
 
 export function createMeetingActions(deps: MeetingDeps) {
   const unitScope = async (orgUnitId: string | null): Promise<ResourceContext> => {
@@ -130,6 +166,100 @@ export function createMeetingActions(deps: MeetingDeps) {
     }
     assertParticipants(participants);
     return participants;
+  };
+
+  const roomDetails = async (room: MeetingRoom) => {
+    const booking = room.zoomRequestId ? await deps.zoomBooking(room.zoomRequestId) : null;
+    return {
+      link: room.externalUrl ?? booking?.shortUrl ?? booking?.joinUrl ?? null,
+      passcode: booking?.passcode ?? null,
+    };
+  };
+
+  // One message per person, in their own zone; inactive accounts are skipped.
+  async function tell(
+    meeting: Meeting,
+    uids: readonly string[],
+    key: (uid: string) => string,
+    compose: (uid: string, zone: string) => string,
+  ): Promise<number> {
+    if (uids.length === 0) return 0;
+    const contacts = await deps.contacts(uids);
+    let sent = 0;
+    for (const uid of uids) {
+      const contact = contacts.get(uid) ?? null;
+      if (contact?.active === false) continue;
+      const body = compose(uid, contact?.timeZone ?? meeting.timeZone);
+      const status = await deps.send(
+        messageTo(contact, {
+          subject: `Rapat / Meeting: ${meeting.title}`,
+          text: body,
+          html: `<p>${escapeHtml(body).replace(/\n/g, "<br>")}</p>`,
+        }),
+        key(uid),
+      );
+      if (status !== "duplicate") sent += 1;
+    }
+    return sent;
+  }
+
+  const page = (meeting: Meeting) => `${deps.adminUrl}/meetings/${meeting.id}`;
+  // Room and unit are looked up once; the returned function renders them for one reader's zone.
+  const factsOf = async (meeting: Meeting) => {
+    const room = await roomDetails(meeting.room);
+    const unit = meeting.orgUnitId ? await deps.unitName(meeting.orgUnitId) : null;
+    return (zone: string) =>
+      [
+        `Waktu / Time: ${when(meeting.startsAt, zone)} - ${when(meeting.endsAt, zone)}`,
+        unit && `Unit: ${unit}`,
+        room.link && `Link: ${room.link}`,
+        room.passcode && `Passcode: ${room.passcode}`,
+      ].filter((line): line is string => !!line);
+  };
+
+  const sendInvitations = async (meeting: Meeting, uids: readonly string[]) => {
+    if (uids.length === 0) return;
+    const facts = await factsOf(meeting);
+    const agenda = meeting.agenda.slice(0, 5).map((a, i) => `${i + 1}. ${a.title}`);
+    await tell(
+      meeting,
+      uids,
+      (uid) => noticeKey(meeting, "invite", uid),
+      (_uid, zone) =>
+        [
+          both(
+            `Kamu diundang ke rapat "${meeting.title}".`,
+            `You are invited to the meeting "${meeting.title}".`,
+          ),
+          ...facts(zone),
+          ...(agenda.length ? ["Agenda:", ...agenda] : []),
+          page(meeting),
+        ].join("\n"),
+    );
+  };
+
+  const sendChange = async (
+    before: Meeting,
+    after: Meeting,
+    actor: string,
+    changes: readonly Change[],
+  ) => {
+    if (changes.length === 0) return;
+    // People added in the same save get the invitation only.
+    const uids = after.participantIds.filter(
+      (uid) => uid !== actor && before.participantIds.includes(uid),
+    );
+    await tell(
+      after,
+      uids,
+      (uid) => changeKey(after, uid),
+      (_uid, zone) =>
+        [
+          both(`Rapat "${after.title}" berubah.`, `The meeting "${after.title}" has changed.`),
+          ...changes.map((c) => `${c.label}: ${c.from(zone)} → ${c.to(zone)}`),
+          page(after),
+        ].join("\n"),
+    );
   };
 
   const run = (
@@ -159,11 +289,12 @@ export function createMeetingActions(deps: MeetingDeps) {
     resource: async (input) =>
       input.id ? { orgUnitPath: (await load(input.id)).orgUnitPath } : unitScope(input.orgUnitId),
     handler: async (
-      { id, version, periodId, participants: people, ...input },
+      { id, version, notify, periodId, participants: people, ...input },
       principal,
       audit,
     ) => {
       const now = deps.now();
+      let before = null as Meeting | null;
       const participants = await resolve(people);
       const times = meetingTimes(input);
       const unitPath = await unitScope(input.orgUnitId);
@@ -174,6 +305,7 @@ export function createMeetingActions(deps: MeetingDeps) {
         id ?? null,
         id ? version : null,
         (current): MeetingFields => {
+          before = current;
           if (current) assertScheduled(current, now);
           else if (times.startsAt.getTime() < now.getTime()) {
             throw new RuleViolationError("The start time has passed.");
@@ -210,6 +342,21 @@ export function createMeetingActions(deps: MeetingDeps) {
         meetingAudit(audit, id ? "UPDATE" : "CREATE"),
         now,
       );
+      // Invitations only for a meeting that has not started; the saver is never told.
+      if (saved.startsAt.getTime() > now.getTime()) {
+        await sendInvitations(
+          saved,
+          saved.participantIds.filter(
+            (uid) => uid !== principal.userId && !before?.participantIds.includes(uid),
+          ),
+        );
+      }
+      if (before && notify) {
+        await sendChange(before, saved, principal.userId, [
+          ...instantChange("Mulai / Starts", before.startsAt, saved.startsAt),
+          ...instantChange("Selesai / Ends", before.endsAt, saved.endsAt),
+        ]);
+      }
       return { id: saved.id, version: saved.version };
     },
   });
@@ -218,8 +365,9 @@ export function createMeetingActions(deps: MeetingDeps) {
     permission: "meetings.read",
     inSomeScope: true,
     input: SetRoom,
-    handler: async ({ id, version, room }, principal, audit) => {
+    handler: async ({ id, version, notify, room }, principal, audit) => {
       const now = deps.now();
+      let before = null as Meeting | null;
       if (room.kind === "zoom") {
         const booking = await deps.zoomBooking(room.zoomRequestId);
         if (booking?.status !== "approved" || booking.meetingId !== id) {
@@ -231,11 +379,22 @@ export function createMeetingActions(deps: MeetingDeps) {
         id,
         version,
         (m) => {
+          before = m;
           assertScheduled(m, now);
           return { ...m, room: setRoom(room) };
         },
         meetingAudit(audit, "UPDATE"),
       );
+      if (before && notify) {
+        const [old, current] = await Promise.all([
+          roomDetails(before.room),
+          roomDetails(saved.room),
+        ]);
+        await sendChange(before, saved, principal.userId, [
+          ...textChange("Link", old.link, current.link),
+          ...textChange("Passcode", old.passcode, current.passcode),
+        ]);
+      }
       return { version: saved.version };
     },
   });
@@ -244,7 +403,7 @@ export function createMeetingActions(deps: MeetingDeps) {
     permission: "meetings.read",
     inSomeScope: true,
     input: Cancel,
-    handler: async ({ id, version, reason }, principal, audit) => {
+    handler: async ({ id, version, reason, notify }, principal, audit) => {
       const saved = await run(
         principal,
         id,
@@ -252,6 +411,22 @@ export function createMeetingActions(deps: MeetingDeps) {
         (m) => cancelMeeting(m, reason, deps.now()),
         meetingAudit(audit, "UPDATE", false),
       );
+      if (notify) {
+        await tell(
+          saved,
+          saved.participantIds.filter((uid) => uid !== principal.userId),
+          (uid) => noticeKey(saved, "cancel", uid),
+          (_uid, zone) =>
+            [
+              both(
+                `Rapat "${saved.title}" dibatalkan. Alasan: ${reason}`,
+                `The meeting "${saved.title}" is cancelled. Reason: ${reason}`,
+              ),
+              `Waktu / Time: ${when(saved.startsAt, zone)}`,
+              page(saved),
+            ].join("\n"),
+        );
+      }
       return { version: saved.version };
     },
   });
@@ -302,30 +477,34 @@ export function createMeetingActions(deps: MeetingDeps) {
     for (const meeting of due) {
       const kind = dueReminder(meeting, now);
       if (!kind) continue;
-      const contacts = await deps.contacts(meeting.participantIds);
-      const where = meeting.room.externalUrl ?? `${deps.adminUrl}/meetings/${meeting.id}`;
-      const text =
-        kind === "start"
-          ? both(
-              `Rapat "${meeting.title}" segera dimulai. Isi presensi dengan kode di layar.`,
-              `The meeting "${meeting.title}" starts soon. Sign the attendance with the code on the screen.`,
-            )
-          : both(
-              `Rapat "${meeting.title}" sudah selesai. Pastikan presensi dan notulen lengkap.`,
-              `The meeting "${meeting.title}" has ended. Make sure attendance and minutes are complete.`,
-            );
-      for (const uid of meeting.participantIds) {
-        const body = `${text}\n\n${where}`;
-        const status = await deps.send(
-          messageTo(contacts.get(uid) ?? null, {
-            subject: `Rapat / Meeting: ${meeting.title}`,
-            text: body,
-            html: `<p>${escapeHtml(body).replace(/\n/g, "<br>")}</p>`,
-          }),
-          reminderKey(meeting.id, kind, uid),
-        );
-        if (status !== "duplicate") messages += 1;
-      }
+      const facts = kind === "start" ? await factsOf(meeting) : null;
+      messages += await tell(
+        meeting,
+        meeting.participantIds,
+        (uid) => reminderKey(meeting, kind, uid),
+        (uid, zone) =>
+          kind === "start"
+            ? [
+                both(
+                  `Rapat "${meeting.title}" segera dimulai. Isi presensi dengan kode di layar.`,
+                  `The meeting "${meeting.title}" starts soon. Sign the attendance with the code on the screen.`,
+                ),
+                ...(facts?.(zone) ?? []),
+                ...(runsMeeting(meeting, uid)
+                  ? [
+                      both(
+                        "Buka presensi di halaman rapat.",
+                        "Open the attendance on the meeting page.",
+                      ),
+                    ]
+                  : []),
+                page(meeting),
+              ].join("\n")
+            : `${both(
+                `Rapat "${meeting.title}" sudah selesai. Pastikan presensi dan notulen lengkap.`,
+                `The meeting "${meeting.title}" has ended. Make sure attendance and minutes are complete.`,
+              )}\n\n${meeting.room.externalUrl ?? page(meeting)}`,
+      );
     }
     return { meetings: due.length, messages };
   }

@@ -9,7 +9,15 @@ import {
 } from "@website/domain/meetings";
 import { saveMeetingAction } from "@/app/(panel)/meetings/actions";
 import { formatInZone } from "@/components/format";
-import { ChoiceField, Field, FormModal, num, PeriodSwitch, text } from "@/components/program-ui";
+import {
+  ChoiceField,
+  Field,
+  FormModal,
+  NotifyField,
+  num,
+  PeriodSwitch,
+  text,
+} from "@/components/program-ui";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Column } from "@/components/ui/data-table";
@@ -99,6 +107,7 @@ export function MeetingForm({
         saveMeetingAction({
           ...(current ? { id: current.id } : {}),
           version: current?.version ?? null,
+          notify: form.has("notify"),
           periodId,
           title: text(form, "title"),
           description: text(form, "description"),
@@ -172,6 +181,7 @@ export function MeetingForm({
         maxLength={2000}
         defaultValue={current?.description ?? ""}
       />
+      {current ? <NotifyField label="Tell participants about the change" /> : null}
     </FormModal>
   );
 }

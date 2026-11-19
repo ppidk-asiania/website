@@ -221,5 +221,16 @@ export function dueReminder(
   return null;
 }
 
-export const reminderKey = (meetingId: string, kind: ReminderKind, uid: string) =>
-  `meeting:${meetingId}:${kind}:${uid}`;
+// The start key carries the start time, so a moved meeting reminds again.
+export const reminderKey = (
+  meeting: Pick<Meeting, "id" | "startsAt">,
+  kind: ReminderKind,
+  uid: string,
+) =>
+  `meeting:${meeting.id}:${kind}:${uid}${kind === "start" ? `:${meeting.startsAt.getTime()}` : ""}`;
+
+export const noticeKey = (meeting: Pick<Meeting, "id">, kind: "invite" | "cancel", uid: string) =>
+  `meeting:${meeting.id}:${kind}:${uid}`;
+
+export const changeKey = (meeting: Pick<Meeting, "id" | "version">, uid: string) =>
+  `meeting:${meeting.id}:change:${uid}:${meeting.version}`;

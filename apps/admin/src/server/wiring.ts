@@ -680,6 +680,7 @@ export const meetingActions = lazyEnv(() =>
       const unit = await adminStores().orgUnits.get(id);
       return unit ? orgUnitPath(unit) : null;
     },
+    unitName: async (id) => (await adminStores().orgUnits.get(id))?.name ?? null,
     findUserId: async (email) => (await adminStores().accounts.findByEmail(email))?.uid ?? null,
     contacts: (uids) => adminStores().contacts.contacts(uids),
     send: (message, key) => messenger().send(message, key),
