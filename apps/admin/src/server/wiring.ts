@@ -284,6 +284,9 @@ export const letterActions = lazyEnv(() =>
     letters: adminStores().letters,
     types: adminStores().letterTypes,
     settings: adminStores().letterSettings,
+    deskUnit: async (periodId, desk) =>
+      (await adminStores().periods.get(periodId))?.desks[desk].orgUnitId ?? null,
+    seats: (uid) => adminStores().appointments.activeSeats(uid),
     unitPath: async (id) => {
       const unit = await adminStores().orgUnits.get(id);
       return unit ? orgUnitPath(unit) : null;

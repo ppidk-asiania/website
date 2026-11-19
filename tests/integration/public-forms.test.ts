@@ -348,15 +348,18 @@ describe("who may answer (10.3)", () => {
     });
     fake.docs.set("chapters/c1", { name: "PPI Sydney" });
   };
-  const appoint = (userId: string, status = "active", periodId = "p1") =>
+  const appoint = (userId: string, status = "active", periodId = "p1") => {
+    fake.docs.set("orgUnits/desain", { path: [], type: "bidang" });
     fake.docs.set(`appointments/a-${userId}-${status}-${periodId}`, {
       userId,
       periodId,
+      orgUnitId: "desain",
       status,
       seat: "head",
       title: "Kepala Bidang Desain",
       createdAt: new Date("2026-10-01T00:00:00Z"),
     });
+  };
   const answerNow = (token: string, ids: string[], user: Signed | null, name = "Ari") =>
     submit(
       { token, version: 1, answers: { [ids[0]!]: name, [ids[1]!]: "Good" }, captcha: "human" },

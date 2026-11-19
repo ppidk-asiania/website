@@ -83,6 +83,12 @@ export async function saveAppointmentRolesAction(input: unknown) {
   return result;
 }
 
+export async function saveUnitRoleMapAction(input: unknown) {
+  const result = await appointmentActions().saveUnitRoleMap(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/organizations", "layout");
+  return result;
+}
+
 export async function saveChapterOfficersAction(input: unknown) {
   const result = await chapterRecords().saveOfficers(getPrincipal, getAuditContext)(input);
   if (result.ok) revalidatePath("/organizations", "layout");

@@ -115,11 +115,35 @@ These members are display data for the cabinet page only — not accounts and no
 - A unit is deleted only when no live unit sits below it and nobody holds an active appointment
   in it (those would keep roles scoped to a deleted unit); an archived period's units are
   read-only.
-- Appointments (B7, account-based roles) still exist in the data and the import, but the
-  redesigned Structure page no longer shows them; see `packages/permissions/docs/authorization.md`.
+- Appointments (B7, account-based roles) are managed on the unit's **Officers** tab (step 10.2,
+  below); the unit members of the editor stay display data only.
 - Permission `structure.edit` to add, edit and delete (admin page `structure`);
   `structure.read` to see the list. Audit module `structure`, resource `orgUnit`; only DELETE
   entries are revertible (a revert of an edit would not rewrite the paths below the unit).
+
+### Officers: seats inside a unit (step 10.2, DEC-20)
+
+- Seats: `head`, `deputy_head`, `secretary`, `treasurer`, `member` (labels Kepala, Wakil Kepala,
+  Sekretaris, Bendahara, Anggota). `seatLabel(seat, unit)` gives "Kepala Bidang Desain" and never
+  repeats the unit type; in a core unit the unit name is the label. `seatsFor(unit)`: a core unit
+  has exactly one seat (`head`), any other unit all five. One active head per unit, checked in the
+  appoint transaction (so ratification obeys it too).
+- Officers tab (`/organizations/periods/[id]/units/[unitId]/officers`, `appointments.read` to see,
+  `appointments.edit` to Appoint / End, read-only in an archived period): account, seat, since.
+  Appoint and End keep every rule of step 3.7 (one transaction, `canAppointInto`, second
+  sign-in method, not yourself, sessions ended, audited).
+- Role map per unit: `orgUnits.roleMap` = `{ seat: { roleId, scope: "global" | "unit" } }`, edited
+  on the tab with `roles.edit` (existing custom roles only). `derivedAssignments` reads it before
+  `settings/appointmentRoles`; the officer role is always given. Saving it does not rewrite
+  existing assignments; it applies to the next appointment. A plain unit save keeps the map.
+- `activeSeats(uid)` (block N): `[{ orgUnitId, orgUnitPath, unitType, seat }]` for the active
+  period; ended, other-period and unit-less seats drop out. The pure rule is `activeSeats` in the
+  domain; the store method of the same name reads the appointments and units. Used by the
+  forms "officers only" check (step 10.3) and by bound desks.
+- Desk bound to a unit (the step 10.1 field `period.desks.<desk>.orgUnitId`): signing the top
+  desk or the signer desk of a letter whose type has a top desk also needs an active seat in that
+  unit. Empty means the permission alone. A letter type without a top desk signs with the unit's
+  own signer and is never bound.
 
 ### Seat and desk names (step 10.1)
 

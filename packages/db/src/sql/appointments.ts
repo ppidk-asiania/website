@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "./store";
 import type { AuditAppender, AuditEvent, Snapshot } from "@website/audit";
 import {
+  activeSeats,
   derivedAssignments,
+  seatsFor,
+  type ActiveSeat,
   type Appointment,
   type AppointmentRoleMap,
   type AppointmentSeat,
@@ -74,7 +77,7 @@ export async function prepareAppointment(
 ): Promise<PreparedAppointment> {
   const docs = db.collection("appointments");
   const settings = db.collection("settings");
-  const [active, unitSnapshot, userSnapshot, mapSnapshot, same] = await Promise.all([
+  const [active, unitSnapshot, userSnapshot, mapSnapshot, same, heads] = await Promise.all([
     tx.get(settings.doc("activePeriod")),
     tx.get(db.collection("orgUnits").doc(safeId.parse(input.orgUnitId))),
     tx.get(db.collection("users").doc(safeId.parse(input.userId))),
@@ -85,6 +88,12 @@ export async function prepareAppointment(
         .where("orgUnitId", "==", input.orgUnitId)
         .where("status", "==", "active"),
     ),
+    tx.get(
+      docs
+        .where("orgUnitId", "==", input.orgUnitId)
+        .where("seat", "==", "head")
+        .where("status", "==", "active"),
+    ),
   ]);
   const unit = unitSnapshot.data() as Omit<OrgUnit, "id"> | undefined;
   const periodId = active.get("periodId") as string;
@@ -93,8 +102,18 @@ export async function prepareAppointment(
   }
   if (!userSnapshot.exists) throw new RuleViolationError("No account with this e-mail.");
   if (!same.empty) throw new RuleViolationError("This person is already appointed in this unit.");
+  if (!seatsFor(unit).includes(input.seat)) {
+    throw new RuleViolationError("A core unit has one seat: its head.");
+  }
+  if (input.seat === "head" && !heads.empty) {
+    throw new RuleViolationError("A unit has one head. End the current head's appointment first.");
+  }
   const { map } = mapSnapshot.data() as { map: AppointmentRoleMap };
-  const derived = derivedAssignments(input.seat, { id: input.orgUnitId, type: unit.type }, map);
+  const derived = derivedAssignments(
+    input.seat,
+    { id: input.orgUnitId, type: unit.type, roleMap: unit.roleMap ?? {} },
+    map,
+  );
   if (JSON.stringify(derived) !== JSON.stringify(checked)) {
     throw new ConcurrencyConflictError("appointment roles changed");
   }
@@ -164,6 +183,18 @@ export function createSqlAppointmentStore(db: Database) {
   const mapRef = settings.doc("appointmentRoles");
   const auditLog = createSqlAuditWriter(db);
 
+  const activeForUser = async (uid: string): Promise<Appointment[]> => {
+    const [active, snapshot] = await Promise.all([
+      settings.doc("activePeriod").get(),
+      docs.where("userId", "==", uid).where("status", "==", "active").get(),
+    ]);
+    const periodId = active.get("periodId") as string | undefined;
+    return snapshot.docs
+      .map((doc) => toAppointment(doc.id, doc.data()))
+      .filter((a) => a.periodId === periodId)
+      .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
+  };
+
   return {
     async get(id: string): Promise<Appointment | null> {
       if (!safeId.safeParse(id).success) return null;
@@ -179,16 +210,23 @@ export function createSqlAppointmentStore(db: Database) {
     },
 
     /** The user's active appointments in the active period, oldest first. */
-    async activeForUser(uid: string): Promise<Appointment[]> {
-      const [active, snapshot] = await Promise.all([
-        settings.doc("activePeriod").get(),
-        docs.where("userId", "==", uid).where("status", "==", "active").get(),
+    activeForUser,
+
+    /** Block N: the seats the account holds in the active period. */
+    async activeSeats(uid: string): Promise<ActiveSeat[]> {
+      const list = await activeForUser(uid);
+      const periodId = list[0]?.periodId;
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "orgUnits", [
+        ...new Set(list.map((a) => a.orgUnitId)),
       ]);
-      const periodId = active.get("periodId") as string | undefined;
-      return snapshot.docs
-        .map((doc) => toAppointment(doc.id, doc.data()))
-        .filter((a) => a.periodId === periodId)
-        .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
+      const units = new Map(
+        [...found].flatMap(([id, data]) =>
+          data
+            ? [[id, { path: data["path"] as string[], type: data["type"] as OrgUnit["type"] }]]
+            : [],
+        ),
+      );
+      return activeSeats(list, units, periodId);
     },
 
     async graduatedOfficers(today: string): Promise<Array<Appointment & { graduatedOn: string }>> {

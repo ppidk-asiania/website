@@ -298,16 +298,17 @@ export function createSqlFormWebStore(db: Database) {
   const byToken = (token: string) => forms.where("publicToken", "==", token).limit(1);
 
   async function own(form: Form, user: SignedInAccount): Promise<OwnFormData> {
-    const [profile, seats, previous] = await Promise.all([
+    const [profile, titles, seats, previous] = await Promise.all([
       profiles.findByUserId(user.uid),
       appointments.activeForUser(user.uid),
+      appointments.activeSeats(user.uid),
       responses.doc(`${form.id}_${user.uid}`).get(),
     ]);
     const chapter = profile?.chapterId
       ? await db.collection("chapters").doc(profile.chapterId).get()
       : null;
     const all: FormProfile = {
-      seat: seats.map((a) => a.title).join("; "),
+      seat: titles.map((a) => a.title).join("; "),
       whatsapp: profile?.whatsappNumber ?? "",
       chapter: (chapter?.get("name") as string | undefined) ?? "",
       campus: profile?.university ?? "",
@@ -318,7 +319,6 @@ export function createSqlFormWebStore(db: Database) {
     return {
       name: profile?.fullName ?? user.name ?? user.email ?? user.uid,
       email: user.email ?? profile?.email ?? "",
-      // shortcut: an active appointment in the active period; step 10.2 swaps in activeSeats(uid)
       officer: seats.length > 0,
       profile: copyProfile(form.profileFields, all),
       answers: (previous.get("answers") as Answers | undefined) ?? null,

@@ -146,4 +146,5 @@ export interface GraduatedOfficer {
   readonly title: string;
   readonly graduatedOn: string;
   readonly periodId: string;
+  readonly orgUnitId: string;
 }

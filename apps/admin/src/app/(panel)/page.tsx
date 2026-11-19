@@ -65,7 +65,7 @@ export default async function AdminDashboardPage({
           {
             label: "Graduated officers still in office",
             value: graduatedOfficers.length,
-            href: `/organizations/periods/${graduatedOfficers[0]?.periodId ?? ""}`,
+            href: `/organizations/periods/${graduatedOfficers[0]?.periodId ?? ""}/units/${graduatedOfficers[0]?.orgUnitId ?? ""}/officers`,
             icon: "users" as const,
           },
         ]

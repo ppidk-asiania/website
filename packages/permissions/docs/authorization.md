@@ -42,9 +42,14 @@
 - **Appointments → roles** (B7, `apps/admin/src/server/appointments.ts`,
   `packages/db/src/sql/appointments.ts`): appointing someone to a seat of a unit of the
   active period writes the appointment and its roles in ONE transaction. The roles come from the
-  settings document `settings/appointmentRoles` (data, edited on the Structure page with
+  settings document `settings/appointmentRoles` (data, edited in Role Manager → Edit Role with
   `roles.edit`; only existing custom roles, never built-in ones; "suggested" =
-  `SUGGESTED_APPOINTMENT_ROLES`; create those roles in Role Manager → Edit Role first):
+  `SUGGESTED_APPOINTMENT_ROLES`; create those roles in Role Manager → Edit Role first). A unit's
+  own `roleMap` (set on the unit's **Officers** tab with `roles.edit`, step 10.2) is read first
+  and wins for that seat; the seats are head, deputy head, secretary, treasurer and member, a core
+  unit has only its head, and a unit has one head. Appointments are made and ended on the
+  Officers tab (`/organizations/periods/[id]/units/[unitId]/officers`, `appointments.read` /
+  `appointments.edit`). Default rules:
   every officer → officer role (global); head of a core unit (secretary general, executive secretary,
   executive treasurer and deputies) → that seat's role (global); head / secretary of any other unit → the
   unit-head / unit-secretary role scoped to that unit (`derivedAssignments`). They carry

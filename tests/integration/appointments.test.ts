@@ -284,8 +284,9 @@ describe("appointments → roles (B7)", () => {
     const head = await actions.appoint(...as("boss"))(
       appointInput("ana@example.org", "media", "head"),
     );
+    fake.docs.set("orgUnits/pr", unit("pr", "bidang"));
     const koor = await actions.appoint(...as("boss"))(
-      appointInput("ana@example.org", "koor", "member"),
+      appointInput("ana@example.org", "pr", "member"),
     );
     const headId = head.ok ? head.data.id : "";
     const ana = await createSqlAccountStore(fake.db as unknown as Db).get("ana");
@@ -371,5 +372,97 @@ describe("appointments → roles (B7)", () => {
         periodId: "p2026",
       }),
     ).toMatchObject({ error: "refused", issues: [expect.stringContaining("appointment")] });
+  });
+});
+
+describe("officers: seats inside a unit (step 10.2, DEC-20)", () => {
+  beforeEach(async () => {
+    await actions.saveRoleMap(...as("boss"))({ map: SUGGESTED_APPOINTMENT_ROLES, version: null });
+    for (const uid of ["ana", "rio", "sec", "boss", "zed"]) {
+      methods[uid] = { providers: ["google.com"], mfaFactors: 1 };
+    }
+    fake.docs.set("users/zed", {
+      ...fake.docs.get("users/ana"),
+      uid: "zed",
+      email: "zed@example.org",
+    });
+  });
+  const appoint = (email: string, unitId: string, seat: string) =>
+    actions.appoint(...as("boss"))(appointInput(email, unitId, seat));
+
+  it("a unit holds the five seats; only one head", async () => {
+    for (const [email, seat] of [
+      ["ana@example.org", "head"],
+      ["rio@example.org", "deputy_head"],
+      ["sec@example.org", "treasurer"],
+    ] as const) {
+      expect(await appoint(email, "media", seat)).toMatchObject({ ok: true });
+    }
+    expect(await appoint("zed@example.org", "media", "head")).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("one head")],
+    });
+    expect(await appoint("zed@example.org", "media", "secretary")).toMatchObject({ ok: true });
+    expect((await appointments.listForPeriod("p2026")).map((a) => a.seat)).toEqual([
+      "head",
+      "deputy_head",
+      "treasurer",
+      "secretary",
+    ]);
+  });
+
+  it("a core unit has one seat: its head", async () => {
+    expect(await appoint("ana@example.org", "koor", "member")).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("one seat")],
+    });
+    expect(await appoint("ana@example.org", "koor", "head")).toMatchObject({ ok: true });
+  });
+
+  it("the unit's role map (roles.edit) beats the default and applies to the next appointment", async () => {
+    const roleMap = { member: { roleId: "treasurer", scope: "global" } };
+    const save = (uid: string, map: object = roleMap) =>
+      actions.saveUnitRoleMap(...as(uid))({ orgUnitId: "media", version: 1, roleMap: map });
+    expect(await save("sec")).toEqual({ ok: false, error: "forbidden" });
+    expect(await save("boss", { member: { roleId: "ghost", scope: "global" } })).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("ghost")],
+    });
+    await appoint("rio@example.org", "media", "member");
+    expect(await save("boss")).toEqual({ ok: true, data: { version: 2 } });
+    expect(await createSqlOrgUnitStore(fake.db as unknown as Db).get("media")).toMatchObject({
+      roleMap,
+    });
+    const result = await appoint("ana@example.org", "media", "member");
+    const live = (uid: string) =>
+      assignmentsOf(uid)
+        .filter((a) => a["source"] === "appointment" && a["revokedAt"] === null)
+        .map((a) => a["roleId"]);
+    expect(live("rio")).toEqual(["officer"]);
+    expect(live("ana")).toEqual(["officer", "treasurer"]);
+    await actions.end(...as("boss"))({
+      id: result.ok ? result.data.id : "",
+      version: 1,
+      status: "ended",
+    });
+    expect(live("ana")).toEqual([]);
+  });
+
+  it("activeSeats reads the unit's type and path; ended seats drop out", async () => {
+    const made = await appoint("ana@example.org", "media", "deputy_head");
+    expect(await appointments.activeSeats("ana")).toEqual([
+      {
+        orgUnitId: "media",
+        orgUnitPath: ["koor", "media"],
+        unitType: "direktorat",
+        seat: "deputy_head",
+      },
+    ]);
+    await actions.end(...as("boss"))({
+      id: made.ok ? made.data.id : "",
+      version: 1,
+      status: "ended",
+    });
+    expect(await appointments.activeSeats("ana")).toEqual([]);
   });
 });

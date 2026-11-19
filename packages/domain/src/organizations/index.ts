@@ -287,6 +287,8 @@ export interface OrgUnit extends EntityMeta {
   readonly active: boolean;
   readonly members: readonly UnitMember[];
   readonly divisions: readonly UnitDivision[];
+  /** Roles a seat of this unit gives; beats `settings/appointmentRoles` (step 10.2). */
+  readonly roleMap?: UnitRoleMap;
 }
 
 export const unitPeopleCount = (unit: Pick<OrgUnit, "members" | "divisions">): number =>
@@ -371,8 +373,37 @@ export function inTreeOrder<T extends Pick<OrgUnit, "id" | "parentId" | "sort" |
   return ordered;
 }
 
-export const APPOINTMENT_SEATS = ["head", "secretary", "member"] as const;
+export const APPOINTMENT_SEATS = [
+  "head",
+  "deputy_head",
+  "secretary",
+  "treasurer",
+  "member",
+] as const;
 export type AppointmentSeat = (typeof APPOINTMENT_SEATS)[number];
+
+export const SEAT_WORDS: Readonly<Record<AppointmentSeat, string>> = {
+  head: "Kepala",
+  deputy_head: "Wakil Kepala",
+  secretary: "Sekretaris",
+  treasurer: "Bendahara",
+  member: "Anggota",
+};
+const UNIT_TYPE_WORDS: Partial<Record<OrgUnitType, string>> = {
+  direktorat: "Direktorat",
+  biro: "Biro",
+  bidang: "Bidang",
+  divisi: "Divisi",
+  staf: "Staf",
+};
+
+/** "Kepala Bidang Desain", never "Kepala Bidang Bidang Desain"; a core unit is its own seat. */
+export function seatLabel(seat: AppointmentSeat, unit: Pick<OrgUnit, "name" | "type">): string {
+  if (isCoreUnit(unit.type)) return unit.name;
+  const word = UNIT_TYPE_WORDS[unit.type] ?? "";
+  const named = new RegExp(`^${word}\\b`, "i").test(unit.name) ? unit.name : `${word} ${unit.name}`;
+  return `${SEAT_WORDS[seat]} ${named.trim()}`;
+}
 
 export const CORE_UNIT_TYPES = [
   "sekretaris_jenderal",
@@ -385,6 +416,27 @@ export const CORE_UNIT_TYPES = [
 export type CoreUnitType = (typeof CORE_UNIT_TYPES)[number];
 const isCoreUnit = (type: OrgUnitType): type is CoreUnitType =>
   (CORE_UNIT_TYPES as readonly OrgUnitType[]).includes(type);
+
+/** A core unit keeps exactly one seat (the unit is the seat). */
+export const seatsFor = (unit: Pick<OrgUnit, "type">): readonly AppointmentSeat[] =>
+  isCoreUnit(unit.type) ? ["head"] : APPOINTMENT_SEATS;
+
+export const UnitRoleMapSchema = z
+  .object(
+    Object.fromEntries(
+      APPOINTMENT_SEATS.map((seat) => [
+        seat,
+        z
+          .object({ roleId: safeId, scope: z.enum(["global", "unit"]) })
+          .strict()
+          .optional(),
+      ]),
+    ),
+  )
+  .strict();
+export type UnitRoleMap = Partial<
+  Record<AppointmentSeat, { readonly roleId: string; readonly scope: "global" | "unit" }>
+>;
 
 export const AppointmentRoleMapSchema = z
   .object({
@@ -448,7 +500,7 @@ export interface DerivedAssignment {
 
 export function derivedAssignments(
   seat: AppointmentSeat,
-  unit: Pick<OrgUnit, "id" | "type">,
+  unit: Pick<OrgUnit, "id" | "type" | "roleMap">,
   map: AppointmentRoleMap,
 ): DerivedAssignment[] {
   const officer: DerivedAssignment = { roleId: map.officer, scope: { type: "global" } };
@@ -456,6 +508,14 @@ export function derivedAssignments(
     roleId,
     scope: { type: "orgUnit", orgUnitId: unit.id },
   });
+  const mapped = unit.roleMap?.[seat];
+  if (mapped)
+    return [
+      officer,
+      mapped.scope === "global"
+        ? { roleId: mapped.roleId, scope: { type: "global" } }
+        : forUnit(mapped.roleId),
+    ];
   if (isCoreUnit(unit.type)) {
     return seat === "head"
       ? [officer, { roleId: map.core[unit.type], scope: { type: "global" } }]
@@ -466,3 +526,31 @@ export function derivedAssignments(
   return [officer];
 }
 export * from "./chapter-records";
+
+export interface ActiveSeat {
+  readonly orgUnitId: string;
+  readonly orgUnitPath: readonly string[];
+  readonly unitType: OrgUnitType;
+  readonly seat: AppointmentSeat;
+}
+
+/** Block N: the seats an account holds in the active period (ended, other-period and unit-less ones drop out). */
+export function activeSeats(
+  appointments: readonly Pick<Appointment, "orgUnitId" | "seat" | "status" | "periodId">[],
+  units: ReadonlyMap<string, Pick<OrgUnit, "path" | "type">>,
+  periodId: string | undefined,
+): ActiveSeat[] {
+  return appointments.flatMap((a) => {
+    const unit = units.get(a.orgUnitId);
+    return unit && a.status === "active" && a.periodId === periodId
+      ? [
+          {
+            orgUnitId: a.orgUnitId,
+            orgUnitPath: [...unit.path, a.orgUnitId],
+            unitType: unit.type,
+            seat: a.seat,
+          },
+        ]
+      : [];
+  });
+}

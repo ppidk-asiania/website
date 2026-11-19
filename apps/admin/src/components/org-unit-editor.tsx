@@ -15,6 +15,7 @@ import { Icon } from "@/components/ui/icon";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import { label, ORG_UNIT_TYPE_LABELS } from "@/labels";
 import { ORG_SUBTITLE } from "./organizations-page";
+import { UnitTabs } from "./org-officers-page";
 import type { OrgUnitItem } from "./org-units-model";
 import { Select } from "@/components/ui/select";
 
@@ -52,7 +53,15 @@ function moved<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-export function OrgUnitEditor({ periodId, unit }: { periodId: string; unit: OrgUnitItem | null }) {
+export function OrgUnitEditor({
+  periodId,
+  unit,
+  showOfficers = false,
+}: {
+  periodId: string;
+  unit: OrgUnitItem | null;
+  showOfficers?: boolean;
+}) {
   const router = useRouter();
   const toast = useToastMessage();
   const [name, setName] = useState(unit?.name ?? "");
@@ -225,6 +234,10 @@ export function OrgUnitEditor({ periodId, unit }: { periodId: string; unit: OrgU
           <p className="admin-page-header__desc">{ORG_SUBTITLE}</p>
         </div>
       </div>
+
+      {unit && showOfficers ? (
+        <UnitTabs periodId={periodId} unitId={unit.id} active="unit" />
+      ) : null}
 
       <div className="admin-unit-fields">
         <div className="admin-field">

@@ -321,7 +321,7 @@ export function createAccountActions(deps: AccountDeps) {
             )
           ) {
             throw new RuleViolationError(
-              "This role comes from an appointment: end the appointment on the Structure page.",
+              "This role comes from an appointment: end the appointment on the Officers tab of its unit (Organizations → Structure).",
             );
           }
         },

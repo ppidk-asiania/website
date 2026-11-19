@@ -2,16 +2,20 @@
 
 import { useState } from "react";
 import {
-  APPOINTMENT_SEATS,
   CORE_UNIT_TYPES,
+  seatLabel,
+  seatsFor,
   SUGGESTED_APPOINTMENT_ROLES,
   type AppointmentRoleMap,
   type AppointmentSeat,
+  type OrgUnitType,
+  type UnitRoleMap,
 } from "@website/domain/organizations";
 import {
   appointAction,
   endAppointmentAction,
   saveAppointmentRolesAction,
+  saveUnitRoleMapAction,
 } from "@/app/(panel)/organizations/actions";
 import { actionMessage } from "@/components/action-message";
 import { Button } from "@/components/ui/button";
@@ -28,15 +32,17 @@ export interface AppointmentItem {
   title: string;
   seat: AppointmentSeat;
   status: "active" | "ended" | "revoked";
+  startsOn: string;
 }
 
-const SEAT_LABELS: Record<AppointmentSeat, string> = {
-  head: "Head of the unit",
-  secretary: "Secretary of the unit",
-  member: "Member",
-};
+export interface SeatUnit {
+  id: string;
+  name: string;
+  type: OrgUnitType;
+}
 
 export function UnitPeople(props: {
+  unit: SeatUnit;
   people: AppointmentItem[];
   canEdit: boolean;
   onDone: (message: string) => void;
@@ -48,13 +54,15 @@ export function UnitPeople(props: {
     setBusy(false);
     props.onDone(result.ok ? `${a.name}'s appointment ended` : actionMessage(result));
   };
-  if (props.people.length === 0) return null;
+  if (props.people.length === 0)
+    return <p className="admin-unit-empty">No one holds a seat yet.</p>;
   return (
     <ul className="admin-form-separator__list">
       {props.people.map((a) => (
         <li key={a.id} className="admin-account__row">
           <span className="admin-table__sub">
-            {a.title} — {a.name}
+            {a.name} — {seatLabel(a.seat, props.unit)}
+            {a.title === seatLabel(a.seat, props.unit) ? "" : ` (${a.title})`} · since {a.startsOn}
           </span>
           {props.canEdit ? (
             <Button size="sm" icon="x" variant="outline" disabled={busy} onClick={() => end(a)}>
@@ -68,12 +76,14 @@ export function UnitPeople(props: {
 }
 
 export function AppointModal(props: {
-  unit: { id: string; name: string } | null;
+  unit: SeatUnit | null;
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
   const [email, setEmail] = useState("");
-  const [seat, setSeat] = useState<AppointmentSeat>("member");
+  const [seat, setSeat] = useState<AppointmentSeat>(
+    props.unit ? (seatsFor(props.unit).at(-1) ?? "head") : "member",
+  );
   const [title, setTitle] = useState("");
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -83,7 +93,12 @@ export function AppointModal(props: {
   const appoint = async () => {
     if (!unit) return;
     setBusy(true);
-    const result = await appointAction({ email, orgUnitId: unit.id, seat, title });
+    const result = await appointAction({
+      email,
+      orgUnitId: unit.id,
+      seat,
+      title: title.trim() || seatLabel(seat, unit),
+    });
     setBusy(false);
     if (!result.ok) {
       setErrors(result.fields ?? {});
@@ -143,22 +158,22 @@ export function AppointModal(props: {
           value={seat}
           onChange={(e) => setSeat(e.target.value as AppointmentSeat)}
         >
-          {APPOINTMENT_SEATS.map((s) => (
+          {(unit ? seatsFor(unit) : []).map((s) => (
             <option key={s} value={s}>
-              {SEAT_LABELS[s]}
+              {seatLabel(s, unit as SeatUnit)}
             </option>
           ))}
         </Select>
       </div>
       <div className="admin-field">
         <label className="admin-field__label" htmlFor="appoint-title">
-          Title *
+          Title
         </label>
         <input
           id="appoint-title"
           className="admin-input"
           value={title}
-          placeholder="e.g. Direktur Media"
+          placeholder={unit ? seatLabel(seat, unit) : ""}
           onChange={(e) => setTitle(e.target.value)}
           aria-describedby="appoint-title-error"
         />
@@ -257,6 +272,108 @@ export function RoleMapModal(props: {
             setMap((m) => ({ ...m, core: { ...m.core, [type]: id } })),
           ),
         )}
+      </div>
+      {message && (
+        <p role="alert" className="admin-field__error">
+          {message}
+        </p>
+      )}
+    </Modal>
+  );
+}
+
+export function UnitRoleMapModal(props: {
+  open: boolean;
+  unit: SeatUnit & { version: number; roleMap: UnitRoleMap };
+  roles: { id: string; name: string }[];
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const { unit } = props;
+  const [map, setMap] = useState<UnitRoleMap>(unit.roleMap);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const change = (seat: AppointmentSeat, roleId: string, scope: "global" | "unit") =>
+    setMap((m) => ({
+      ...Object.fromEntries(Object.entries(m).filter(([key]) => key !== seat)),
+      ...(roleId ? { [seat]: { roleId, scope } } : {}),
+    }));
+
+  const save = async () => {
+    setBusy(true);
+    const result = await saveUnitRoleMapAction({
+      orgUnitId: unit.id,
+      version: unit.version,
+      roleMap: map,
+    });
+    setBusy(false);
+    if (!result.ok) return setMessage(actionMessage(result));
+    props.onDone("Roles from seats saved");
+  };
+
+  return (
+    <Modal
+      asForm
+      open={props.open}
+      title={`Roles from seats — ${unit.name}`}
+      onClose={props.onClose}
+      footer={
+        <div className="admin-modal__footer-row">
+          <Button variant="outline" icon="chevronLeft" onClick={props.onClose}>
+            Back
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            icon="cloud"
+            disabled={busy}
+            onClick={() => save()}
+          >
+            Save
+          </Button>
+        </div>
+      }
+    >
+      <p className="admin-table__sub">
+        A seat with a role here gives that role instead of the default from Role Manager. Changing
+        this does not rewrite existing assignments; it applies to the next appointment.
+      </p>
+      <div className="admin-form-grid">
+        {seatsFor(unit).map((seat) => {
+          const entry = map[seat];
+          return (
+            <div className="admin-field" key={seat}>
+              <label className="admin-field__label" htmlFor={`unit-role-${seat}`}>
+                {seatLabel(seat, unit)}
+              </label>
+              <Select
+                id={`unit-role-${seat}`}
+                className="admin-select"
+                value={entry?.roleId ?? ""}
+                onChange={(e) => change(seat, e.target.value, entry?.scope ?? "unit")}
+              >
+                <option value="">Default</option>
+                {props.roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </Select>
+              {entry ? (
+                <Select
+                  aria-label={`Scope of the role of ${seatLabel(seat, unit)}`}
+                  className="admin-select"
+                  value={entry.scope}
+                  onChange={(e) => change(seat, entry.roleId, e.target.value as "global" | "unit")}
+                >
+                  <option value="unit">This unit and the units below it</option>
+                  <option value="global">Whole organisation</option>
+                </Select>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
       {message && (
         <p role="alert" className="admin-field__error">

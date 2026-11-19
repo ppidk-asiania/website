@@ -218,7 +218,7 @@ router.push("/things"); router.refresh();
   hides a section when it is empty: (1) **action tiles** — one `StatCard` per desk with items
   waiting (finance review/authorise/pay, the three LPJ desks, Zoom approval; items of the active
   period in the units the desk covers that the module's own rule would let this person act on),
-  **My overdue tasks** and, with `appointments.edit`, **Graduated officers still in office**; the
+  **My overdue tasks** and, with `appointments.edit`, **Graduated officers still in office** (opens the Officers tab of the unit); the
   header says how many; (2) **Setup to fix** — missing environment variables (superadmin) and
   "nobody can review LPJs"; (3) **Page views** (superadmin). Counters, latest changes, the 7-day
   agenda and period numbers were removed (they live on their own pages). `src/server/dashboard.ts`;

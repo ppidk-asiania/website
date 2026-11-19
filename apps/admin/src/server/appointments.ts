@@ -4,6 +4,7 @@ import { hasTwoSignInMethods, type AccountAdmin, type PasskeyStore } from "@webs
 import type {
   AppointmentAudit,
   SqlAccountStore,
+  SqlOrgUnitStore,
   SqlAppointmentStore,
   SqlRoleStore,
 } from "@website/db/sql";
@@ -11,8 +12,8 @@ import {
   AppointmentInputSchema,
   AppointmentRoleMapSchema,
   derivedAssignments,
+  UnitRoleMapSchema,
   type AppointmentRoleMap,
-  type OrgUnit,
 } from "@website/domain/organizations";
 import { RuleViolationError } from "@website/domain/shared";
 import { logSecurityEvent, type Logger } from "@website/observability";
@@ -26,7 +27,7 @@ export interface AppointmentDeps {
     "getRoleMap" | "saveRoleMap" | "appoint" | "end"
   >;
   readonly accounts: Pick<SqlAccountStore, "findByEmail">;
-  readonly units: { get(id: string): Promise<OrgUnit | null> };
+  readonly units: Pick<SqlOrgUnitStore, "get" | "saveRoleMap">;
   readonly roles: Pick<SqlRoleStore, "getMany">;
   readonly passkeys: Pick<PasskeyStore, "listByUser">;
   readonly authAdmin: AccountAdmin;
@@ -108,6 +109,47 @@ export function createAppointmentActions(deps: AppointmentDeps) {
     },
   });
 
+  const saveUnitRoleMap = createGuardedAction({
+    permission: "roles.edit",
+    input: z
+      .object({
+        orgUnitId: safeId,
+        version: z.number().int().min(1),
+        roleMap: UnitRoleMapSchema,
+      })
+      .strict(),
+    recentSignIn: true,
+    handler: async ({ orgUnitId, version, roleMap }, _principal, audit) => {
+      const ids = Object.values(roleMap).flatMap((entry) => (entry ? [entry.roleId] : []));
+      const builtIn = ids.find(isSystemRoleId);
+      if (builtIn)
+        throw new RuleViolationError(`Built-in roles (${builtIn}) cannot be given here.`);
+      const roles = await deps.roles.getMany(ids);
+      const missing = ids.find((id) => !roles.has(id));
+      if (missing) throw new RuleViolationError(`The role "${missing}" does not exist.`);
+      const saved = await deps.units.saveRoleMap(
+        orgUnitId,
+        version,
+        roleMap,
+        (before, after, current, next) =>
+          audit({
+            module: "roles",
+            action: "UPDATE",
+            resourceType: "orgUnitRoleMap",
+            resourceId: next.id,
+            title: `Roles from seats — ${next.name}`,
+            before,
+            after,
+            versionBefore: current?.version ?? null,
+            versionAfter: next.version,
+            revertible: false,
+          }),
+        deps.now(),
+      );
+      return { version: saved.version };
+    },
+  });
+
   const appoint = createGuardedAction({
     permission: "appointments.edit",
     input: AppointmentInputSchema,
@@ -186,5 +228,5 @@ export function createAppointmentActions(deps: AppointmentDeps) {
     },
   });
 
-  return { saveRoleMap, appoint, end };
+  return { saveRoleMap, saveUnitRoleMap, appoint, end };
 }

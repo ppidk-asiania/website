@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { can } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { OrgUnitEditor } from "@/components/org-unit-editor";
 import { toOrgUnitItem } from "@/components/org-units-model";
@@ -20,5 +21,11 @@ export default async function EditUnitRoute({
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
   const unit = await adminReads.getOrgUnit(unitId);
   if (!unit || unit.deletedAt || unit.periodId !== id) notFound();
-  return <OrgUnitEditor periodId={id} unit={toOrgUnitItem(unit)} />;
+  return (
+    <OrgUnitEditor
+      periodId={id}
+      unit={toOrgUnitItem(unit)}
+      showOfficers={can(viewer.principal, "appointments.read")}
+    />
+  );
 }

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
+  createSqlAppointmentStore,
+  createSqlPeriodStore,
   createSqlLetterSettingsStore,
   createSqlLetterStore,
   createSqlLetterTypeStore,
@@ -88,6 +90,9 @@ const actions = () =>
       const unit = fake.docs.get(`orgUnits/${id}`) as { path: string[] } | undefined;
       return Promise.resolve(unit ? [...unit.path, id] : null);
     },
+    deskUnit: async (periodId, desk) =>
+      (await createSqlPeriodStore(db()).get(periodId))?.desks[desk].orgUnitId ?? null,
+    seats: (uid) => createSqlAppointmentStore(db()).activeSeats(uid),
     storage,
     files: letterPdf(),
     afterStep: (letter) => {
@@ -144,6 +149,7 @@ beforeEach(() => {
   fake.docs.set("appointments/a1", {
     userId: "sekjen",
     periodId: "p1",
+    orgUnitId: "media",
     status: "active",
     name: "Rina Sekjen",
     title: "Sekretaris Jenderal",
@@ -467,6 +473,37 @@ describe("letters workflow", () => {
       .map(([, e]) => (e as { action: string }).action);
     expect(audit).toContain("PUBLISH");
     expect(audit).toContain("UNPUBLISH");
+  });
+
+  it("bound desk refuses a signer without the seat", async () => {
+    fake.docs.set("periods/p1", {
+      name: "2026/2027",
+      desks: {
+        coordinator: { title: "", orgUnitId: null },
+        signer: { title: "", orgUnitId: "sekjen" },
+      },
+    });
+    const typeId = await createType({ requiresCoordinator: true });
+    const created = await actions().save(...as(secretariat))({ ...draft, typeId, version: null });
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    const { id } = created.data;
+    const submitted = await actions().submit(...as(secretariat))({ id, version: 1 });
+    const passed = await actions().pass(...as(secretariat))({
+      id,
+      version: submitted.ok ? submitted.data.version : 0,
+    });
+    const version = passed.ok ? passed.data.version : 0;
+    expect(await actions().signSecretary(...as(sekjen))({ id, version })).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("seat")],
+    });
+    fake.docs.set("appointments/a1", {
+      ...fake.docs.get("appointments/a1"),
+      orgUnitId: "sekjen",
+    });
+    expect(await actions().signSecretary(...as(sekjen))({ id, version })).toMatchObject({
+      ok: true,
+    });
   });
 
   it("freezes the period's own desk titles; a later period renaming them changes nothing issued", async () => {

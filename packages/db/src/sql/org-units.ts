@@ -12,6 +12,7 @@ import {
   type PeriodStatus,
   type UnitDivision,
   type UnitMember,
+  type UnitRoleMap,
 } from "@website/domain/organizations";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
@@ -34,6 +35,7 @@ function toOrgUnit(id: string, data: Record<string, unknown>): OrgUnit {
     active: data["active"] as boolean,
     members: (data["members"] as UnitMember[] | undefined) ?? [],
     divisions: (data["divisions"] as UnitDivision[] | undefined) ?? [],
+    roleMap: (data["roleMap"] as UnitRoleMap | undefined) ?? {},
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
     updatedAt: toDate(data["updatedAt"]) as Date,
@@ -54,6 +56,9 @@ export function orgUnitSnapshot(u: OrgUnitFields): Snapshot {
     active: u.active,
     members: u.members.map(copyMember),
     divisions: u.divisions.map((d) => ({ name: d.name, members: d.members.map(copyMember) })),
+    roleMap: Object.fromEntries(
+      Object.entries(u.roleMap ?? {}).map(([seat, role]) => [seat, { ...role }]),
+    ),
   };
 }
 
@@ -131,7 +136,28 @@ export function createSqlOrgUnitStore(db: Database) {
             unitIn(tx, input.parentId),
           ]);
           const path = placeOrgUnit(input.periodId, period, input.parentId, parent);
-          return { ...input, path, deletedAt: null };
+          return { ...input, roleMap: current?.roleMap ?? {}, path, deletedAt: null };
+        },
+        audit,
+        now,
+      );
+    },
+
+    /** Changing the map never rewrites existing assignments; it applies to the next appointment. */
+    saveRoleMap(
+      id: string,
+      expectedVersion: number,
+      roleMap: UnitRoleMap,
+      audit: OrgUnitAudit,
+      now: Date,
+    ): Promise<OrgUnit> {
+      return store.write(
+        id,
+        expectedVersion,
+        async (current, tx) => {
+          const unit = current as OrgUnit;
+          placeOrgUnit(unit.periodId, await periodIn(tx, unit.periodId), null, null);
+          return { ...unit, roleMap };
         },
         audit,
         now,

@@ -27,6 +27,7 @@ import {
   type Letter,
   type LetterType,
 } from "@website/domain/documents";
+import type { ActiveSeat, PeriodDeskKey } from "@website/domain/organizations";
 import { isPdf, RuleViolationError } from "@website/domain/shared";
 import { openPdf, pdfText, type UnreadablePdfError } from "@website/pdf";
 import { can, type Permission, type Principal, type ResourceContext } from "@website/permissions";
@@ -44,6 +45,9 @@ export interface LetterDeps {
   readonly types: Pick<SqlLetterTypeStore, "save">;
   readonly settings: Pick<SqlLetterSettingsStore, "get" | "save">;
   readonly afterIssue: (letter: Letter) => Promise<void>;
+  /** The unit a period's desk is bound to (`period.desks.<desk>.orgUnitId`), or null. */
+  readonly deskUnit: (periodId: string, desk: PeriodDeskKey) => Promise<string | null>;
+  readonly seats: (uid: string) => Promise<readonly ActiveSeat[]>;
   readonly unitPath: (orgUnitId: string) => Promise<readonly string[] | null>;
   readonly storage: {
     save(
@@ -143,7 +147,7 @@ export function createLetterActions(deps: LetterDeps) {
       input: Record<string, unknown>,
       uid: string,
       now: Date,
-    ) => Letter,
+    ) => Letter | Promise<Letter>,
   ) =>
     createGuardedAction({
       permission,
@@ -163,9 +167,18 @@ export function createLetterActions(deps: LetterDeps) {
       },
     });
 
+  // The unit's own signer desk (no top desk on the letter type) is never bound.
   const sign =
-    (desk: Desk) => (letter: Letter, type: LetterType, _: unknown, uid: string, now: Date) =>
-      signDesk(letter, type, desk, uid, now);
+    (desk: Desk) =>
+    async (letter: Letter, type: LetterType, _: unknown, uid: string, now: Date) => {
+      const key =
+        desk === "coordinator" ? "coordinator" : type.requiresCoordinator ? "signer" : null;
+      const bound = key && (await deps.deskUnit(letter.periodId, key));
+      if (bound && !(await deps.seats(uid)).some((seat) => seat.orgUnitId === bound)) {
+        throw new RuleViolationError("This desk is bound to a unit: signing needs a seat in it.");
+      }
+      return signDesk(letter, type, desk, uid, now);
+    };
 
   const remove = createGuardedAction({
     permission: "letters.edit",

@@ -446,7 +446,7 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
     transition(
       id: string,
       version: number,
-      step: (letter: Letter, type: LetterType) => Letter,
+      step: (letter: Letter, type: LetterType) => Letter | Promise<Letter>,
       auditFor: LetterAudit,
       now: Date,
     ): Promise<Letter> {
