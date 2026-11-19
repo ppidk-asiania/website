@@ -3,7 +3,7 @@ import { safeId, safeText } from "@website/security/validation";
 import { RuleViolationError, type EntityMeta } from "../shared";
 import type { Meeting } from "./index";
 
-export const MINUTES_SOURCES = ["manual", "ai_transcript", "ai_zoom"] as const;
+export const MINUTES_SOURCES = ["manual", "ai_transcript", "ai_zoom", "ai_summary"] as const;
 export type MinutesSource = (typeof MINUTES_SOURCES)[number];
 
 export interface Minutes {

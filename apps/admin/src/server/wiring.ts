@@ -76,7 +76,7 @@ import { createAiActions } from "./ai";
 import { createAnthropicDrafter, createCallModel } from "./anthropic";
 import { createLinkActions } from "./links";
 import { goppiShortener, sidShortener } from "./shorteners";
-import { createZoomActions, createZoomTranscript } from "./zoom";
+import { createZoomActions, createZoomSummary, createZoomTranscript } from "./zoom";
 import { createZoomWebhookRoute } from "./zoom-webhook";
 import { createDriveClient } from "./drive";
 import { createRecordingArchive } from "./recordings";
@@ -721,6 +721,7 @@ export const minutesActions = lazyEnv(() =>
       booking: (id) => adminStores().zoom.get(id),
       client: zoomClient(),
     }),
+    zoomSummary: createZoomSummary({ sessions: adminStores().zoom }),
     now: () => new Date(),
   }),
 );
@@ -997,5 +998,7 @@ export const adminReads = {
   surveysLastYear: () => adminStores().surveys.since(new Date(Date.now() - 365 * 86_400_000)),
   recordingFiles: (bookingIds: readonly string[]) =>
     adminStores().zoom.filesForBookings(bookingIds),
+  zoomSessions: (bookingIds: readonly string[]) =>
+    adminStores().zoom.sessionsForBookings(bookingIds),
   listActionItems: (meetingId: string) => adminStores().actionItems.listForMeeting(meetingId),
 };

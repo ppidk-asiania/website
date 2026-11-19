@@ -46,6 +46,14 @@ export interface MeetingView {
   externalUrl: string | null;
   zoomRequestId: string | null;
   zoomBookings: Array<{ id: string; label: string }>;
+  zoomSummaries: Array<{
+    at: string;
+    title: string;
+    overview: string;
+    details: ReadonlyArray<{ label: string; summary: string }>;
+    nextSteps: readonly string[];
+    folded: boolean;
+  }>;
   cancelReason: string | null;
   agenda: string[];
   agendaItems: Array<{ id: string; title: string }>;
@@ -257,6 +265,35 @@ export function MeetingPage({
           <DataTable columns={columns} rows={m.participants} rowKey={(p) => p.uid} />
         </CardBody>
       </Card>
+      {m.zoomSummaries.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Zoom summary"
+            subtitle="Written by Zoom AI; check it before you rely on it"
+          />
+          <CardBody>
+            {m.zoomSummaries.map((s) => (
+              <details key={s.at} open={!s.folded}>
+                <summary>{s.title || formatInZone(s.at, m.timeZone)}</summary>
+                {s.overview ? <p style={{ whiteSpace: "pre-wrap" }}>{s.overview}</p> : null}
+                {s.details.map((d) => (
+                  <p key={d.label + d.summary} style={{ whiteSpace: "pre-wrap" }}>
+                    {d.label ? <strong>{d.label}: </strong> : null}
+                    {d.summary}
+                  </p>
+                ))}
+                {s.nextSteps.length > 0 ? (
+                  <ul>
+                    {s.nextSteps.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </details>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
       <MinutesPanel
         meetingId={m.id}
         version={m.version}
@@ -273,6 +310,7 @@ export function MeetingPage({
               version={m.version}
               names={new Map(m.participants.map((p) => [p.uid, p.name]))}
               hasZoom={m.zoomRequestId !== null}
+              hasSummary={m.zoomSummaries.length > 0}
             />
           ) : null
         }

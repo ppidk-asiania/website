@@ -57,6 +57,8 @@ const actions = () =>
           ? "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\nRina: Zoom says hi.\nRina: Again."
           : null,
       ),
+    zoomSummary: (m) =>
+      Promise.resolve(m.room.zoomRequestId ? "Session one.\n\nSession two." : null),
     now: () => clock,
   });
 
@@ -192,6 +194,37 @@ describe("minutes (F5)", () => {
     const fresh = mergeDraft({ ...meeting, minutes: null }, { a2: "Budget" }, "ai_zoom");
     expect(fresh.minutes?.source).toBe("ai_zoom");
     expect(quorumMet(merged)).toBe(false);
+  });
+});
+
+describe("draft from Zoom summary (12.3)", () => {
+  it("feeds the summary text to the drafter, marks the source, never overwrites notes", async () => {
+    let asked: DraftRequest | null = null;
+    drafter = {
+      draft: (request) => {
+        asked = request;
+        return Promise.resolve({
+          items: [{ agendaItemId: "a2", notes: "Budget agreed." }],
+          actionItems: [],
+        });
+      },
+    };
+    expect(
+      await actions().draft(...as(secretary))({ id: "m1", version: 1, source: "ai_summary" }),
+    ).toMatchObject({ issues: [expect.stringContaining("no Zoom summary")] as unknown });
+    fake.docs.set("meetings/m1", {
+      ...fake.docs.get("meetings/m1"),
+      room: { zoomRequestId: "z1", externalUrl: null },
+    });
+    const result = await actions().draft(...as(secretary))({
+      id: "m1",
+      version: 1,
+      source: "ai_summary",
+    });
+    expect(result.ok).toBe(true);
+    expect((asked as unknown as DraftRequest).transcript).toBe("Session one.\n\nSession two.");
+    const saved = (await meetings().get("m1")) as Meeting;
+    expect(saved.minutes).toMatchObject({ source: "ai_summary", notes: { a2: "Budget agreed." } });
   });
 });
 

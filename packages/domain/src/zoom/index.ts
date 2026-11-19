@@ -3,6 +3,7 @@ import { safeId, safeText } from "@website/security/validation";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
 
 export * from "./recordings";
+export * from "./sessions";
 
 export const ZOOM_STATUSES = ["pending", "approved", "rejected", "cancelled"] as const;
 export type ZoomStatus = (typeof ZOOM_STATUSES)[number];

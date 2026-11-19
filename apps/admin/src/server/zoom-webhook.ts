@@ -2,7 +2,12 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import type { SqlZoomStore } from "@website/db/sql";
 import { messageTo, type Contact, type Messenger } from "@website/domain/messaging";
-import { zoomEventMeeting, type ZoomRequest } from "@website/domain/zoom";
+import {
+  recordingIsEmpty,
+  summaryContent,
+  zoomEventMeeting,
+  type ZoomRequest,
+} from "@website/domain/zoom";
 import { readBodyLimited, verifyHmacSignature } from "@website/security";
 import { systemZoomAudit } from "./zoom";
 import type { ZoomClient } from "./zoom-client";
@@ -12,7 +17,7 @@ const MAX_BODY = 256 * 1024;
 export interface ZoomWebhookDeps {
   readonly secret: string | undefined;
   readonly record: (provider: string, eventId: string, now: Date) => Promise<boolean>;
-  readonly zoom: Pick<SqlZoomStore, "findByZoomMeetingId" | "write" | "addSession">;
+  readonly zoom: Pick<SqlZoomStore, "findByZoomMeetingId" | "write" | "addSession" | "saveSummary">;
   readonly client: Pick<ZoomClient, "updateMeeting"> | null;
   readonly contacts: (uids: readonly string[]) => Promise<Map<string, Contact>>;
   readonly send: Messenger["send"];
@@ -54,9 +59,19 @@ export function createZoomWebhookRoute(deps: ZoomWebhookDeps) {
     );
   }
 
-  async function onRecording(booking: ZoomRequest, uuid: string | null, now: Date) {
+  async function onRecording(
+    booking: ZoomRequest,
+    uuid: string | null,
+    duration: unknown,
+    now: Date,
+  ) {
     if (!uuid || booking.recordingUuids.includes(uuid)) return;
-    await deps.zoom.addSession(uuid, booking.id, now);
+    await deps.zoom.addSession(
+      uuid,
+      booking.id,
+      now,
+      typeof duration === "number" ? duration : null,
+    );
     await deps.zoom.write(
       booking.id,
       booking.version,
@@ -127,8 +142,21 @@ export function createZoomWebhookRoute(deps: ZoomWebhookDeps) {
     if (!booking) return reply({ ok: true });
     try {
       if (name === "meeting.ended") await onEnded(booking, now);
-      if (name === "recording.completed") await onRecording(booking, meeting.uuid, now);
-      if (Object.hasOwn(NOTICES, name)) await notify(booking, name, meeting.uuid);
+      // An empty session is still stored and archived; only the notice is held back.
+      if (name === "recording.completed") {
+        const duration = (event.payload as { object?: { duration?: unknown } }).object?.duration;
+        await onRecording(booking, meeting.uuid, duration, now);
+        if (!recordingIsEmpty(event.payload)) await notify(booking, name, meeting.uuid);
+      }
+      if (name === "meeting.summary_completed") {
+        const content = summaryContent(event.payload);
+        if (content) {
+          if (meeting.uuid) {
+            await deps.zoom.saveSummary(meeting.uuid, booking.id, { ...content, at: now }, now);
+          }
+          await notify(booking, name, meeting.uuid);
+        }
+      }
     } catch (error) {
       deps.logError("zoom webhook failed", {
         event: name,

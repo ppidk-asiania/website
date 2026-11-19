@@ -81,7 +81,7 @@ told about their own change.
 ## Minutes and action items (F5)
 
 - `meeting.minutes`: notes per agenda item (`notes[agendaItemId]`), other business, `quorum`
-  (people needed; null = not set), `source` (`manual`, `ai_transcript`, `ai_zoom`).
+  (people needed; null = not set), `source` (`manual`, `ai_transcript`, `ai_zoom`, `ai_summary`).
 - The chair and the secretary write them (`saveMinutes`); notes of items no longer on the agenda
   and empty notes are dropped.
 - **Approve and lock**: the chair, or `meetings.approve_minutes` for the meeting's unit, once the
@@ -118,7 +118,12 @@ told about their own change.
   "Name: " prefix as a speaker only when it occurs at least twice, joins a speaker's lines in a
   row.
 - The draft fills only EMPTY agenda items (`mergeDraft`; a person's notes are never
-  overwritten); `minutes.source` records `ai_transcript` / `ai_zoom` when the machine wrote first.
+  overwritten); `minutes.source` records `ai_transcript` / `ai_zoom` / `ai_summary` when the machine wrote first.
+- **Draft from Zoom summary** (12.3): feeds the stored Zoom summaries of the meeting's booking,
+  all sessions in time order (`summaryText`), into the same drafter (`source = ai_summary`);
+  no Zoom call. The button tooltips tell the three sources apart: pasted transcript, Zoom
+  transcript pulled now, stored Zoom summary. Shown only when a summary exists. The drafter's
+  AI usage row (10.5) is added by that step's wrapper, not here.
 - Proposed action items come back to the page; a PIC who is not a participant becomes "no PIC"
   and a person adds each item, which re-checks the PIC on save.
 - A failure is logged (`minutes draft failed`) and nothing is written.

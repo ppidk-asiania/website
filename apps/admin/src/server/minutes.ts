@@ -35,6 +35,7 @@ export interface MinutesDeps {
   readonly names: (uids: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   readonly logError: (message: string, fields: Record<string, unknown>) => void;
   readonly zoomTranscript: (meeting: Meeting) => Promise<string | null>;
+  readonly zoomSummary: (meeting: Meeting) => Promise<string | null>;
   readonly now: () => Date;
 }
 
@@ -56,6 +57,7 @@ const Draft = z.discriminatedUnion("source", [
     })
     .strict(),
   z.object({ id: safeId, version, source: z.literal("ai_zoom") }).strict(),
+  z.object({ id: safeId, version, source: z.literal("ai_summary") }).strict(),
 ]);
 const ItemDone = z.object({ id: safeId, version, done: z.boolean() }).strict();
 
@@ -266,10 +268,16 @@ export function createMinutesActions(deps: MinutesDeps) {
         throw new RuleViolationError("Only the meeting's chair or secretary can do this.");
       }
       const transcript =
-        input.source === "ai_transcript" ? input.transcript : await deps.zoomTranscript(meeting);
+        input.source === "ai_transcript"
+          ? input.transcript
+          : input.source === "ai_summary"
+            ? await deps.zoomSummary(meeting)
+            : await deps.zoomTranscript(meeting);
       if (transcript === null) {
         throw new RuleViolationError(
-          "Zoom has no transcript for this meeting's room yet (it comes with the cloud recording).",
+          input.source === "ai_summary"
+            ? "There is no Zoom summary for this meeting's room yet."
+            : "Zoom has no transcript for this meeting's room yet (it comes with the cloud recording).",
         );
       }
       const names = await deps.names(meeting.participantIds);

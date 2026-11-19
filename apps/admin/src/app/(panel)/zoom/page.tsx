@@ -25,14 +25,24 @@ export default async function AdminZoomPage() {
       can(principal, "zoom.read", { orgUnitPath: b.orgUnitPath }),
   );
   const recorded = visible.filter((b) => b.recordingUuids.length > 0);
-  const [people, files] = await Promise.all([
+  const [people, files, sessions] = await Promise.all([
     adminReads.getUsers([...new Set(visible.map((b) => b.requestedBy))]),
     adminReads.recordingFiles(recorded.map((b) => b.id)),
+    adminReads.zoomSessions(recorded.map((b) => b.id)),
   ]);
+  // A zero-minute session with no file and no summary gets no card; one WITH files is a probable false start.
+  const sessionsOf = (b: (typeof visible)[number]) =>
+    b.recordingUuids.flatMap((uuid) => {
+      const session = sessions.find((s) => s.uuid === uuid);
+      const hasFiles = files.some((f) => f.sessionUuid === uuid);
+      if (session?.durationMinutes === 0 && !hasFiles && !session.summary) return [];
+      return [{ uuid, falseStart: session?.durationMinutes === 0 && hasFiles }];
+    });
   const recordingOf = (b: (typeof visible)[number]) => {
-    if (b.recordingUuids.length === 0) return null;
-    const mine = files.filter((f) => f.bookingId === b.id);
-    if (isArchived(b.recordingUuids, mine)) return "Recording archived in Drive";
+    const shown = sessionsOf(b).map((s) => s.uuid);
+    if (shown.length === 0) return null;
+    const mine = files.filter((f) => f.bookingId === b.id && shown.includes(f.sessionUuid));
+    if (isArchived(shown, mine)) return "Recording archived in Drive";
     const clash = mine.filter((f) => f.status === "clash" || f.status === "failed").length;
     const done = mine.filter((f) => f.status === "done").length;
     return `Recording: ${done} of ${mine.length} files in Drive${clash ? `, ${clash} need a look` : ""}`;
@@ -71,6 +81,7 @@ export default async function AdminZoomPage() {
         joinUrl: b.shortUrl ?? b.joinUrl,
         roomError: b.roomError,
         recording: recordingOf(b),
+        falseStart: sessionsOf(b).some((s) => s.falseStart),
         decisionNote: b.decisionNote,
         invitation: b.joinUrl ? invitationText(b) : null,
         canDecide:

@@ -7,6 +7,7 @@ import { RuleViolationError } from "@website/domain/shared";
 import {
   assertStatus,
   requestTimes,
+  summaryText,
   ZoomRequestInputSchema,
   ZoomSettingsInputSchema,
   type ZoomRequest,
@@ -298,6 +299,21 @@ export function createZoomActions(deps: ZoomDeps) {
     cancel,
     saveSettings,
     retryRooms,
+  };
+}
+
+/** The stored summaries of a meeting's Zoom booking, all sessions in time order; no Zoom call. */
+export function createZoomSummary(deps: {
+  readonly sessions: Pick<SqlZoomStore, "sessionsForBookings">;
+}) {
+  return async (meeting: { room: { zoomRequestId: string | null } }): Promise<string | null> => {
+    const id = meeting.room.zoomRequestId;
+    const found = id ? await deps.sessions.sessionsForBookings([id]) : [];
+    const texts = found
+      .flatMap((s) => (s.summary ? [s.summary] : []))
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+      .map(summaryText);
+    return texts.length ? texts.join("\n\n") : null;
   };
 }
 

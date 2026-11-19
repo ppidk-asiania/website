@@ -67,6 +67,21 @@ always gets a short answer.
 - `recording.completed`: the session uuid is added to `recordingUuids` (the archive, F3, uses
   them) and the requester is told; `meeting.summary_completed`: the requester is told. Keys
   `zoom:{bookingId}:recording|summary:{uuid}`.
+- **Empty sessions and the summary (12.3)** (`domain/zoom/sessions.ts`). `recordingIsEmpty`
+  is true on proof only: `duration` present and under 5 minutes, `recording_count` 0, or files
+  listed and none playable (MP4/M4A, size > 0, at least 5 minutes); a field Zoom did not send is
+  never proof. An empty session is still stored (with `durationMinutes`) and archived; only the
+  notice is held back (there is no Zoom satisfaction poll in the platform; PPIDK's polls are not
+  imported). `summaryContent` is null when the overview is blank, no next step and no detail
+  has text (a title alone is empty): no notice, nothing stored. Otherwise the summary is saved on
+  the session row (`recordingSessions/{hex(uuid)}.summary`; a re-published summary replaces it;
+  the row is created if the summary arrives first) and the requester is told.
+- Meeting page: section "Zoom summary" for a meeting whose room is our booking (visible to
+  whoever may open the meeting; folded when more than three parts or 800 characters). It reads
+  the stored rows, never Zoom. The recordings stay on the Zoom page, seen by the requester,
+  their unit and `zoom.approve` only.
+- Zoom page recording line: a session with `durationMinutes` 0, no file and no summary is not
+  counted; a zero-minute session WITH files adds the badge "probably a false start".
 - **Pull Zoom transcript** (minutes, F6): for a meeting whose room is a Zoom booking,
   `GET /meetings/{zoomMeetingId}/recordings` → the `TRANSCRIPT` file downloaded with the API
   token → the machine draft (`source = ai_zoom`). No recording yet (404 or no file) = a message.

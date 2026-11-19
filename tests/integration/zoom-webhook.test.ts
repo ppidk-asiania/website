@@ -87,6 +87,23 @@ const event = (name: string, object: Record<string, unknown>, ts = 1) => ({
   event_ts: ts,
   payload: { account_id: "acc", object },
 });
+const summaryEvent = (over: Record<string, unknown> = {}, ts = 1) =>
+  event(
+    "meeting.summary_completed",
+    {
+      meeting_id: 81234567890,
+      meeting_uuid: "sess2",
+      summary_title: "Rapat",
+      summary_overview: "We agreed.",
+      summary_details: [],
+      next_steps: [],
+      ...over,
+    },
+    ts,
+  );
+const sessionDoc = (uuid: string) =>
+  fake.docs.get(`recordingSessions/${Buffer.from(uuid).toString("hex")}`) as
+    Record<string, unknown> | undefined;
 const stored = async () =>
   (await createSqlZoomStore(fake.db as unknown as Db).get("b1")) as ZoomRequest;
 
@@ -171,11 +188,7 @@ describe("Zoom webhooks (F2)", () => {
     await route()(signed(event("recording.completed", { id: 81234567890, uuid: "sess/1==" }, 2)));
     await route()(signed(event("recording.completed", { id: "81234567890", uuid: "sess2" }, 3)));
     await route()(signed(event("recording.completed", { id: "81234567890" }, 4)));
-    await route()(
-      signed(
-        event("meeting.summary_completed", { meeting_id: 81234567890, meeting_uuid: "sess2" }),
-      ),
-    );
+    await route()(signed(summaryEvent({ meeting_uuid: "sess2" })));
     expect((await stored()).recordingUuids).toEqual(["sess/1==", "sess2"]);
     expect(sent).toEqual([
       "zoom:b1:recording:sess_1__",
@@ -195,6 +208,76 @@ describe("Zoom webhooks (F2)", () => {
     )(signed(event("meeting.ended", { id: 81234567890, uuid: "u1" })));
     expect(response.status).toBe(200);
     expect(errors).toEqual(["zoom webhook failed"]);
+  });
+});
+
+describe("Zoom sessions: empty ones and the summary (12.3)", () => {
+  const object = (uuid: string, over: Record<string, unknown> = {}) => ({
+    id: 81234567890,
+    uuid,
+    duration: 45,
+    recording_count: 1,
+    recording_files: [
+      {
+        id: "f1",
+        file_type: "MP4",
+        file_size: 10,
+        recording_start: "2026-11-10T10:00:00Z",
+        recording_end: "2026-11-10T10:45:00Z",
+      },
+    ],
+    ...over,
+  });
+
+  it("a restarted meeting: the false start is stored but only the real session is announced", async () => {
+    await route()(
+      signed(
+        event(
+          "recording.completed",
+          object("false", { duration: 0, recording_count: 0, recording_files: [] }),
+          1,
+        ),
+      ),
+    );
+    await route()(signed(event("recording.completed", object("real"), 2)));
+    expect((await stored()).recordingUuids).toEqual(["false", "real"]);
+    expect(sessionDoc("false")).toMatchObject({ bookingId: "b1", durationMinutes: 0 });
+    expect(sessionDoc("real")).toMatchObject({ durationMinutes: 45 });
+    expect(sent).toEqual(["zoom:b1:recording:real"]);
+  });
+
+  it("a blank summary is not announced or stored; a real one is both, and a re-publish replaces it", async () => {
+    await route()(signed(summaryEvent({ summary_overview: " " }, 1)));
+    expect(sent).toEqual([]);
+    expect(sessionDoc("sess2")).toBeUndefined();
+    await route()(signed(summaryEvent({}, 2)));
+    expect(sent).toEqual(["zoom:b1:summary:sess2"]);
+    expect(sessionDoc("sess2")?.["summary"]).toMatchObject({
+      title: "Rapat",
+      overview: "We agreed.",
+      details: [],
+      nextSteps: [],
+      at: clock,
+    });
+    await route()(signed(summaryEvent({ summary_overview: "Changed." }, 3)));
+    expect(sessionDoc("sess2")?.["summary"]).toMatchObject({ overview: "Changed." });
+    await route()(signed(event("recording.completed", object("sess2"), 4)));
+    expect(sessionDoc("sess2")).toMatchObject({ durationMinutes: 45 });
+    expect(sessionDoc("sess2")?.["summary"]).toMatchObject({ overview: "Changed." });
+  });
+
+  it("the store lists sessions with their summary for the meeting page", async () => {
+    await route()(signed(summaryEvent({}, 1)));
+    const sessions = await createSqlZoomStore(fake.db as unknown as Db).sessionsForBookings(["b1"]);
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        uuid: "sess2",
+        bookingId: "b1",
+        durationMinutes: null,
+        summary: expect.objectContaining({ overview: "We agreed." }) as unknown,
+      }),
+    ]);
+    expect(await createSqlZoomStore(fake.db as unknown as Db).sessionsForBookings([])).toEqual([]);
   });
 });
 

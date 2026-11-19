@@ -14,11 +14,13 @@ export function DraftMinutes({
   version,
   names,
   hasZoom,
+  hasSummary,
 }: {
   meetingId: string;
   version: number;
   names: ReadonlyMap<string, string>;
   hasZoom: boolean;
+  hasSummary: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -27,14 +29,14 @@ export function DraftMinutes({
   const [transcript, setTranscript] = useState("");
   const [proposals, setProposals] = useState<Proposal[]>([]);
 
-  const submit = async (event: FormEvent | null) => {
+  const submit = async (event: FormEvent | null, source: "ai_zoom" | "ai_summary" = "ai_zoom") => {
     event?.preventDefault();
     setBusy(true);
     setMessage(null);
     const result = await draftMinutesAction(
       event
         ? { id: meetingId, version, transcript, source: "ai_transcript" }
-        : { id: meetingId, version, source: "ai_zoom" },
+        : { id: meetingId, version, source },
     );
     setBusy(false);
     if (!result.ok) return setMessage(actionMessage(result));
@@ -77,9 +79,21 @@ export function DraftMinutes({
                 variant="outline"
                 icon="download"
                 disabled={busy}
+                title="The full Zoom transcript of the cloud recording, fetched from Zoom now"
                 onClick={() => submit(null)}
               >
                 Pull Zoom transcript
+              </Button>
+            ) : null}
+            {hasSummary ? (
+              <Button
+                variant="outline"
+                icon="note"
+                disabled={busy}
+                title="The Zoom AI summaries already on this page (all sessions), not the full transcript"
+                onClick={() => submit(null, "ai_summary")}
+              >
+                Draft from Zoom summary
               </Button>
             ) : null}
             <Button
@@ -87,6 +101,7 @@ export function DraftMinutes({
               variant="primary"
               icon="note"
               loading={busy}
+              title="The transcript pasted or uploaded above"
               disabled={transcript.trim().length < 20}
             >
               {busy ? "Drafting…" : "Draft"}

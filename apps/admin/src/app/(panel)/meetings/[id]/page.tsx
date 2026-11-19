@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { meetingStatus } from "@website/domain/meetings";
+import { summaryFolded } from "@website/domain/zoom";
 import { utcToWallTime } from "@website/domain/shared";
 import { inTreeOrder, orgUnitPath } from "@website/domain/organizations";
 import { can } from "@website/permissions";
@@ -23,14 +24,18 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
   const meeting = await adminReads.getMeeting(id);
   if (!meeting || meeting.deletedAt || !canSeeMeeting(principal, meeting)) notFound();
   const DAY = 86_400_000;
-  const [units, items, bookings] = await Promise.all([
+  const [units, items, bookings, sessions] = await Promise.all([
     adminReads.listOrgUnits(meeting.periodId),
     adminReads.listActionItems(meeting.id),
     adminReads.listZoom(
       new Date(meeting.startsAt.getTime() - DAY),
       new Date(meeting.startsAt.getTime() + DAY),
     ),
+    meeting.room.zoomRequestId ? adminReads.zoomSessions([meeting.room.zoomRequestId]) : [],
   ]);
+  const summaries = sessions
+    .flatMap((s) => (s.summary ? [s.summary] : []))
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
   const people = await adminReads.getUsers([
     ...new Set([...meeting.participantIds, ...items.map((i) => i.pic)]),
   ]);
@@ -62,6 +67,11 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
             id: b.id,
             label: `${b.topic} (${b.shortUrl ?? b.joinUrl ?? "room pending"})`,
           })),
+        zoomSummaries: summaries.map((s) => ({
+          ...s,
+          at: s.at.toISOString(),
+          folded: summaryFolded(s),
+        })),
         cancelReason: meeting.cancelReason,
         agenda: meeting.agenda.map((a) => a.title),
         agendaItems: meeting.agenda.map((a) => ({ id: a.id, title: a.title })),

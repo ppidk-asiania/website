@@ -54,6 +54,7 @@ interface Row {
   joinUrl: string | null;
   roomError: string | null;
   recording: string | null;
+  falseStart: boolean;
   decisionNote: string | null;
   invitation: string | null;
   canDecide: boolean;
@@ -154,7 +155,8 @@ export function ZoomPage({
             {r.requester}
             {r.roomError ? " · Room not created yet (retried automatically)" : ""}
             {r.decisionNote ? ` · ${r.decisionNote}` : ""}
-            {r.recording ? ` · ${r.recording}` : ""}
+            {r.recording ? ` · ${r.recording}` : ""}{" "}
+            {r.falseStart ? <Badge tone="warn">probably a false start</Badge> : null}
           </div>
         </div>
       ),

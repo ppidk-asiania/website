@@ -41,6 +41,7 @@ const SOURCE_LABELS: Record<MinutesSource, string> = {
   manual: "Written by hand",
   ai_transcript: "Drafted from a transcript, then edited",
   ai_zoom: "Drafted from the Zoom transcript, then edited",
+  ai_summary: "Drafted from the Zoom summary, then edited",
 };
 
 export function MinutesPanel({

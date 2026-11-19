@@ -10,6 +10,7 @@ import {
   type ZoomRequest,
   type ZoomSettings,
   type ZoomStatus,
+  type ZoomSummary,
 } from "@website/domain/zoom";
 import { safeId } from "@website/security/validation";
 import { createSqlAuditWriter } from "./audit";
@@ -52,6 +53,14 @@ const toRequest = (id: string, data: Record<string, unknown>): ZoomRequest => ({
   updatedAt: toDate(data["updatedAt"]) as Date,
   deletedAt: toDate(data["deletedAt"]),
 });
+
+export interface ZoomSession {
+  readonly uuid: string;
+  readonly bookingId: string;
+  readonly durationMinutes: number | null;
+  readonly summary: ZoomSummary | null;
+  readonly createdAt: Date;
+}
 
 const sessionId = (uuid: string) => Buffer.from(uuid).toString("hex");
 
@@ -137,12 +146,69 @@ export function createSqlZoomStore(db: Database) {
         .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
     },
 
-    async addSession(uuid: string, bookingId: string, now: Date): Promise<void> {
+    /** `durationMinutes` is null when Zoom did not send it. */
+    async addSession(
+      uuid: string,
+      bookingId: string,
+      now: Date,
+      durationMinutes: number | null = null,
+    ): Promise<void> {
       const ref = sessions.doc(sessionId(uuid));
       await db.runTransaction(async (tx) => {
-        if ((await tx.get(ref)).exists) return;
-        tx.create(ref, { uuid, bookingId, listedAt: null, trashedAt: null, createdAt: now });
+        if ((await tx.get(ref)).exists) {
+          if (durationMinutes !== null) tx.update(ref, { durationMinutes });
+          return;
+        }
+        tx.create(ref, {
+          uuid,
+          bookingId,
+          listedAt: null,
+          trashedAt: null,
+          durationMinutes,
+          createdAt: now,
+        });
       });
+    },
+
+    /** Saves the session's summary; a re-published summary replaces the old one. */
+    async saveSummary(uuid: string, bookingId: string, summary: ZoomSummary, now: Date) {
+      const ref = sessions.doc(sessionId(uuid));
+      await db.runTransaction(async (tx) => {
+        if ((await tx.get(ref)).exists) tx.update(ref, { summary });
+        else {
+          tx.create(ref, {
+            uuid,
+            bookingId,
+            listedAt: null,
+            trashedAt: null,
+            durationMinutes: null,
+            summary,
+            createdAt: now,
+          });
+        }
+      });
+    },
+
+    async sessionsForBookings(bookingIds: readonly string[]): Promise<ZoomSession[]> {
+      const found: ZoomSession[] = [];
+      for (let i = 0; i < bookingIds.length; i += 30) {
+        const snapshot = await sessions.where("bookingId", "in", bookingIds.slice(i, i + 30)).get();
+        found.push(
+          ...snapshot.docs.map((d) => {
+            const summary = d.get("summary") as Record<string, unknown> | null | undefined;
+            return {
+              uuid: d.get("uuid") as string,
+              bookingId: d.get("bookingId") as string,
+              durationMinutes: (d.get("durationMinutes") as number | null | undefined) ?? null,
+              summary: summary
+                ? ({ ...summary, at: toDate(summary["at"]) as Date } as unknown as ZoomSummary)
+                : null,
+              createdAt: toDate(d.get("createdAt")) ?? new Date(0),
+            };
+          }),
+        );
+      }
+      return found.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     },
 
     async unlistedSessions(
