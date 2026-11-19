@@ -31,6 +31,8 @@ export interface LetterVerification {
   readonly unitName: string;
   readonly periodName: string | null;
   readonly signers: readonly PublicSigner[];
+  /** Manual letters: the names were typed by the secretariat, not signed in the system. */
+  readonly signersRecorded: boolean;
   readonly cancelledAt: Date | null;
   readonly cancelReason: string | null;
   readonly content: "shown" | "changed" | "needs_name" | "none";
@@ -82,6 +84,7 @@ export function letterVerification(input: {
     unitName: input.unitName,
     periodName: input.periodName,
     signers: publicSigners(letter),
+    signersRecorded: letter.source === "manual",
     cancelledAt: letter.cancelledAt,
     cancelReason: letter.cancelReason,
     content,

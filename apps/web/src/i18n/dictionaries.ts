@@ -454,6 +454,7 @@ const id = {
     period: "Periode kepengurusan",
     signers: "Penandatangan",
     signedAt: "Ditandatangani",
+    signersRecorded: "Penandatangan dicatat sekretariat sesuai surat yang diterbitkan.",
     content: "Isi surat",
     compare:
       "Inilah isi yang tercatat pada arsip kami. Bandingkan dengan lembar yang kamu pegang; bila berbeda, lembar itu bukan yang kami terbitkan.",
@@ -1296,6 +1297,7 @@ const en: Dictionary = {
     period: "Board period",
     signers: "Signed by",
     signedAt: "Signed",
+    signersRecorded: "Signers as recorded by the secretariat from the issued letter.",
     content: "Content",
     compare:
       "This is the content in our archive. Compare it with the letter you hold; if they differ, that letter is not the one we issued.",

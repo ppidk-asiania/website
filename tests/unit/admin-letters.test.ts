@@ -3,6 +3,7 @@ import {
   LETTER_TABS,
   letterActions,
   matchesLetterTab,
+  showsFilePanel,
   toLetterItem,
   type LetterItem,
 } from "../../apps/admin/src/components/letters-model";
@@ -48,6 +49,7 @@ const letter: Letter = {
   topDeskOnly: false,
   initialsBox: false,
   draftUrl: null,
+  signedBy: [],
   sheetNumberTemplate: null,
 };
 const type = {
@@ -180,8 +182,9 @@ describe("Letters page model", () => {
       letterActions(item({ status: "awaiting_file", upload: file }), { ...none, issue: true }, "s"),
     ).toEqual([]);
     const placement = {
+      numbers: [],
       qr: { page: 1, xMm: 175, yMm: 255, sizeMm: 22 },
-      secretary: { page: 1, xMm: 130, yMm: 230 },
+      secretary: { page: 1, xMm: 130, yMm: 230, wMm: null, withStamp: false },
       coordinator: null,
     };
     expect(
@@ -216,7 +219,12 @@ describe("upload letters in the list", () => {
           uploadedBy: "author",
           uploadedAt: at,
         },
-        placement: { qr: null, secretary: { page: 1, xMm: 1, yMm: 2 }, coordinator: null },
+        placement: {
+          numbers: [],
+          qr: null,
+          secretary: { page: 1, xMm: 1, yMm: 2, wMm: null, withStamp: false },
+          coordinator: null,
+        },
       },
       type,
       "Sekretariat",
@@ -229,5 +237,45 @@ describe("upload letters in the list", () => {
       placement: { secretary: { page: 1, xMm: 1, yMm: 2 } },
     });
     expect(item().upload).toBeNull();
+  });
+});
+
+describe("manual letters and the file panel (14.2)", () => {
+  const issuer = { ...none, issue: true };
+  it("a manual draft is numbered straight away (no review) and finished with its file", () => {
+    expect(
+      letterActions(item({ status: "draft", source: "manual", canEdit: true }), issuer, "s"),
+    ).toEqual(["edit", "delete", "issue"]);
+    expect(
+      letterActions(item({ status: "draft", source: "upload", canEdit: true }), issuer, "s"),
+    ).toEqual(["edit", "submit", "delete"]);
+    const file = { size: 1, numberChecked: true, uploadedAt: at.toISOString() };
+    expect(
+      letterActions(item({ status: "awaiting_file", source: "manual", upload: file }), issuer, "s"),
+    ).toEqual(["issueFile"]);
+    expect(letterActions(item({ status: "awaiting_file", source: "manual" }), issuer, "s")).toEqual(
+      [],
+    );
+  });
+
+  it("shows the Final PDF panel while an own-PDF letter is editable or waiting, a manual one once numbered", () => {
+    expect(showsFilePanel({ source: "upload", status: "draft" })).toBe(true);
+    expect(showsFilePanel({ source: "upload", status: "review" })).toBe(true);
+    expect(showsFilePanel({ source: "upload", status: "awaiting_file" })).toBe(true);
+    expect(showsFilePanel({ source: "upload", status: "issued" })).toBe(false);
+    expect(showsFilePanel({ source: "manual", status: "draft" })).toBe(false);
+    expect(showsFilePanel({ source: "manual", status: "awaiting_file" })).toBe(true);
+    expect(showsFilePanel({ source: "editor", status: "draft" })).toBe(false);
+  });
+
+  it("carries the signers typed for a manual letter", () => {
+    const manual = toLetterItem(
+      { ...letter, source: "manual", signedBy: [{ name: "Rina", seat: "Sekjen" }] },
+      type,
+      "Sekretariat",
+      names,
+      true,
+    );
+    expect(manual.signedBy).toEqual([{ name: "Rina", seat: "Sekjen" }]);
   });
 });

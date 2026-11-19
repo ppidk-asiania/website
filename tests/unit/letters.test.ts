@@ -15,6 +15,7 @@ import {
   LetterTypeInputSchema,
   makeVerificationCode,
   missingFields,
+  missingUploadParts,
   normalizeLetterInput,
   normalizeVerificationCode,
   passReview,
@@ -73,6 +74,7 @@ const letter = (extra: Partial<Letter> = {}): Letter => ({
   topDeskOnly: false,
   initialsBox: false,
   draftUrl: null,
+  signedBy: [],
   sheetNumberTemplate: null,
   ...extra,
 });
@@ -256,6 +258,99 @@ describe("letter options (14.1)", () => {
       status: "approved",
       coordinator: { uid: "koor", at: now },
       secretary: null,
+    });
+  });
+});
+
+describe("upload path v2 and manual letters (14.2)", () => {
+  const file = {
+    path: "letters/p1/l1_upload_x.pdf",
+    sha256: "a".repeat(64),
+    size: 10,
+    numberChecked: false,
+    uploadedBy: "author",
+    uploadedAt: now,
+  };
+  const boxes = UploadPlacementSchema.parse({
+    numbers: [{ page: 1, xMm: 20, yMm: 40, wMm: 80, hMm: 6 }],
+    qr: { page: 1, xMm: 170, yMm: 250, sizeMm: 22 },
+    secretary: { page: 1, xMm: 130, yMm: 230, withStamp: true },
+    coordinator: null,
+  });
+
+  it("boxes: numbers are optional in the schema, signatures know their stamp, sizes are bounded", () => {
+    const old = UploadPlacementSchema.parse({ qr: null, secretary: null, coordinator: null });
+    expect(old.numbers).toEqual([]);
+    expect(boxes.secretary).toMatchObject({ withStamp: true });
+    expect(
+      UploadPlacementSchema.parse({
+        ...old,
+        coordinator: { page: 2, xMm: 1, yMm: 1 },
+      }).coordinator,
+    ).toMatchObject({ withStamp: false });
+    const tooWide = { page: 1, xMm: 1, yMm: 1, wMm: 300, hMm: 6 };
+    expect(UploadPlacementSchema.safeParse({ ...old, numbers: [tooWide] }).success).toBe(false);
+    expect(
+      UploadPlacementSchema.safeParse({ ...old, numbers: Array(11).fill({ ...tooWide, wMm: 50 }) })
+        .success,
+    ).toBe(false);
+  });
+
+  it("an own-PDF letter is submitted only with its PDF, a number box and a QR box", () => {
+    const own = letter({ source: "upload", body: "" });
+    expect(missingUploadParts(own)).toEqual(["Final PDF", "Number box", "QR box"]);
+    expect(() => submitForReview(own, type())).toThrow(
+      "Complete first: Final PDF, Number box, QR box.",
+    );
+    const half = attachUpload(own, file);
+    expect(() => submitForReview(half, type())).toThrow("Complete first: Number box, QR box.");
+    const ready = placeStamps(half, boxes);
+    expect(missingUploadParts(ready)).toEqual([]);
+    expect(submitForReview(ready, type()).status).toBe("review");
+    expect(submitForReview(letter(), type()).status).toBe("review");
+  });
+
+  it("the file and boxes are taken in a draft or review (own-PDF letters), or while awaiting the file", () => {
+    const own = letter({ source: "upload", body: "" });
+    expect(attachUpload(own, file).upload).toEqual(file);
+    expect(placeStamps(letter({ source: "upload", status: "review" }), boxes).placement).toEqual(
+      boxes,
+    );
+    expect(() => attachUpload(letter({ source: "upload", status: "corrected" }), file)).toThrow(
+      "not waiting for its file",
+    );
+    expect(() => attachUpload(letter(), file)).toThrow("not waiting for its file");
+    expect(
+      attachUpload(letter({ source: "manual", status: "awaiting_file" }), file).upload,
+    ).toEqual(file);
+    expect(() => attachUpload(letter({ source: "manual" }), file)).toThrow("not waiting");
+  });
+
+  it("a manual letter needs its signers and never goes through correction", () => {
+    const manual = letter({ source: "manual", body: "" });
+    expect(missingFields(manual, type())).toEqual(["Signers"]);
+    expect(
+      missingFields({ ...manual, signedBy: [{ name: "Rina", seat: "Sekjen" }] }, type()),
+    ).toEqual([]);
+    expect(() => submitForReview(manual, type())).toThrow("takes its number straight");
+  });
+
+  it("signers and the draft link are kept for manual letters only (link: also own-PDF)", () => {
+    const input = letter({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [{ name: "Rina", seat: "Sekjen" }],
+    });
+    expect(normalizeLetterInput(input, type(), "manual")).toMatchObject({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [{ name: "Rina", seat: "Sekjen" }],
+    });
+    expect(normalizeLetterInput(input, type(), "upload")).toMatchObject({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [],
+    });
+    expect(normalizeLetterInput(input, type(), "editor")).toMatchObject({
+      draftUrl: null,
+      signedBy: [],
     });
   });
 });

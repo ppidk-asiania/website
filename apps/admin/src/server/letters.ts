@@ -11,6 +11,7 @@ import {
   attachUpload,
   cancelLetter,
   checkUploadedNumber,
+  isEditable,
   issueUpload,
   letterUploadPath,
   MAX_LETTER_UPLOAD_BYTES,
@@ -69,7 +70,7 @@ const SaveLetter = LetterInputSchema.and(
     .object({
       id: safeId.optional(),
       version: z.number().int().min(1).nullable(),
-      source: z.enum(["editor", "upload", "certificate"]).optional(),
+      source: z.enum(["editor", "upload", "certificate", "manual"]).optional(),
     })
     .strict(),
 );
@@ -209,19 +210,39 @@ export function createLetterActions(deps: LetterDeps) {
     },
   });
 
+  // Prints the number, QR, signatures and stamp into the boxes and archives the result.
+  const stampAndIssue = async (letter: Letter, audit: AuditBuilder) => {
+    const stampedFrom = (letter.upload as { sha256: string }).sha256;
+    const archive = await deps.files.saveFile(letter, await deps.files.stampUpload(letter));
+    const now = deps.now();
+    return deps.letters.transition(
+      letter.id,
+      letter.version,
+      (current) => issueUpload(current, archive, stampedFrom, now),
+      letterAudit(audit, "PUBLISH"),
+      now,
+    );
+  };
+
   const issue = createGuardedAction({
     permission: "letters.issue",
     input: Ref,
     resource: scopeOf,
     handler: async ({ id, version }, _principal, audit) => {
       const { letterhead } = await deps.settings.get();
-      const issued = await deps.letters.issue(
+      const taken = await deps.letters.issue(
         id,
         version,
         letterhead,
         letterAudit(audit, "PUBLISH"),
         deps.now(),
       );
+      // An own-PDF letter that already has its file and boxes is issued in the same action. If
+      // stamping fails the number stays taken: "Issue the stamped PDF" finishes it.
+      const issued =
+        taken.source === "upload" && taken.upload && taken.placement?.qr
+          ? await stampAndIssue(taken, audit)
+          : taken;
       if (issued.status === "issued" && issued.source === "editor") await deps.afterIssue(issued);
       return {
         status: issued.status,
@@ -297,17 +318,18 @@ export function createLetterActions(deps: LetterDeps) {
       if (bytes === null) throw new RuleViolationError("The PDF may be at most 10 MB.");
       if (!isPdf(bytes)) throw new RuleViolationError("Export the document as a PDF first.");
       const letter = await deps.letters.get(id);
-      if (letter?.status !== "awaiting_file") {
+      // An own-PDF letter takes its file as a draft (the number is printed later, so nothing to
+      // check); a manual letter, or one whose number was taken, has the number typed into it.
+      const waiting = letter?.status === "awaiting_file";
+      if (!letter || !(waiting || (letter.source === "upload" && isEditable(letter)))) {
         throw new RuleViolationError("This letter is not waiting for its file.");
       }
       assertMayHandle(letter, principal);
       await openPdf(bytes).catch((error: UnreadablePdfError) => {
         throw new RuleViolationError(error.message);
       });
-      const numberChecked = checkUploadedNumber(
-        await pdfText(bytes),
-        letter.numberFormatted as string,
-      );
+      const numberChecked =
+        waiting && checkUploadedNumber(await pdfText(bytes), letter.numberFormatted as string);
       const now = deps.now();
       const path = letterUploadPath(letter, deps.uuid());
       await deps.storage.save(path, bytes, {
@@ -343,21 +365,13 @@ export function createLetterActions(deps: LetterDeps) {
       if (!letter?.upload || letter.version !== version) {
         throw new RuleViolationError("Upload the final PDF first (or reload the page).");
       }
-      if (!letter.placement?.qr) {
+      // A manual letter is archived as it was uploaded: nothing is printed into it.
+      if (letter.source !== "manual" && !letter.placement?.qr) {
         throw new RuleViolationError(
           "Save the QR and signature positions first, then check the preview.",
         );
       }
-      const stampedFrom = letter.upload.sha256;
-      const archive = await deps.files.saveFile(letter, await deps.files.stampUpload(letter));
-      const now = deps.now();
-      const saved = await deps.letters.transition(
-        id,
-        version,
-        (current) => issueUpload(current, archive, stampedFrom, now),
-        letterAudit(audit, "PUBLISH"),
-        now,
-      );
+      const saved = await stampAndIssue(letter, audit);
       return { version: saved.version, status: saved.status };
     },
   });

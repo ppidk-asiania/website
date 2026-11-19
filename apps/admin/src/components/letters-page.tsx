@@ -38,6 +38,7 @@ import {
   RichTextStack,
   type RichTextBlock,
 } from "@/components/ui/rich-text-box";
+import { EditableList } from "@/components/ui/editable-list";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import { LetterUploadPanel } from "./letter-upload-panel";
@@ -45,6 +46,7 @@ import {
   LETTER_TABS,
   letterActions,
   matchesLetterTab,
+  showsFilePanel,
   type LetterActionKey,
   type LetterDesks,
   type LetterItem,
@@ -68,7 +70,8 @@ interface TypeOption {
 }
 
 interface Draft {
-  source: "editor" | "upload" | "certificate";
+  source: "editor" | "upload" | "certificate" | "manual";
+  signedBy: { name: string; seat: string }[];
   activityCode: string;
   typeId: string;
   orgUnitId: string;
@@ -185,6 +188,7 @@ function LettersList(props: Props) {
     setFieldErrors({});
     setDraft({
       source: letter?.source ?? "editor",
+      signedBy: letter?.signedBy ?? [],
       activityCode: letter?.activityCode ?? "",
       typeId: letter?.typeId ?? types[0]?.id ?? "",
       orgUnitId: letter?.orgUnitId ?? units[0]?.id ?? "",
@@ -224,6 +228,7 @@ function LettersList(props: Props) {
       topDeskOnly: draft.topDeskOnly,
       initialsBox: draft.initialsBox,
       draftUrl: draft.draftUrl.trim() || null,
+      signedBy: draft.source === "manual" ? draft.signedBy.filter((s) => s.name.trim()) : [],
     });
     setBusy(false);
     if (!result.ok) {
@@ -275,6 +280,13 @@ function LettersList(props: Props) {
         return setAsking(key);
     }
   };
+
+  const setSigner = (index: number, patch: Partial<{ name: string; seat: string }>) =>
+    draft &&
+    setDraft({
+      ...draft,
+      signedBy: draft.signedBy.map((s, at) => (at === index ? { ...s, ...patch } : s)),
+    });
 
   const errorFor = (field: string, hint?: string) => (
     <FieldError id={`letter-${field}-error`} message={fieldErrors[field]} hint={hint} />
@@ -378,7 +390,10 @@ function LettersList(props: Props) {
                     Certificate batch (one number, a sheet per participant)
                   </option>
                   <option value="upload">
-                    Own PDF (SOP, decree with annexes: upload after numbering)
+                    Own PDF (SOP, decree with annexes: upload it, the number and QR are printed)
+                  </option>
+                  <option value="manual">
+                    Manual (typed and signed elsewhere: only the number is taken here)
                   </option>
                 </Select>
               </div>
@@ -506,7 +521,7 @@ function LettersList(props: Props) {
               />
               {errorFor("activityCode", "Goes into the number when the type uses {kode_kegiatan}.")}
             </div>
-            {draft.source === "upload" ? (
+            {draft.source === "upload" || draft.source === "manual" ? (
               <div className="admin-field admin-form-grid__full">
                 <label className="admin-field__label" htmlFor="letter-draft-url">
                   Draft link
@@ -545,7 +560,54 @@ function LettersList(props: Props) {
                 </label>
               ) : null}
             </div>
-            {draft.source === "upload" ? null : (
+            {draft.source === "manual" ? (
+              <div className="admin-field admin-form-grid__full">
+                <EditableList
+                  title="Signed by *"
+                  subtitle="Shown on the verification page as recorded by the secretariat."
+                  count={draft.signedBy.length}
+                  emptyHint="Add everyone who signed the letter."
+                  addLabel="Add signer"
+                  onAdd={() =>
+                    draft.signedBy.length < 6 &&
+                    setDraft({ ...draft, signedBy: [...draft.signedBy, { name: "", seat: "" }] })
+                  }
+                  onRemove={(index) =>
+                    setDraft({ ...draft, signedBy: draft.signedBy.filter((_, at) => at !== index) })
+                  }
+                  onReorder={(from, to) => {
+                    const signedBy = [...draft.signedBy];
+                    signedBy.splice(to, 0, ...signedBy.splice(from, 1));
+                    setDraft({ ...draft, signedBy });
+                  }}
+                  renderRow={(index) => (
+                    <>
+                      <input
+                        className="admin-input"
+                        aria-label={`Signer ${index + 1} name`}
+                        placeholder="Name"
+                        maxLength={120}
+                        value={draft.signedBy[index]?.name ?? ""}
+                        onChange={(e) => setSigner(index, { name: e.target.value })}
+                      />
+                      <input
+                        className="admin-input"
+                        aria-label={`Signer ${index + 1} position`}
+                        placeholder="Position"
+                        maxLength={120}
+                        value={draft.signedBy[index]?.seat ?? ""}
+                        onChange={(e) => setSigner(index, { seat: e.target.value })}
+                      />
+                    </>
+                  )}
+                />
+                {errorFor(
+                  "signedBy",
+                  "Shown on the verification page as recorded by the secretariat.",
+                )}
+              </div>
+            ) : null}
+            {draft.source === "upload" || draft.source === "manual" ? null : (
               <div className="admin-field admin-form-grid__full">
                 <span className="admin-field__label">
                   {draft.source === "certificate"
@@ -590,6 +652,10 @@ function LettersList(props: Props) {
 
   if (view === "detail" && current) {
     const actions = letterActions(current, desks, viewerId);
+    // Issuing only takes the number unless an own-PDF letter already has its file and QR box.
+    const ownFile =
+      current.source === "manual" ||
+      (current.source === "upload" && !(current.upload && current.placement?.qr));
     const zone = browserZone();
     return (
       <div>
@@ -671,10 +737,10 @@ function LettersList(props: Props) {
               </>
             ) : null}
           </dl>
-          {current.source === "upload" ? null : (
+          {current.source === "upload" || current.source === "manual" ? null : (
             <div className="admin-letter-body" dangerouslySetInnerHTML={{ __html: current.body }} />
           )}
-          {current.source === "upload" && current.status === "awaiting_file" ? (
+          {showsFilePanel(current) ? (
             <LetterUploadPanel
               letter={current}
               deskTitles={deskTitles}
@@ -701,7 +767,7 @@ function LettersList(props: Props) {
                   Participants
                 </Button>
               ) : null}
-              {(current.source === "upload" && !current.upload) ||
+              {((current.source === "upload" || current.source === "manual") && !current.upload) ||
               current.source === "certificate" ? null : (
                 <Button
                   variant="outline"
@@ -744,7 +810,7 @@ function LettersList(props: Props) {
                     disabled={busy}
                     onClick={() => runAction(key)}
                   >
-                    {key === "issue" && current.source === "upload" ? "Take number" : labels[key]}
+                    {key === "issue" && ownFile ? "Take number" : labels[key]}
                   </Button>
                 ),
               )}
@@ -794,14 +860,14 @@ function LettersList(props: Props) {
         </Modal>
         <ConfirmDialog
           open={asking === "issue"}
-          title={current.source === "upload" ? "Take the number?" : "Issue this letter?"}
-          confirmLabel={current.source === "upload" ? "Take number" : "Issue"}
+          title={ownFile ? "Take the number?" : "Issue this letter?"}
+          confirmLabel={ownFile ? "Take number" : "Issue"}
           tone="primary"
           pending={busy}
           onConfirm={() =>
             void act(
               issueLetterAction,
-              current.source === "upload" ? "Number taken: upload the final PDF" : "Letter issued",
+              ownFile ? "Number taken: upload the final PDF" : "Letter issued",
             )
           }
           onCancel={() => setAsking(null)}

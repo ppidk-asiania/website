@@ -16,7 +16,7 @@ export const LETTER_STATUSES = [
 ] as const;
 export type LetterStatus = (typeof LETTER_STATUSES)[number];
 
-export const LETTER_SOURCES = ["editor", "upload", "certificate"] as const;
+export const LETTER_SOURCES = ["editor", "upload", "certificate", "manual"] as const;
 export type LetterSource = (typeof LETTER_SOURCES)[number];
 
 export const DESKS = ["secretary", "coordinator"] as const;
@@ -78,6 +78,15 @@ export const LetterInputSchema = z
       .max(1000)
       .nullable()
       .default(null),
+    /** Manual letters (written and signed elsewhere): who signed, as typed by the author. */
+    signedBy: z
+      .array(
+        z
+          .object({ name: safeText(120), seat: safeText(120, { allowEmpty: true }).default("") })
+          .strict(),
+      )
+      .max(6)
+      .default([]),
   })
   .strict();
 export type LetterInput = z.infer<typeof LetterInputSchema>;
@@ -131,12 +140,22 @@ export const MAX_LETTER_UPLOAD_BYTES = 10 * 1024 * 1024;
 const page = z.number().int().min(1).max(500);
 const mm = z.number().min(0).max(420);
 const Spot = z.object({ page, xMm: mm, yMm: mm }).strict();
+const Signature = Spot.extend({
+  wMm: z.number().min(10).max(120).nullable().default(null),
+  withStamp: z.boolean().default(false),
+});
 
+// Millimetres from the top-left corner of the page's CropBox, as the page is shown.
 export const UploadPlacementSchema = z
   .object({
+    /** One box per place the number is printed (first page, annex titles). */
+    numbers: z
+      .array(Spot.extend({ wMm: z.number().min(5).max(210), hMm: z.number().min(3).max(100) }))
+      .max(10)
+      .default([]),
     qr: Spot.extend({ sizeMm: z.number().min(15).max(40) }).nullable(),
-    secretary: Spot.nullable(),
-    coordinator: Spot.nullable(),
+    secretary: Signature.nullable(),
+    coordinator: Signature.nullable(),
   })
   .strict();
 export type UploadPlacement = z.infer<typeof UploadPlacementSchema>;
@@ -172,7 +191,8 @@ export function normalizeLetterInput(
   return {
     ...input,
     recipient: type.requiresRecipient ? input.recipient : "",
-    draftUrl: source === "upload" ? input.draftUrl : null,
+    draftUrl: source === "upload" || source === "manual" ? input.draftUrl : null,
+    signedBy: source === "manual" ? input.signedBy : [],
   };
 }
 
@@ -183,6 +203,7 @@ export function missingFields(letter: Letter, type: LetterType): string[] {
     !letter.letterDate && "Letter date",
     type.requiresRecipient && !letter.recipient.trim() && "Recipient",
     type.numberFormat.includes("{kode_kegiatan}") && !letter.activityCode && "Activity code",
+    letter.source === "manual" && letter.signedBy.length === 0 && "Signers",
   ].filter((field): field is string => typeof field === "string");
 }
 
@@ -191,9 +212,21 @@ function assertComplete(letter: Letter, type: LetterType) {
   if (missing.length > 0) refuse(`Complete first: ${missing.join(", ")}.`);
 }
 
+/** Own-PDF letters are submitted with their PDF and the boxes the number, QR and signatures go in. */
+export const missingUploadParts = (letter: Pick<Letter, "upload" | "placement">): string[] =>
+  [
+    !letter.upload && "Final PDF",
+    !letter.placement?.numbers.length && "Number box",
+    !letter.placement?.qr && "QR box",
+  ].filter((part): part is string => typeof part === "string");
+
 export function submitForReview(letter: Letter, type: LetterType): Letter {
   assertStatus(letter, ["draft"], "Only drafts can be submitted for review.");
+  if (letter.source === "manual")
+    refuse("A manual letter takes its number straight from the draft.");
   assertComplete(letter, type);
+  const parts = letter.source === "upload" ? missingUploadParts(letter) : [];
+  if (parts.length > 0) refuse(`Complete first: ${parts.join(", ")}.`);
   // The secretariat may not exist yet at the start of a period: the top desk's own letter skips it.
   return { ...letter, status: letter.topDeskOnly ? "corrected" : "review" };
 }
@@ -269,7 +302,10 @@ export function checkUploadedNumber(text: string, number: string): boolean {
   return true;
 }
 
+// An own-PDF letter takes its file and boxes while it is a draft (or in review); one whose number
+// was taken before that order existed, and a manual letter, take them while awaiting the file.
 function assertAwaitingFile(letter: Letter) {
+  if (letter.source === "upload" && isEditable(letter)) return;
   assertStatus(letter, ["awaiting_file"], "This letter is not waiting for its file.");
 }
 

@@ -60,6 +60,12 @@ describe("what the verification page shows", () => {
     expect(JSON.stringify(view)).not.toContain(draftUrl);
   });
 
+  it("a manual letter's signers are marked as recorded, not signed in the system", () => {
+    expect(letterVerification(input).signersRecorded).toBe(false);
+    const manual = { ...letter, source: "manual" } as Letter;
+    expect(letterVerification({ ...input, letter: manual }).signersRecorded).toBe(true);
+  });
+
   it("gated types open only with the exact recipient", () => {
     const closed = letterVerification(input);
     expect(closed).toMatchObject({

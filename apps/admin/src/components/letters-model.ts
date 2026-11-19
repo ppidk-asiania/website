@@ -58,6 +58,7 @@ export interface LetterItem {
   topDeskOnly: boolean;
   initialsBox: boolean;
   draftUrl: string | null;
+  signedBy: { name: string; seat: string }[];
   status: LetterStatus;
   statusLabel: string;
   requiresCoordinator: boolean;
@@ -111,6 +112,7 @@ export function toLetterItem(
     topDeskOnly: letter.topDeskOnly,
     initialsBox: letter.initialsBox,
     draftUrl: letter.draftUrl,
+    signedBy: letter.signedBy.map((s) => ({ ...s })),
     status: letter.status,
     statusLabel: label(LETTER_STATUS_LABELS, letter.status),
     requiresCoordinator: type?.requiresCoordinator ?? false,
@@ -156,7 +158,10 @@ export function letterActions(
   const actions: LetterActionKey[] = [];
   const { status } = item;
   if (item.canEdit && isEditable(item)) actions.push("edit");
-  if (item.canEdit && status === "draft") actions.push("submit", "delete");
+  // A manual letter has no review or signing: its number is taken straight from the draft.
+  const manual = item.source === "manual";
+  if (item.canEdit && status === "draft")
+    actions.push(...(manual ? [] : ["submit" as const]), "delete");
   if (can.review && status === "review") actions.push("pass");
   if (can.review && (status === "review" || status === "corrected" || status === "approved")) {
     actions.push("return");
@@ -180,9 +185,15 @@ export function letterActions(
       actions.push("signCoordinator");
     }
   }
-  if (can.issue && status === "approved") actions.push("issue");
-  if (can.issue && status === "awaiting_file" && item.upload && item.placement)
+  if (can.issue && (status === "approved" || (manual && status === "draft"))) actions.push("issue");
+  if (can.issue && status === "awaiting_file" && item.upload && (manual || item.placement))
     actions.push("issueFile");
   if (can.cancel && (status === "issued" || status === "awaiting_file")) actions.push("cancel");
   return actions;
 }
+
+/** The "Final PDF" panel: own-PDF letters while editable or waiting, manual ones once numbered. */
+export const showsFilePanel = (item: Pick<LetterItem, "source" | "status">): boolean =>
+  item.source === "manual"
+    ? item.status === "awaiting_file"
+    : item.source === "upload" && (item.status === "awaiting_file" || isEditable(item));

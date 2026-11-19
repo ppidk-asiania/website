@@ -196,16 +196,32 @@ export function createLetterPdf(deps: LetterPdfDeps) {
     }
     const placement = letter.placement;
     const signed = await signaturesOf(letter);
+    const stamp = placement && (placement.secretary?.withStamp || placement.coordinator?.withStamp);
+    const stampImage = stamp ? await image(letter.letterhead?.stamp ?? null) : null;
     const signatures = (["secretary", "coordinator"] as const).flatMap((desk) => {
       const spot = placement?.[desk];
-      const image = signed.get(letter[desk]?.uid ?? "");
-      return spot && image ? [{ spot, ...image }] : [];
+      const printed = signed.get(letter[desk]?.uid ?? "") ?? null;
+      const stamped = spot?.withStamp ? stampImage : null;
+      return spot && (printed || stamped)
+        ? [
+            {
+              spot,
+              image: printed?.image ?? null,
+              widthMm: spot.wMm ?? printed?.widthMm ?? 40,
+              rotation: printed?.rotation ?? 0,
+              stamp: stamped,
+            },
+          ]
+        : [];
     });
     const qr = placement?.qr ?? null;
-    const verification = verificationOf(letter.verificationCode) as NonNullable<
-      ReturnType<typeof verificationOf>
-    >;
-    return stampPdf(bytes, { signatures, qr: qr && { spot: qr, ...qr, ...verification } });
+    const verification = verificationOf(letter.verificationCode);
+    const number = letter.numberFormatted;
+    return stampPdf(bytes, {
+      signatures,
+      qr: qr && verification ? { spot: qr, ...qr, ...verification } : null,
+      numbers: number && placement ? placement.numbers.map((box) => ({ box, text: number })) : [],
+    });
   }
 
   async function saveFile(letter: Letter, bytes: Uint8Array): Promise<LetterArchive> {
@@ -270,7 +286,7 @@ export function createLetterFileRoute(deps: {
       const bytes =
         letter.status === "issued"
           ? await deps.pdf.archive(letter, loaded.context, loaded.period)
-          : letter.source === "upload"
+          : letter.source === "upload" || letter.source === "manual"
             ? await previewUpload(letter)
             : await deps.pdf.render(letter, loaded.context, loaded.period);
       if (!bytes) return notFound();

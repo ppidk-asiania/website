@@ -340,16 +340,20 @@ export function mapPpidkDocuments(
       placement:
         waiting && placement
           ? {
+              numbers: [],
               qr: null,
               secretary: {
                 page: Number(placement.halaman ?? 1),
                 xMm: Number(placement.x_mm ?? 130),
                 yMm: Number(placement.y_mm ?? 230),
+                wMm: null,
+                withStamp: false,
               },
               coordinator: null,
             }
           : null,
       activityCode: l["kode_kegiatan"] ? l["kode_kegiatan"].trim().toUpperCase() : null,
+      signedBy: [],
       topDeskOnly: l["hanya_sekjen"] === "1",
       initialsBox: l["kotak_paraf"] === "1",
       draftUrl:

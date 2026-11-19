@@ -8,6 +8,7 @@ import {
   isEditable,
   letterCanonical,
   makeVerificationCode,
+  missingFields,
   normalizeLetterInput,
   sheetNumberTemplate,
   type Certificate,
@@ -192,6 +193,10 @@ export const toCertificate = (id: string, data: Record<string, unknown>): Certif
   createdAt: toDate(data["createdAt"]) as Date,
 });
 
+// Positions saved before number boxes existed have none.
+const placementOf = (value: unknown): UploadPlacement | null =>
+  value ? ({ numbers: [], ...(value as Partial<UploadPlacement>) } as UploadPlacement) : null;
+
 export function toLetter(id: string, data: Record<string, unknown>): Letter {
   return {
     id,
@@ -226,11 +231,12 @@ export function toLetter(id: string, data: Record<string, unknown>): Letter {
     letterhead: data["letterhead"] as Letterhead | null,
     archive: data["archive"] as LetterArchive | null,
     upload: uploaded(data["upload"]),
-    placement: (data["placement"] as UploadPlacement | null | undefined) ?? null,
+    placement: placementOf(data["placement"]),
     activityCode: (data["activityCode"] as string | null | undefined) ?? null,
     topDeskOnly: (data["topDeskOnly"] as boolean | undefined) ?? false,
     initialsBox: (data["initialsBox"] as boolean | undefined) ?? false,
     draftUrl: (data["draftUrl"] as string | null | undefined) ?? null,
+    signedBy: (data["signedBy"] as Letter["signedBy"] | undefined) ?? [],
     sheetNumberTemplate: (data["sheetNumberTemplate"] as string | null | undefined) ?? null,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
@@ -253,6 +259,7 @@ export function letterSnapshot(l: LetterFields): Snapshot {
     topDeskOnly: l.topDeskOnly,
     initialsBox: l.initialsBox,
     draftUrl: l.draftUrl,
+    signedBy: l.signedBy,
     status: l.status,
     reviewNote: l.reviewNote,
     secretary: l.secretary?.uid ?? null,
@@ -299,6 +306,7 @@ const stored = (l: LetterFields) => ({
   topDeskOnly: l.topDeskOnly,
   initialsBox: l.initialsBox,
   draftUrl: l.draftUrl,
+  signedBy: l.signedBy,
   sheetNumberTemplate: l.sheetNumberTemplate,
 });
 
@@ -503,12 +511,16 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
         if (letter.version !== version)
           throw new ConcurrencyConflictError("letters version changed");
         if (letter.deletedAt) throw new RuleViolationError("This item is in the trash.");
-        if (letter.status !== "approved") {
+        // A manual letter was written and signed elsewhere: no correction, no desks.
+        const manual = letter.source === "manual";
+        if (letter.status !== (manual ? "draft" : "approved")) {
           throw new RuleViolationError(
-            "The signing desks must approve the letter before it is issued.",
+            manual
+              ? "Only a draft takes its number."
+              : "The signing desks must approve the letter before it is issued.",
           );
         }
-        const upload = letter.source === "upload";
+        const upload = letter.source === "upload" || manual;
         const batch = letter.source === "certificate";
         if (
           batch &&
@@ -517,10 +529,22 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
           throw new RuleViolationError("Add the participants first.");
         }
         const type = await readType(tx, letter.typeId);
+        const missing = manual ? missingFields(letter, type) : [];
+        if (missing.length > 0) {
+          throw new RuleViolationError(`Complete first: ${missing.join(", ")}.`);
+        }
         const unit = await readUnit(tx, letter.orgUnitId, letter.periodId);
         const period = await tx.get(db.collection("periods").doc(letter.periodId));
         const signed = (["coordinator", "secretary"] as const).filter((d) => letter[d] !== null);
-        const signers: SignerSnapshot[] = [];
+        const signers: SignerSnapshot[] = manual
+          ? letter.signedBy.map((s) => ({
+              name: s.name,
+              desk: s.seat,
+              position: s.seat || null,
+              period: period.get("name") as string | null,
+              at: now,
+            }))
+          : [];
         for (const d of signed) {
           signers.push(
             await signerSnapshot(tx, d, letter, type, unit, {
@@ -560,7 +584,8 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
           verificationCode: code,
           issuedAt: upload ? null : now,
           signers,
-          letterhead: upload ? null : letterhead,
+          // Own-PDF letters freeze it too: it carries the stamp.
+          letterhead: manual ? null : letterhead,
           version: letter.version + 1,
           updatedAt: now,
         };

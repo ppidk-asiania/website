@@ -8,10 +8,12 @@ export {
   type PdfImage,
 } from "./letter";
 export {
+  frameOf,
   openPdf,
   pdfText,
   stampPdf,
   UnreadablePdfError,
+  type PageBox,
   type PageSpot,
   type StampInput,
 } from "./stamp";

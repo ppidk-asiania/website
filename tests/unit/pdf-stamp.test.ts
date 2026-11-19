@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PDFDocument, PDFName, PDFRawStream, StandardFonts } from "pdf-lib";
-import { openPdf, pdfText, qrPng, stampPdf, UnreadablePdfError } from "@website/pdf";
+import { degrees, PDFDocument, PDFName, PDFRawStream, StandardFonts } from "pdf-lib";
+import { frameOf, openPdf, pdfText, qrPng, stampPdf, UnreadablePdfError } from "@website/pdf";
 
 const textPdf = async (text: string, pages = 1) => {
   const doc = await PDFDocument.create();
@@ -82,5 +82,107 @@ describe("stamping the author's PDF (upload path)", () => {
     await expect(stampPdf(empty, { signatures: [], qr: null })).rejects.toBeInstanceOf(
       UnreadablePdfError,
     );
+  });
+});
+
+describe("boxes on the page (14.2)", () => {
+  const MM = 72 / 25.4;
+  // A4 page whose CropBox does not start at the origin, turned the way a scanner turns it.
+  const turned = async (angle: number) => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([600, 800]);
+    page.setCropBox(10, 20, 500, 700);
+    page.setRotation(degrees(angle));
+    return page;
+  };
+  // Where the displayed top-left corner and one displayed point land in the page's own space.
+  const apply = (m: readonly number[], x: number, y: number) => [
+    (m[0] as number) * x + (m[2] as number) * y + (m[4] as number),
+    (m[1] as number) * x + (m[3] as number) * y + (m[5] as number),
+  ];
+
+  it("measures from the top-left corner of the CropBox as the page is shown, for every turn", async () => {
+    const expected: Record<
+      number,
+      { size: number[]; topLeft: number[]; right: number[]; down: number[] }
+    > = {
+      0: { size: [500, 700], topLeft: [10, 720], right: [11, 720], down: [10, 719] },
+      90: { size: [700, 500], topLeft: [10, 20], right: [10, 21], down: [11, 20] },
+      180: { size: [500, 700], topLeft: [510, 20], right: [509, 20], down: [510, 21] },
+      270: { size: [700, 500], topLeft: [510, 720], right: [510, 719], down: [509, 720] },
+    };
+    for (const angle of [0, 90, 180, 270]) {
+      const { width, height, matrix } = frameOf(await turned(angle));
+      const want = expected[angle] as (typeof expected)[number];
+      expect([width, height], `${angle} size`).toEqual(want.size);
+      // Displayed frame: origin bottom-left, y up. Its top-left is (0, height).
+      expect(apply(matrix, 0, height), `${angle} top-left`).toEqual(want.topLeft);
+      expect(apply(matrix, 1, height), `${angle} right`).toEqual(want.right);
+      expect(apply(matrix, 0, height - 1), `${angle} down`).toEqual(want.down);
+    }
+  });
+
+  it("an upright page without a CropBox is the plain page: 1 mm is 1 mm from its top-left", async () => {
+    const doc = await PDFDocument.create();
+    const frame = frameOf(doc.addPage([595.28, 841.89]));
+    expect(frame).toEqual({ width: 595.28, height: 841.89, matrix: [1, 0, 0, 1, 0, 0] });
+    expect(apply(frame.matrix, 20 * MM, frame.height - 40 * MM)).toEqual([
+      20 * MM,
+      841.89 - 40 * MM,
+    ]);
+  });
+
+  it("prints the number into every box, shrinks it to fit and stamps on turned pages too", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([595.28, 841.89]);
+    const second = doc.addPage([595.28, 841.89]);
+    second.setRotation(degrees(90));
+    const bytes = await doc.save({ useObjectStreams: false });
+    const stamp = { bytes: await qrPng("stamp", 120), type: "png" as const };
+    const stamped = await stampPdf(bytes, {
+      signatures: [
+        { spot: { page: 2, xMm: 120, yMm: 220 }, image: null, widthMm: 40, rotation: 0, stamp },
+      ],
+      qr: null,
+      numbers: [
+        {
+          box: { page: 1, xMm: 20, yMm: 40, wMm: 90, hMm: 6 },
+          text: "001/SK/PPIDK-ASIANIA/XI/2026",
+        },
+        {
+          box: { page: 2, xMm: 20, yMm: 40, wMm: 20, hMm: 6 },
+          text: "001/SK/PPIDK-ASIANIA/XI/2026",
+        },
+      ],
+    });
+    const text = await pdfText(stamped);
+    expect(text.match(/001\/SK\/PPIDK-ASIANIA\/XI\/2026/g)).toHaveLength(2);
+    expect(await images(stamped)).toBe(1);
+    const reopened = await PDFDocument.load(stamped);
+    expect(reopened.getPage(1).getRotation().angle).toBe(90);
+  });
+
+  it("a signature with a stamp but no personal signature image still prints the stamp", async () => {
+    const stamp = { bytes: await qrPng("stamp", 120), type: "png" as const };
+    const none = await stampPdf(await textPdf("x"), {
+      signatures: [
+        { spot: { page: 1, xMm: 120, yMm: 220 }, image: null, widthMm: 40, rotation: 0 },
+      ],
+      qr: null,
+    });
+    expect(await images(none)).toBe(0);
+    const both = await stampPdf(await textPdf("x"), {
+      signatures: [
+        {
+          spot: { page: 1, xMm: 120, yMm: 220 },
+          image: { bytes: await qrPng("sig", 120), type: "png" },
+          widthMm: 40,
+          rotation: 0,
+          stamp,
+        },
+      ],
+      qr: null,
+    });
+    expect(await images(both)).toBe(2);
   });
 });

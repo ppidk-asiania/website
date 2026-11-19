@@ -51,6 +51,9 @@ export default async function VerifyCodePage({
   const signers = view.signers.length > 0 && (
     <>
       <h2>{t.signers}</h2>
+      {view.kind === "letter" && view.signersRecorded && (
+        <p className="site-muted">{t.signersRecorded}</p>
+      )}
       <dl className="site-details">
         {view.signers.map((s) => (
           <div key={s.desk} className="site-details__row">

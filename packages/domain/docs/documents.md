@@ -129,39 +129,66 @@ PPIDK (`hanya_sekjen`, `kotak_paraf`, `tautan_draf`):
 - Code: `apps/admin/src/server/letter-pdf.ts`, route `apps/admin/src/app/api/letters/[id]/pdf/route.ts`.
 - Configuration: `VERIFICATION_HOST` (or `WEB_URL`) and `FILE_STORAGE_DIR` on admin.
 
-## Upload path (D3)
+## Upload path (D3, v2 in 14.2)
 
-For documents typed elsewhere (SOP, decrees with annexes, tables), from PPIDK `UnggahDokumen`:
+For documents typed elsewhere (SOP, decrees with annexes, tables), from PPIDK `UnggahDokumen`.
+Since 14.2 the PDF and the boxes are part of the draft, so issuing is one action:
 
 ```text
-draft (Document: own PDF) ─→ review ─→ corrected ─→ desks ─→ approved
-  ─→ "Take number" ─→ awaiting_file ─→ upload PDF, place stamps, preview ─→ issued
+draft (Document: own PDF) + PDF + boxes ─→ review ─→ corrected ─→ desks ─→ approved
+  ─→ "Issue and number": number taken, number/QR/signatures printed ─→ issued
 ```
 
-- **Write**: choose "Own PDF" when creating (fixed afterwards); no body. The same correction and
-  desks as typed letters.
-- **Take number** (`letters.issue`, the issue button of an upload letter): the same transaction
-  as issue (number, verification code, signers, digest) but the letter becomes `awaiting_file`
-  with no issue date. It may be cancelled from there (the number is never reused).
-- **Upload** (`letters.edit` in the letter's unit): `POST /api/letters/<id>/file?version=` with
-  the PDF (≤ 10 MB, `%PDF-` checked, opened with pdf-lib: locked or damaged files are refused
-  with a clear message). The number check: a PDF with a text layer (≥ 40 characters) must
-  contain the number (spaces and case ignored); a PDF without one (a scan) is accepted as "not
-  checked", recorded on the letter (`upload.numberChecked`) and in the audit entry. Stored at
-  `letters/<periodId>/<id>_upload_<random>.pdf` with its sha256; a new upload replaces (and
-  removes) the previous one.
-- **Placement** (`letters.edit`): page and mm from the top-left corner for the QR (with its size;
-  the code and address are printed under it) and for each desk's signature (at the signer's own
-  width and rotation, only once that desk signed). Nothing placed = the file is kept as is.
-- **Preview** (`GET /api/letters/<id>/pdf`) and **Issue the stamped PDF** (`letters.issue`) use
-  the SAME function (`stampUpload` in `apps/admin/src/server/letter-pdf.ts`): the stamped bytes
-  are stored as the archive (sha256, size), the letter becomes `issued` with its issue date. A
-  stored upload whose checksum no longer matches is refused; a file replaced between stamping
-  and the issue write is refused (issue again).
-- Code: `src/documents/letters.ts` (`checkUploadedNumber`, `attachUpload`, `placeStamps`,
-  `issueUpload`), `apps/admin/src/server/letters.ts` (`upload`, `place`, `issueFile`),
-  `packages/pdf/src/stamp.ts`, `apps/admin/src/components/letter-upload-panel.tsx`,
-  route `apps/admin/src/app/api/letters/[id]/file/route.ts`.
+- **Write**: choose "Own PDF" when creating (fixed afterwards); no body; an optional draft link.
+  The same correction and desks as typed letters.
+- **Upload while drafting** (`letters.edit` in the letter's unit): `POST /api/letters/<id>/file?version=`
+  with the PDF (≤ 10 MB, `%PDF-` checked, opened with pdf-lib: locked or damaged files are refused
+  with a clear message). The number is not known yet, so nothing is checked (`numberChecked` is
+  false). A new upload replaces (and removes) the previous one. Stored at
+  `letters/<periodId>/<id>_upload_<random>.pdf` with its sha256.
+- **Boxes** (`letters.edit`, `place`): a page and mm from the top-left corner of the page as it is
+  shown (CropBox and page rotation respected, `frameOf` in `packages/pdf/src/stamp.ts`) for up to 10
+  **number boxes** (the formatted number is printed in Helvetica, shrunk to fit the box), the **QR**
+  (with its size; the code and address are printed under it) and each desk's **signature** (at its
+  own width unless a width is set, only once that desk signed; "with stamp" also prints the
+  letterhead stamp, 28 mm wide, to the left of the signature). Submitting an upload letter needs the
+  PDF, one QR box and the number box(es) it asks for ("Complete first: Final PDF, Number box, QR box").
+- **Placement screen** (admin): the page is shown with pdf.js in the browser (`pdfjs-dist`, DEC-23;
+  the first 30 pages; the file comes from the preview route) and the boxes are dragged and resized on
+  it; the same values can be typed. The maths is in `components/placement-math.ts`.
+- **Issue** (`letters.issue`, approved letter): takes the number (same transaction as a typed letter:
+  verification code, signers, digest) and, when the file and the QR box exist, stamps and archives in
+  the same action (`stampAndIssue`). If stamping fails the number stays taken and the letter is
+  `awaiting_file`: fix the file or boxes and press **Issue the stamped PDF** (`issueFile`). Letters
+  numbered before 14.2 are `awaiting_file` too and finish the same way: type the number into the PDF,
+  upload it (the number check applies: a text layer of ≥ 40 characters must contain the number, a scan
+  is "not checked"), place the QR and signatures, issue.
+- **Preview** (`GET /api/letters/<id>/pdf`) and **Issue the stamped PDF** use the SAME function
+  (`stampUpload` in `apps/admin/src/server/letter-pdf.ts`): the stamped bytes are the archive (sha256,
+  size) and the letter becomes `issued`. A stored upload whose checksum no longer matches is refused;
+  a file replaced between stamping and the issue write is refused (issue again).
+- Code: `src/documents/letters.ts` (`missingUploadParts`, `checkUploadedNumber`, `attachUpload`,
+  `placeStamps`, `issueUpload`), `apps/admin/src/server/letters.ts` (`upload`, `place`, `issue`,
+  `issueFile`), `packages/pdf/src/stamp.ts`, `apps/admin/src/components/letter-upload-panel.tsx`,
+  `letter-placement-canvas.tsx`, route `apps/admin/src/app/api/letters/[id]/file/route.ts`.
+
+## Manual letters (9.10a)
+
+For a letter that was typed, signed and sent outside the platform but still needs a number from the
+register (source `manual`). No review, no desks, no body:
+
+```text
+draft (signers typed, optional draft link) ─→ "Take number" ─→ awaiting_file ─→ upload final PDF ─→ issued
+```
+
+- **Signers** (`signedBy`: 1-6 × name + position, required): written to the letter's `signers` when the
+  number is taken (`at` = that moment). The verification page shows them with "as recorded by the
+  secretariat" (`signersRecorded`), because nobody signed them in the system.
+- **Take number** (`letters.issue`, straight from the draft): number and verification code, no
+  letterhead is frozen. The number is typed into the document by the author; the upload checks it like
+  the old upload path (a mismatch is shown, not blocking).
+- **Issue the PDF** (`issueFile`): the uploaded file is archived exactly as it is (nothing is printed
+  into it; no QR box needed), byte for byte.
 
 ## Certificates (D5)
 

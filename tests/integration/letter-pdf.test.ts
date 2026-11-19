@@ -266,12 +266,23 @@ describe("upload path stamping (D3)", () => {
     const stamped = await pdf.stampUpload({
       ...waiting,
       placement: {
+        numbers: [],
         qr: { page: 1, xMm: 170, yMm: 250, sizeMm: 22 },
-        secretary: { page: 1, xMm: 130, yMm: 230 },
-        coordinator: { page: 1, xMm: 30, yMm: 230 },
+        secretary: { page: 1, xMm: 130, yMm: 230, wMm: null, withStamp: false },
+        coordinator: { page: 1, xMm: 30, yMm: 230, wMm: null, withStamp: false },
       },
     });
     expect(await imageCount(stamped)).toBe(2);
+    const numbered = await pdf.stampUpload({
+      ...waiting,
+      placement: {
+        numbers: [{ page: 1, xMm: 20, yMm: 30, wMm: 90, hMm: 6 }],
+        qr: null,
+        secretary: null,
+        coordinator: null,
+      },
+    });
+    expect(await pdfText(numbered)).toContain(letter.numberFormatted);
     files.set(upload.path, new Uint8Array([1]));
     await expect(pdf.stampUpload(waiting)).rejects.toThrow("missing or changed");
     await expect(pdf.stampUpload({ ...waiting, upload: null })).rejects.toThrow(

@@ -15,7 +15,7 @@ import {
 } from "@website/domain/documents";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { pdfText } from "@website/pdf";
+import { pdfText, qrPng } from "@website/pdf";
 import { createLetterPdf, letterDesks } from "../../apps/admin/src/server/letter-pdf";
 import { createLetterActions } from "../../apps/admin/src/server/letters";
 import { fakeDb } from "../support/fake-db";
@@ -184,6 +184,15 @@ async function approvedLetter(
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { id } = created.data;
   let version = created.data.version;
+  if (source === "upload") {
+    // Numbered under the old order: approved without a file or boxes (they are taken later).
+    fake.docs.set(`letters/${id}`, {
+      ...(fake.docs.get(`letters/${id}`) as object),
+      status: "approved",
+      secretary: { uid: "sekjen", at: clock },
+    });
+    return { id, version, typeId };
+  }
   const next = async (result: Promise<{ ok: boolean; data?: { version: number } }>) => {
     const r = await result;
     if (!r.ok) throw new Error(JSON.stringify(r));
@@ -881,7 +890,7 @@ describe("upload path (D3)", () => {
       status: "awaiting_file",
       numberFormatted: NUMBER,
       issuedAt: null,
-      letterhead: null,
+      letterhead: DEFAULT_LETTERHEAD,
       upload: null,
       placement: null,
     });
@@ -961,6 +970,7 @@ describe("upload path (D3)", () => {
       secretary: { page: 1, xMm: 130, yMm: 230 },
       coordinator: null,
     };
+    // (the box schema adds the defaults: no number boxes, no stamp)
     expect(
       await actions().place(...as(secretariat))({
         id,
@@ -1035,5 +1045,198 @@ describe("upload path (D3)", () => {
     ).toMatchObject({
       ok: false,
     });
+  });
+});
+
+describe("upload path v2 and manual letters (14.2)", () => {
+  const pdfWith = async (text: string) => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    doc.addPage().drawText(text, { x: 40, y: 760, size: 10, font });
+    return doc.save();
+  };
+  const NUMBER = "001/SU/SEKJEN/PPIDK-ASIANIA/XI/2026";
+  const send = (id: string, version: number, body: Uint8Array, principal = secretariat) =>
+    actions().uploadFile(...as(principal))(
+      id,
+      new Request(`https://admin.test/api/letters/${id}/file?version=${version}`, {
+        method: "POST",
+        body,
+      }),
+    );
+  const boxes = {
+    numbers: [{ page: 1, xMm: 20, yMm: 30, wMm: 90, hMm: 6 }],
+    qr: { page: 1, xMm: 170, yMm: 250, sizeMm: 22 },
+    secretary: { page: 1, xMm: 130, yMm: 230, withStamp: true },
+    coordinator: null,
+  };
+  const images = async (bytes: Uint8Array) =>
+    (await PDFDocument.load(bytes)).context
+      .enumerateIndirectObjects()
+      .filter(([, o]) => (o as { dict?: Map<unknown, unknown> }).dict?.constructor !== undefined)
+      .filter(([, o]) => String((o as { dict?: { toString(): string } }).dict).includes("/Image"))
+      .length;
+  const own = async () => {
+    const typeId = await createType();
+    const created = await actions().save(...as(secretariat))({
+      ...draft,
+      body: "",
+      source: "upload",
+      typeId,
+      version: null,
+    });
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    return created.data;
+  };
+  const approve = async (id: string, version: number) => {
+    let v = version;
+    for (const step of [
+      () => actions().submit(...as(secretariat))({ id, version: v }),
+      () => actions().pass(...as(secretariat))({ id, version: v }),
+      () => actions().signSecretary(...as(sekjen))({ id, version: v }),
+    ]) {
+      const result = await step();
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      v = (result.data as { version: number }).version;
+    }
+    return v;
+  };
+
+  it("an own-PDF letter takes its PDF and boxes as a draft and is submitted only with them", async () => {
+    const { id, version } = await own();
+    expect(await actions().submit(...as(secretariat))({ id, version })).toMatchObject({
+      ok: false,
+      issues: ["Complete first: Final PDF, Number box, QR box."],
+    });
+    const sent = await send(id, version, await pdfWith("Standar Operasional Prosedur"));
+    expect([sent.status, await sent.json()]).toEqual([
+      201,
+      { version: version + 1, numberChecked: false },
+    ]);
+    expect(await actions().submit(...as(secretariat))({ id, version: version + 1 })).toMatchObject({
+      issues: ["Complete first: Number box, QR box."],
+    });
+    expect(
+      await actions().place(...as(secretariat))({
+        id,
+        version: version + 1,
+        placement: { ...boxes, numbers: Array(11).fill(boxes.numbers[0]) },
+      }),
+    ).toMatchObject({ error: "invalid_input" });
+    expect(
+      await actions().place(...as(secretariat))({ id, version: version + 1, placement: boxes }),
+    ).toMatchObject({ ok: true });
+    expect(await letters().get(id)).toMatchObject({
+      status: "draft",
+      placement: { numbers: boxes.numbers, secretary: { withStamp: true } },
+    });
+    expect(await actions().submit(...as(secretariat))({ id, version: version + 2 })).toMatchObject({
+      ok: true,
+      data: { status: "review" },
+    });
+  });
+
+  it("issue takes the number and prints it, the QR and the stamp into the boxes in one action", async () => {
+    const stamp = {
+      path: "letters/letterhead/stamp.webp",
+      url: "https://x.test/stamp.webp",
+      width: 120,
+      height: 120,
+    };
+    files.set(stamp.path, await qrPng("stamp", 120));
+    await actions().saveLetterhead(...as(stamper))({
+      letterhead: { ...DEFAULT_LETTERHEAD, stamp },
+      version: null,
+    });
+    const { id, version } = await own();
+    await send(id, version, await pdfWith("Standar Operasional Prosedur"));
+    await actions().place(...as(secretariat))({ id, version: version + 1, placement: boxes });
+    const approved = await approve(id, version + 2);
+    const issued = await actions().issue(...as(secretariat))({ id, version: approved });
+    expect(issued).toMatchObject({ ok: true, data: { status: "issued", numberFormatted: NUMBER } });
+    const letter = (await letters().get(id)) as Letter;
+    expect(letter).toMatchObject({ status: "issued", issuedAt: clock, letterhead: { stamp } });
+    const kept = files.get(letter.archive?.path ?? "") as Uint8Array;
+    expect(createHash("sha256").update(kept).digest("hex")).toBe(letter.archive?.sha256);
+    const text = await pdfText(kept);
+    expect(text).toContain(NUMBER);
+    expect(text).toContain(letter.verificationCode as string);
+    expect(await images(kept)).toBe(2);
+    expect(afterIssue).toEqual([]);
+  });
+
+  it("if stamping fails the number stays taken and the old path finishes the letter", async () => {
+    const { id, version } = await own();
+    await send(id, version, await pdfWith("Standar Operasional Prosedur"));
+    await actions().place(...as(secretariat))({ id, version: version + 1, placement: boxes });
+    const approved = await approve(id, version + 2);
+    files.clear();
+    expect(await actions().issue(...as(secretariat))({ id, version: approved })).toMatchObject({
+      ok: false,
+    });
+    const taken = (await letters().get(id)) as Letter;
+    expect(taken).toMatchObject({ status: "awaiting_file", numberFormatted: NUMBER });
+    const fixed = await send(id, taken.version, await pdfWith(`Nomor: ${NUMBER}`));
+    expect(await fixed.json()).toMatchObject({ numberChecked: true });
+    expect(
+      await actions().issueFile(...as(secretariat))({ id, version: taken.version + 1 }),
+    ).toMatchObject({ ok: true, data: { status: "issued" } });
+  });
+
+  it("a manual letter takes its number from the draft, records its signers as typed and archives the file as it is", async () => {
+    const typeId = await createType();
+    const manual = { ...draft, body: "", source: "manual", typeId, version: null };
+    const bare = await actions().save(...as(secretariat))(manual);
+    if (!bare.ok) throw new Error(JSON.stringify(bare));
+    expect(await actions().submit(...as(secretariat))(bare.data)).toMatchObject({
+      issues: ["A manual letter takes its number straight from the draft."],
+    });
+    expect(await actions().issue(...as(secretariat))(bare.data)).toMatchObject({
+      ok: false,
+      issues: ["Complete first: Signers."],
+    });
+    const created = await actions().save(...as(secretariat))({
+      ...manual,
+      signedBy: [{ name: "Rina Sekjen", seat: "Sekretaris Jenderal" }],
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      id: bare.data.id,
+      source: undefined,
+      version: bare.data.version,
+    });
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    const { id } = created.data;
+    const taken = await actions().issue(...as(secretariat))(created.data);
+    expect(taken).toMatchObject({ ok: true, data: { status: "awaiting_file" } });
+    const letter = (await letters().get(id)) as Letter;
+    expect(letter).toMatchObject({
+      source: "manual",
+      numberFormatted: NUMBER,
+      letterhead: null,
+      secretary: null,
+      coordinator: null,
+      signers: [
+        { name: "Rina Sekjen", desk: "Sekretaris Jenderal", position: "Sekretaris Jenderal" },
+      ],
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+    });
+    expect(
+      await actions().issueFile(...as(secretariat))({ id, version: letter.version }),
+    ).toMatchObject({ ok: false });
+    const final = await pdfWith(`Surat. Nomor: ${NUMBER}`);
+    const wrong = await send(id, letter.version, await pdfWith("no number here at all, sorry"));
+    expect(await wrong.json()).toMatchObject({ numberChecked: false });
+    const sent = await send(id, letter.version + 1, final);
+    expect(await sent.json()).toMatchObject({ numberChecked: true });
+    const issued = await actions().issueFile(...as(secretariat))({
+      id,
+      version: letter.version + 2,
+    });
+    expect(issued).toMatchObject({ ok: true, data: { status: "issued" } });
+    const done = (await letters().get(id)) as Letter;
+    const kept = files.get(done.archive?.path ?? "") as Uint8Array;
+    expect(createHash("sha256").update(kept).digest("hex")).toBe(
+      createHash("sha256").update(final).digest("hex"),
+    );
+    expect(done.archive?.sha256).toBe(createHash("sha256").update(final).digest("hex"));
   });
 });
