@@ -1,5 +1,6 @@
 import {
   ADMIN_PAGES,
+  PAGE_PERMISSIONS,
   isPagePermission,
   isWebsiteRole,
   type RoleAssignment,
@@ -182,6 +183,80 @@ export function splitPermissions(permissions: readonly string[]): {
   );
   const single = new Set([...held].filter((p) => !pages.has(p.slice(0, p.lastIndexOf(".")))));
   return { pages, single };
+}
+
+export interface PermissionHolder {
+  readonly uid: string;
+  readonly name: string;
+  readonly scope: string;
+}
+
+export interface PermissionView {
+  readonly roles: readonly { readonly id: string; readonly name: string }[];
+  readonly count: number;
+  /** `null` when the viewer may only see counts. */
+  readonly holders: readonly PermissionHolder[] | null;
+}
+
+const scopeLabel = (scope: RoleAssignment["scope"]) =>
+  scope.type === "global"
+    ? "Everywhere"
+    : scope.type === "chapter"
+      ? `Chapter ${scope.chapterId}`
+      : `Unit ${scope.orgUnitId}`;
+
+/**
+ * Who can do what: for every permission, the roles that hold it and the active accounts that hold
+ * one of those roles now (not revoked, global or in the active period), each person counted once.
+ */
+export function permissionHolders(
+  roles: readonly { id: string; name: string; permissions: readonly string[] }[],
+  users: readonly {
+    uid: string;
+    name: string;
+    status: "active" | "inactive";
+    roleAssignments: readonly RoleAssignment[];
+  }[],
+  activePeriodId: string | null,
+  showNames: boolean,
+): Map<string, PermissionView> {
+  const current = users
+    .filter((user) => user.status === "active")
+    .map((user) => ({
+      user,
+      assignments: user.roleAssignments.filter(
+        (a) => !a.revokedAt && (!a.periodId || a.periodId === activePeriodId),
+      ),
+    }));
+  const view = new Map<string, PermissionView>();
+  for (const permission of PAGE_PERMISSIONS) {
+    const holding = roles.filter((role) => role.permissions.includes(permission));
+    const ids = new Set(holding.map((role) => role.id));
+    const holders = current
+      .map(({ user, assignments }) => ({
+        uid: user.uid,
+        name: user.name,
+        scopes: [
+          ...new Set(assignments.filter((a) => ids.has(a.roleId)).map((a) => scopeLabel(a.scope))),
+        ],
+      }))
+      .filter((holder) => holder.scopes.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    view.set(permission, {
+      roles: holding.map(({ id, name }) => ({ id, name })),
+      count: holders.length,
+      holders: showNames
+        ? holders.map(({ uid, name, scopes }) => ({
+            uid,
+            name,
+            scope: scopes
+              .sort((a, b) => Number(b === "Everywhere") - Number(a === "Everywhere"))
+              .join(", "),
+          }))
+        : null,
+    });
+  }
+  return view;
 }
 
 export function joinPermissions(pages: ReadonlySet<string>, single: ReadonlySet<string>): string[] {

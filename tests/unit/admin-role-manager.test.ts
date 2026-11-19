@@ -8,6 +8,7 @@ import {
   matchesRole,
   permissionGroups,
   personRow,
+  permissionHolders,
   personSortValue,
   roleInk,
   roleTabs,
@@ -185,5 +186,67 @@ describe("Role Manager roles", () => {
     expect(pages("revert")).toEqual([["audit", 1]]);
     expect(pages("shop_orders.refund")).toEqual([["shop_orders", 1]]);
     expect(pages("nothing like this")).toEqual([]);
+  });
+});
+
+describe("Role Manager: who can do what (15.2)", () => {
+  const roles = [
+    { id: "superadmin", name: "Superadmin", permissions: ["audit.read", "audit.edit"] },
+    { id: "bph", name: "BPH", permissions: ["audit.read"] },
+    { id: "it", name: "IT", permissions: [] },
+  ];
+  const person = (uid: string, assignments: Record<string, unknown>[], status = "active") => ({
+    uid,
+    name: uid.toUpperCase(),
+    status: status as "active" | "inactive",
+    roleAssignments: assignments as never,
+  });
+  const users = [
+    person("ana", [{ roleId: "superadmin", scope: global }]),
+    person("budi", [
+      { roleId: "bph", scope: { type: "chapter", chapterId: "jp" } },
+      { roleId: "superadmin", scope: global },
+    ]),
+    person("cici", [{ roleId: "bph", scope: global, periodId: "p1" }]),
+    person("dedi", [{ roleId: "bph", scope: global, periodId: "p0" }]),
+    person("eka", [{ roleId: "bph", scope: global, revokedAt: new Date() }]),
+    person("fifi", [{ roleId: "bph", scope: global }], "inactive"),
+  ];
+
+  it("lists, per permission, the roles that hold it and the people who hold those roles now", () => {
+    const view = permissionHolders(roles, users, "p1", true);
+    expect(view.get("audit.edit")).toEqual({
+      roles: [{ id: "superadmin", name: "Superadmin" }],
+      count: 2,
+      holders: [
+        { uid: "ana", name: "ANA", scope: "Everywhere" },
+        { uid: "budi", name: "BUDI", scope: "Everywhere" },
+      ],
+    });
+    // Counted once each, even with two roles giving the permission; revoked, inactive and
+    // other-period assignments do not count.
+    expect(view.get("audit.read")?.count).toBe(3);
+    expect(view.get("audit.read")?.holders?.map((h) => h.uid)).toEqual(["ana", "budi", "cici"]);
+    expect(view.get("audit.read")?.holders?.find((h) => h.uid === "budi")?.scope).toBe(
+      "Everywhere, Chapter jp",
+    );
+    expect(view.get("audit.revert")).toEqual({ roles: [], count: 0, holders: [] });
+  });
+
+  it("gives counts only when the viewer may not see names", () => {
+    const view = permissionHolders(roles, users, "p1", false);
+    expect(view.get("audit.read")).toMatchObject({ count: 3, holders: null });
+  });
+
+  it("counts a period-less assignment when there is no active period, and names unit scopes", () => {
+    const view = permissionHolders(
+      roles,
+      [person("gita", [{ roleId: "bph", scope: { type: "orgUnit", orgUnitId: "it" } }])],
+      null,
+      true,
+    );
+    expect(view.get("audit.read")?.holders).toEqual([
+      { uid: "gita", name: "GITA", scope: "Unit it" },
+    ]);
   });
 });

@@ -928,6 +928,9 @@ export function RoleManagerRoles({
           <p className="admin-page-header__desc">PPIDK Asiania Role Management System</p>
         </div>
         <div className="admin-page-header__actions">
+          <Button href="/roles/edit?view=permissions" variant="outline" size="sm" icon="search">
+            By permission
+          </Button>
           <div className="admin-fab">
             {canEdit ? (
               <Button variant="primary" size="sm" icon="plus" onClick={() => setEditing("new")}>

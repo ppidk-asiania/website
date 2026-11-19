@@ -36,6 +36,13 @@ otherwise only the matching permissions. A role that has every permission of a p
 the page ticked (`splitPermissions` / `joinPermissions` in the model). The bin deletes a custom role
 that nobody holds (soft delete). Built-in roles (`superadmin`, Visitor) are read-only.
 
+**By permission** (`/roles/edit?view=permissions`, `roles.read`; button on Edit Role): read-only,
+every admin page with each of its permissions, the roles that hold it and the number of people
+who hold one of those roles today (`permissionHolders` in the model; each person once). Revoked
+assignments, assignments of another period and inactive accounts are not counted. The number opens
+the names with their scope (Everywhere, Chapter x, Unit y); names are only sent to viewers with
+`users.read` for all chapters, others see the counts only.
+
 ## Where it lives
 
 - Pages: `src/app/(panel)/roles/page.tsx` (people), `src/app/(panel)/roles/edit/page.tsx`
