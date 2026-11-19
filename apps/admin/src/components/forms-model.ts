@@ -128,7 +128,7 @@ export function fromDraft(d: QuestionDraft) {
     label: d.label,
     description: d.description,
     required: d.required,
-    mayFollow: d.type === "file" && d.mayFollow,
+    ...(d.type === "file" && d.mayFollow ? { mayFollow: true } : {}),
     options: d.options
       .split("\n")
       .map((o) => o.trim())

@@ -50,7 +50,7 @@ const id = {
   home: {
     title: "PPIDK Asia-Oseania",
     tagline:
-      "Perhimpunan Pelajar Indonesia Dunia Kawasan Asia-Oseania — rumah bersama PPI Negara di kawasan Asia dan Oseania.",
+      "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA — rumah bersama PPI Negara di kawasan Asia dan Oseania.",
     purposeHeading: "Tentang situs ini",
     purpose:
       "Situs ini memuat berita, acara, galeri, dan peta PPI Negara di kawasan Asia-Oseania. Anggota dapat membuat akun untuk mendaftar acara dan mengelola profilnya; pengurus memakai akun yang sama untuk mengelola konten.",
@@ -710,14 +710,14 @@ const id = {
     title: "Tentang kami",
     profilHeading: "PROFIL PPIDK ASIA-OSEANIA",
     profilParagraphs: [
-      "Perhimpunan Pelajar Indonesia Dunia Kawasan Asia-Oseania (PPIDK Asia-Oseania) merupakan bagian dari Perhimpunan Pelajar Indonesia Dunia yang berfungsi sebagai wadah koordinasi, komunikasi, dan kolaborasi bagi organisasi Perhimpunan Pelajar Indonesia di negara-negara kawasan Asia-Oseania. PPIDK Asia-Oseania hadir untuk memperkuat sinergi antarpelajar Indonesia yang sedang menempuh pendidikan di berbagai negara dalam kawasan tersebut.",
+      "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA (PPIDK Asia-Oseania) merupakan bagian dari Perhimpunan Pelajar Indonesia Dunia yang berfungsi sebagai wadah koordinasi, komunikasi, dan kolaborasi bagi organisasi Perhimpunan Pelajar Indonesia di negara-negara kawasan Asia-Oseania. PPIDK Asia-Oseania hadir untuk memperkuat sinergi antarpelajar Indonesia yang sedang menempuh pendidikan di berbagai negara dalam kawasan tersebut.",
       "Kawasan Asia-Oseania merupakan salah satu kawasan dengan jumlah pelajar Indonesia yang besar dan tersebar di berbagai negara. Keragaman latar belakang akademik, budaya, bahasa, serta pengalaman internasional menjadi potensi penting yang terus dihimpun dan dikembangkan oleh PPIDK Asia-Oseania. Melalui berbagai program pendidikan, pengembangan kapasitas, kajian, kebudayaan, media, kewirausahaan, serta hubungan antarlembaga, PPIDK Asia-Oseania berupaya menghadirkan kontribusi nyata bagi pelajar Indonesia dan pembangunan bangsa. PPIDK Asia-Oseania saat ini menaungi 16 PPI Negara. Setiap PPI Negara menjadi wadah bagi pelajar Indonesia untuk memperoleh dukungan akademik dan nonakademik, membangun jejaring, mempererat persaudaraan, serta memperkuat identitas kebangsaan selama menempuh pendidikan di luar negeri.",
     ],
     kolaborasiHeading: "Kolaborasi ASIANIA",
     kolaborasiParagraphs: [
       'Nama "Kolaborasi" dipilih sebagai identitas kerja. Ia merepresentasikan cara kabinet ini memandang peran PPIDK Asiania: sebagai simpul penghubung antara PPI Dunia dan PPI negara, dan sebaliknya, serta antar-PPI negara di seluruh kawasan Asia-Oseania, kawasan dengan keunikan, keragaman negara, latar belakang akademik, kompetensi, dan perspektif yang luas.',
       'Nama "Asiania" menegaskan identitas kolektif kawasan, bahwa keunikan dan keragaman bukanlah penghalang untuk berjalan bersama, melainkan justru sumber kekuatan, sepan-jang seluruh elemen terhubung oleh tujuan yang sama.',
-      "Kolaborasi Asiania bukan sekadar nama yang dipilih untuk mengisi struktur administratif kepengurusan. Nama ini lahir dari sebuah keyakinan mendasar: bahwa Perhimpunan Pelajar Indonesia Dunia Kawasan Asia-Oseania (PPIDK Asiania) bukanlah forum koordinasi semata, melainkan sebuah ekosistem, tempat gagasan bertemu kesempatan, pengalaman bertemu dengan kolaborasi, dan diaspora Indonesia tumbuh menjadi kekuatan yang memberi dampak.",
+      "Kolaborasi Asiania bukan sekadar nama yang dipilih untuk mengisi struktur administratif kepengurusan. Nama ini lahir dari sebuah keyakinan mendasar: bahwa PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA (PPIDK Asiania) bukanlah forum koordinasi semata, melainkan sebuah ekosistem, tempat gagasan bertemu kesempatan, pengalaman bertemu dengan kolaborasi, dan diaspora Indonesia tumbuh menjadi kekuatan yang memberi dampak.",
     ],
     visionHeading: "VISI",
     visionDefault:

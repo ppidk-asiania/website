@@ -15,7 +15,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: { default: "PPIDK Asia-Oseania", template: "%s · PPIDK Asia-Oseania" },
-  description: "Perhimpunan Pelajar Indonesia Dunia Kawasan Asia-Oseania",
+  description: "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

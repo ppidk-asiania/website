@@ -1,5 +1,6 @@
 import { cacheLife } from "next/cache";
 import { Suspense } from "react";
+import { ORGANISATION_NAME } from "@website/domain/shared";
 import { initials } from "@website/ui";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { LEGAL_VERSION } from "@/i18n/dictionaries";
@@ -122,7 +123,7 @@ export function SiteFooter({ t }: { t: Dictionary }) {
       </div>
       <div className="site-frame__inner site-footer__bottom">
         <span>
-          {t.footer.rights} © <CopyrightYear /> | PPI Dunia Kawasan Asia-Oceania
+          {t.footer.rights} © <CopyrightYear /> | {ORGANISATION_NAME.id}
         </span>
         <nav className="site-footer__legal">
           <a href="/terms">{t.footer.terms}</a>

@@ -99,9 +99,9 @@ export const accountActions = lazyEnv(() =>
 function inviteMessage(to: string, roleName: string, webUrl: string): Message {
   const login = `${webUrl}/login`;
   const body =
-    `Anda diundang ke admin PPI Dunia Kawasan Asia-Oseania sebagai ${roleName}. Masuk dengan ` +
-    `alamat e-mail ini (Google atau e-mail dan kata sandi). / You are invited to the PPI Dunia ` +
-    `Kawasan Asia-Oseania admin as ${roleName}. Sign in with this e-mail address (Google or ` +
+    `Anda diundang ke admin PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA sebagai ${roleName}. Masuk dengan ` +
+    `alamat e-mail ini (Google atau e-mail dan kata sandi). / You are invited to the ` +
+    `Overseas Indonesian Students’ Association Alliance for Asia-Oceania Region admin as ${roleName}. Sign in with this e-mail address (Google or ` +
     `e-mail and password).`;
   const staff =
     "Peran pengurus butuh dua metode masuk: setelah masuk pertama kali, tambahkan passkey di Akun " +
