@@ -193,6 +193,7 @@ export function mapPpidkDocuments(
       requiresCoordinator: t["requires_coordinator"] === "1",
       requiresRecipient: t["requires_recipient"] !== "0",
       contentPublic: t["content_public"] !== "0",
+      publicArchive: t["public_archive"] === "1",
       active: t["is_active"] !== "0",
       sort: Number(t["sort"] ?? 0),
     };

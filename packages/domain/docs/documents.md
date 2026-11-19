@@ -290,6 +290,30 @@ Anyone holding a letter checks it without signing in (PPIDK `VerifikasiControlle
   `apps/web/src/app/verify/**`. Not built: PPIDK's camera scanner (the phone's camera app opens
   the QR link directly).
 
+## Public letter archive (14.3)
+
+`/letter-archive` on the public site lists issued letters, after a guest book.
+
+- **Switch**: letter type `publicArchive` (off by default; edited on the Letter types page; imported
+  from PPIDK `letter_types.public_archive`). Only issued letters of such types are listed; drafts,
+  cancelled and deleted letters and certificate batches never are. Per row: number, date, subject,
+  type, unit and a link to `/verify/<code>`. The recipient, body and file are never in the response.
+- **Guest book** (`ArchiveGuestSchema`): name, e-mail and institution, reCAPTCHA v3 (action
+  `letter_archive`, `apps/web/src/server/captcha.ts`). Stored in `letterArchiveGuests` with the
+  keyed hash of the IP (`keyedHash("letter-archive", ip)`) and `expiresAt` = 12 months; the cron job
+  `expire` deletes older rows. Signed-in staff are asked too. Success sets a signed cookie
+  (`letter_archive_pass`, purpose `archive`, `LINK_SIGNING_SECRET`, one hour, httpOnly, path
+  `/letter-archive`). Without a valid pass the page shows only the guest book and the store is not
+  read.
+- **List**: search (number or subject), type chips (name without a leading "Surat", one of six fixed
+  colours per type, with counts), year, 20 per page; all in the address (`q`, `type`, `year`,
+  `page`). `parseArchiveQuery` and `searchArchive` are pure (`src/documents/letter-archive.ts`);
+  the newest 5000 issued rows are loaded (`createSqlLetterArchive.rows`).
+- **Admin**: Letters tab "Archive guests" (extra permission `letters.archive_guests`), read-only,
+  newest 300. Guest rows are personal data: no export, no edit. Privacy page mentions the guest book.
+- Code: `apps/web/src/server/letter-archive.ts` (+ `-wiring.ts`), `apps/web/src/app/letter-archive/`,
+  `apps/admin/src/components/letter-archive-guests-page.tsx`.
+
 ## Incoming letters and dispositions (D6)
 
 `src/documents/incoming.ts` (rules, from PPIDK `AgendaService`), `packages/db/src/sql/incoming.ts`,
@@ -364,4 +388,6 @@ folder> [--files <downloaded PPIDK PDFs>] [--apply]` (dry run by default, writes
 `tests/unit/admin-incoming.test.ts`, `tests/integration/incoming.test.ts`,
 `tests/integration/signatures.test.ts`, `tests/unit/pdf-stamp.test.ts`,
 `tests/unit/certificates.test.ts`, `tests/unit/certificate-pdf.test.ts`,
-`tests/integration/certificates.test.ts`, `tests/unit/ppidk-documents-import.test.ts`.
+`tests/integration/certificates.test.ts`, `tests/unit/ppidk-documents-import.test.ts`,
+`tests/unit/letter-archive.test.ts`, `tests/integration/letter-archive.test.ts`,
+`tests/unit/admin-placement.test.ts`.

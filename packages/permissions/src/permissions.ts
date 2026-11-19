@@ -51,6 +51,7 @@ export const ADMIN_PAGES = {
       issue: "Issue letters (give the number)",
       cancel: "Cancel issued letters",
       stamp: "Upload or replace the organisation stamp",
+      archive_guests: "Read the public letter archive guest book",
     },
   },
   letter_types: { label: "Letter types (number patterns)" },

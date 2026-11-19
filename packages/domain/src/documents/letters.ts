@@ -44,6 +44,8 @@ export const LetterTypeInputSchema = z
     requiresCoordinator: z.boolean().default(false),
     requiresRecipient: z.boolean().default(true),
     contentPublic: z.boolean().default(true),
+    /** Issued letters of this type are listed on the public archive page (after the guest book). */
+    publicArchive: z.boolean().default(false),
     active: z.boolean().default(true),
     sort: z.number().int().min(0).max(9999).default(0),
   })

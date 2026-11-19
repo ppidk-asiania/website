@@ -2389,3 +2389,49 @@ body:has(.auth-page) :is(.site-header, .site-footer) {
 .auth-home:hover {
   text-decoration: underline;
 }
+
+.site-archive {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.site-archive__item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.site-chip {
+  justify-self: start;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--chip-tone);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--chip-tone) 14%, var(--color-surface));
+  color: var(--color-text);
+  font-size: var(--text-xs);
+}
+
+.site-chip--0 {
+  --chip-tone: var(--color-primary);
+}
+.site-chip--1 {
+  --chip-tone: var(--color-accent);
+}
+.site-chip--2 {
+  --chip-tone: var(--color-success);
+}
+.site-chip--3 {
+  --chip-tone: var(--color-warning);
+}
+.site-chip--4 {
+  --chip-tone: var(--color-info);
+}
+.site-chip--5 {
+  --chip-tone: var(--color-violet);
+}

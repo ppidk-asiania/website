@@ -91,6 +91,11 @@ on `VERIFICATION_HOST`) show whether a letter or a certificate sheet is ours, it
 for letters by their type's rule, the content and archived PDF (`/verify/[code]/pdf`). No sign-in, noindex, 20 requests/minute per IP.
 Rules: `packages/domain/docs/documents.md` → Public verification.
 
+**Letter archive**: `/letter-archive` lists issued letters of the types marked "public archive"
+(number, date, subject, type, unit, link to the verification page; search, type chips, year, 20 per
+page). A guest book (name, e-mail, institution, reCAPTCHA) opens it for one hour through a signed
+cookie; guest rows are kept 12 months. Rules: `packages/domain/docs/documents.md` → Public letter archive.
+
 **Certificate pickup**: `/certificates` — the e-mail given at registration finds that person's
 sheets of issued certificate batches (exact match on a keyed hash, reCAPTCHA, the same 20/minute
 limit) and gives 15-minute signed download links to the admin app, where sheets are rendered.

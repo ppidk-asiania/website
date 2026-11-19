@@ -97,6 +97,7 @@ const tables: PpidkDocumentTables = {
       requires_coordinator: "0",
       requires_recipient: "1",
       content_public: "1",
+      public_archive: "1",
       is_active: "1",
       sort: "1",
       created_at: "2026-08-01 00:00:00",
@@ -365,6 +366,7 @@ describe("PPIDK documents import (step 4.10)", () => {
       requiresCoordinator: false,
       requiresRecipient: true,
       contentPublic: true,
+      publicArchive: true,
       active: true,
       sort: 1,
       version: 1,
@@ -372,6 +374,7 @@ describe("PPIDK documents import (step 4.10)", () => {
     });
     expect(doc("letterTypes/ppidk-lettertype-7")).toMatchObject({
       contentPublic: false,
+      publicArchive: false,
       active: false,
     });
     expect(doc("letterTypeCodes/sket")).toEqual({ id: "ppidk-lettertype-7" });

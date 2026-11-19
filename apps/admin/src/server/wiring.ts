@@ -1096,6 +1096,7 @@ export const adminReads = {
   listCertificates: (batchId: string) => adminStores().certificates.list(batchId),
   listLetterTypes: () => adminStores().letterTypes.list(),
   getLetterSettings: () => adminStores().letterSettings.get(),
+  listArchiveGuests: () => adminStores().letterArchive.guests(),
   listIncoming: (periodId: string) => adminStores().incoming.list(periodId, 300),
   listRecruitments: () => adminStores().recruitments.listForAdmin(),
   getRecruitment: (id: string) => adminStores().recruitments.get(id),

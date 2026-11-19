@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { Database, Query, Transaction } from "./store";
 import type { AuditEvent, Snapshot } from "@website/audit";
 import {
@@ -11,6 +11,8 @@ import {
   missingFields,
   normalizeLetterInput,
   sheetNumberTemplate,
+  ARCHIVE_GUEST_RETENTION_MS,
+  type ArchiveRow,
   type Certificate,
   type Desk,
   type DeskSignature,
@@ -54,6 +56,7 @@ const toLetterType = (id: string, data: Record<string, unknown>): LetterType => 
   requiresCoordinator: data["requiresCoordinator"] as boolean,
   requiresRecipient: data["requiresRecipient"] as boolean,
   contentPublic: data["contentPublic"] as boolean,
+  publicArchive: data["publicArchive"] === true,
   active: data["active"] as boolean,
   sort: data["sort"] as number,
   version: data["version"] as number,
@@ -72,6 +75,7 @@ export function letterTypeSnapshot(t: LetterTypeFields): Snapshot {
     requiresCoordinator: t.requiresCoordinator,
     requiresRecipient: t.requiresRecipient,
     contentPublic: t.contentPublic,
+    publicArchive: t.publicArchive,
     active: t.active,
     sort: t.sort,
   };
@@ -709,3 +713,83 @@ export function createSqlVerificationReader(db: Database) {
 const PICKUP_LIMIT = 100;
 
 export type SqlVerificationReader = ReturnType<typeof createSqlVerificationReader>;
+
+const ARCHIVE_LIMIT = 5000;
+const GUEST_LIST_LIMIT = 300;
+
+export interface ArchiveGuest {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly institution: string;
+  readonly at: Date;
+}
+
+/** Public letter archive (14.3): issued letters of public types, and the guest book. */
+export function createSqlLetterArchive(db: Database) {
+  const guests = db.collection("letterArchiveGuests");
+  return {
+    /** Newest first. Certificate batches and cancelled or deleted letters are never listed. */
+    async rows(): Promise<ArchiveRow[]> {
+      const types = (
+        await db.collection("letterTypes").where("publicArchive", "==", true).get()
+      ).docs
+        .map((d) => toLetterType(d.id, d.data()))
+        .filter((t) => !t.deletedAt);
+      if (types.length === 0) return [];
+      const found = await db
+        .collection("letters")
+        .where(
+          "typeId",
+          "in",
+          types.map((t) => t.id),
+        )
+        .where("status", "==", "issued")
+        .orderBy("issuedAt", "desc")
+        .limit(ARCHIVE_LIMIT)
+        .get();
+      const letters = found.docs
+        .map((d) => toLetter(d.id, d.data()))
+        .filter((l) => !l.deletedAt && l.source !== "certificate" && l.verificationCode);
+      const units = await getDocumentsByIds<Record<string, unknown>>(db, "orgUnits", [
+        ...new Set(letters.map((l) => l.orgUnitId)),
+      ]);
+      const typeName = new Map(types.map((t) => [t.id, t.name]));
+      return letters.map((l) => ({
+        code: l.verificationCode as string,
+        number: l.numberFormatted ?? "",
+        letterDate: l.letterDate,
+        subject: l.subject,
+        typeId: l.typeId,
+        typeName: typeName.get(l.typeId) ?? "",
+        unitName: (units.get(l.orgUnitId)?.["name"] as string | undefined) ?? "PPIDK Asia-Oseania",
+        issuedAt: l.issuedAt as Date,
+      }));
+    },
+
+    async recordGuest(
+      guest: { name: string; email: string; institution: string; ipHash: string },
+      now: Date,
+    ): Promise<void> {
+      await guests.doc(randomUUID()).set({
+        ...guest,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + ARCHIVE_GUEST_RETENTION_MS),
+      });
+    },
+
+    /** Read-only list for the admin tab; newest first. */
+    async guests(): Promise<ArchiveGuest[]> {
+      const snapshot = await guests.orderBy("createdAt", "desc").limit(GUEST_LIST_LIMIT).get();
+      return snapshot.docs.map((d) => ({
+        id: d.id,
+        name: d.get("name") as string,
+        email: d.get("email") as string,
+        institution: d.get("institution") as string,
+        at: toDate(d.get("createdAt")) as Date,
+      }));
+    },
+  };
+}
+
+export type SqlLetterArchive = ReturnType<typeof createSqlLetterArchive>;

@@ -30,6 +30,7 @@ export interface LetterTypeItem {
   requiresCoordinator: boolean;
   requiresRecipient: boolean;
   contentPublic: boolean;
+  publicArchive: boolean;
   active: boolean;
   sort: number;
 }
@@ -48,6 +49,7 @@ const EMPTY: Draft = {
   requiresCoordinator: false,
   requiresRecipient: true,
   contentPublic: true,
+  publicArchive: false,
   active: true,
   sort: "0",
 };
@@ -274,7 +276,7 @@ function LetterTypesList({
     <FieldError id={`type-${field}-error`} message={fieldErrors[field]} hint={hint} />
   );
   const check = (
-    key: "requiresCoordinator" | "requiresRecipient" | "contentPublic" | "active",
+    key: "requiresCoordinator" | "requiresRecipient" | "contentPublic" | "publicArchive" | "active",
     text: string,
   ) =>
     draft ? (
@@ -320,6 +322,7 @@ function LetterTypesList({
         <span className="admin-status-badge">
           {t.active ? "In use" : "Inactive"}
           {t.contentPublic ? "" : " · content gated"}
+          {t.publicArchive ? " · in public archive" : ""}
         </span>
       ),
     },
@@ -469,6 +472,10 @@ function LetterTypesList({
               {check(
                 "contentPublic",
                 "The verification page shows the content to anyone (off: only to who types the recipient's name)",
+              )}
+              {check(
+                "publicArchive",
+                "List issued letters of this type in the public letter archive (number, date, subject and unit only)",
               )}
               {check("active", "In use")}
             </div>

@@ -115,7 +115,7 @@ const actionLabels = (
   cancel: "Cancel letter",
 });
 
-export type LetterSection = "outgoing" | "incoming" | "types";
+export type LetterSection = "outgoing" | "incoming" | "types" | "guests";
 
 export function LetterSectionTabs({
   sections,

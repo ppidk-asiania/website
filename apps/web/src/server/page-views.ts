@@ -19,7 +19,16 @@ const WITH_ITEMS = new Set([
   "newsletter",
   "activities",
 ]);
-const SECTIONS = new Set([...WITH_ITEMS, "about", "map", "privacy", "terms", "verify", "attend"]);
+const SECTIONS = new Set([
+  ...WITH_ITEMS,
+  "about",
+  "map",
+  "privacy",
+  "terms",
+  "verify",
+  "attend",
+  "letter-archive",
+]);
 
 /** The page as counted: a known section, plus one item slug where the section has items. */
 export function countedPage(path: string): string | null {

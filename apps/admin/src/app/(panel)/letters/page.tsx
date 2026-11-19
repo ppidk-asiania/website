@@ -4,6 +4,7 @@ import { can, canInSomeScope, scopedOrgUnitIds, type Principal } from "@website/
 import { AccessMessage } from "@/components/access-message";
 import { toIncomingItem } from "@/components/incoming-model";
 import { IncomingPage } from "@/components/incoming-page";
+import { LetterArchiveGuestsPage } from "@/components/letter-archive-guests-page";
 import { LetterTypesPage } from "@/components/letter-types-page";
 import { toLetterItem } from "@/components/letters-model";
 import { LetterSectionTabs, LettersPage, type LetterSection } from "@/components/letters-page";
@@ -25,6 +26,9 @@ export default async function AdminLettersPage({
   const sections: { key: LetterSection; label: string }[] = [
     { key: "outgoing", label: "Outgoing" },
     ...(can(principal, "incoming.read") ? [{ key: "incoming" as const, label: "Incoming" }] : []),
+    ...(can(principal, "letters.archive_guests")
+      ? [{ key: "guests" as const, label: "Archive guests" }]
+      : []),
   ];
   const tab = (await searchParams)["tab"];
   const active: LetterSection =
@@ -34,9 +38,11 @@ export default async function AdminLettersPage({
   const tabs = <LetterSectionTabs sections={sections} active={active} />;
   return active === "incoming"
     ? incomingSection(principal, tabs)
-    : active === "types"
-      ? typesSection(principal, tabs)
-      : outgoingSection(principal, tabs);
+    : active === "guests"
+      ? guestsSection(tabs)
+      : active === "types"
+        ? typesSection(principal, tabs)
+        : outgoingSection(principal, tabs);
 }
 
 async function outgoingSection(principal: Principal, sectionTabs: ReactNode) {
@@ -152,6 +158,16 @@ async function incomingSection(principal: Principal, sectionTabs: ReactNode) {
   );
 }
 
+async function guestsSection(sectionTabs: ReactNode) {
+  const guests = await adminReads.listArchiveGuests();
+  return (
+    <LetterArchiveGuestsPage
+      initial={guests.map((g) => ({ ...g, at: g.at.toISOString() }))}
+      sectionTabs={sectionTabs}
+    />
+  );
+}
+
 async function typesSection(principal: Principal, sectionTabs: ReactNode) {
   const [types, settings] = await Promise.all([
     adminReads.listLetterTypes(),
@@ -170,6 +186,7 @@ async function typesSection(principal: Principal, sectionTabs: ReactNode) {
         requiresCoordinator: t.requiresCoordinator,
         requiresRecipient: t.requiresRecipient,
         contentPublic: t.contentPublic,
+        publicArchive: t.publicArchive,
         active: t.active,
         sort: t.sort,
       }))}

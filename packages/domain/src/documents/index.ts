@@ -6,3 +6,4 @@ export * from "./verification";
 export * from "./incoming";
 export * from "./signatures";
 export * from "./certificates";
+export * from "./letter-archive";

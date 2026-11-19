@@ -27,6 +27,7 @@ export const COLLECTIONS = [
   "interviewAssessments",
   "interviewSlots",
   "invites",
+  "letterArchiveGuests",
   "letterCounters",
   "letterTypeCodes",
   "letterTypes",
