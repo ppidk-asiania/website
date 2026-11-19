@@ -295,6 +295,12 @@ export function createSqlMemberProfileStore(db: Database) {
       );
     },
 
+    /** The account that verified this number by messaging the bot (step 11.8 keywords), or null. */
+    async uidByVerifiedNumber(number: string): Promise<string | null> {
+      const found = await profiles.where("whatsappNumber", "==", number).get();
+      return found.docs.find((doc) => Boolean(doc.get("whatsappVerifiedAt")))?.id ?? null;
+    },
+
     /** Where applicants come from, as the profile says today (recruitment recap, step 11.7). */
     async originsOf(uids: readonly string[]) {
       const found = await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids);

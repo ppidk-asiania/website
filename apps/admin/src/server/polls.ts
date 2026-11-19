@@ -62,6 +62,8 @@ export interface IncomingMessage {
   readonly from: string;
   readonly fromMe: boolean;
   readonly text: string;
+  /** In a group chat `from` is the group; this is the person who wrote (a phone chat id or a LID). */
+  readonly participant?: string;
 }
 
 export function createWahaWebhookRoute(deps: {
@@ -90,6 +92,7 @@ export function createWahaWebhookRoute(deps: {
         from?: unknown;
         fromMe?: unknown;
         body?: unknown;
+        participant?: unknown;
       };
     };
     try {
@@ -98,9 +101,15 @@ export function createWahaWebhookRoute(deps: {
       return reply({ error: "invalid_input" }, 400);
     }
     if (body.event === "message") {
-      const { id, from, fromMe, body: text } = body.payload ?? {};
+      const { id, from, fromMe, body: text, participant } = body.payload ?? {};
       if (typeof id === "string" && typeof from === "string" && typeof text === "string") {
-        await deps.onMessage?.({ id, from, fromMe: fromMe === true, text });
+        await deps.onMessage?.({
+          id,
+          from,
+          fromMe: fromMe === true,
+          text,
+          ...(typeof participant === "string" ? { participant } : {}),
+        });
       }
       return reply({ ok: true });
     }

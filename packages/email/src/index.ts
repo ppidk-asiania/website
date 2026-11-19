@@ -73,3 +73,4 @@ export function createMemorySender(): EmailSender & { readonly sent: EmailMessag
   };
 }
 export { emailChannel } from "./channel";
+export { wahaChannel, whatsappChatId, whatsappText, type WahaConfig } from "./whatsapp";

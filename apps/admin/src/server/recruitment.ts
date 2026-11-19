@@ -5,13 +5,17 @@ import {
   RecruitmentInputSchema,
   RubricInputSchema,
   storableRubric,
+  WaGroupSchema,
   type Recruitment,
 } from "@website/domain/recruitment";
+import type { Messenger } from "@website/domain/messaging";
+import { RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 
 export interface RecruitmentDeps {
-  readonly recruitments: Pick<SqlRecruitmentStore, "save" | "write">;
+  readonly recruitments: Pick<SqlRecruitmentStore, "get" | "save" | "write">;
+  readonly send: Messenger["send"];
   readonly now: () => Date;
 }
 
@@ -91,6 +95,43 @@ export function createRecruitmentActions(deps: RecruitmentDeps) {
     },
   });
 
+  /** The committee pastes the WhatsApp group id (step 11.8); null removes the group. */
+  const saveWaGroup = createGuardedAction({
+    permission: "recruitment.edit",
+    input: RefInput.extend({ group: WaGroupSchema.nullable() }).strict(),
+    handler: async ({ id, version, group }, _principal, audit) => {
+      const saved = await deps.recruitments.write(
+        id,
+        version,
+        (current) => ({ ...(current as Recruitment), waGroup: group }),
+        recruitmentAudit(audit, "UPDATE"),
+        deps.now(),
+      );
+      return { version: saved.version };
+    },
+  });
+
+  /** "Send test message": one plain line to the saved group, so the committee sees it works. */
+  const testWaGroup = createGuardedAction({
+    permission: "recruitment.edit",
+    input: z.object({ id: safeId }).strict(),
+    handler: async ({ id }) => {
+      const group = (await deps.recruitments.get(id))?.waGroup;
+      if (!group) throw new RuleViolationError("Save the WhatsApp group first.");
+      const status = await deps.send(
+        {
+          channel: "whatsapp",
+          to: group.id,
+          subject: "",
+          text: "Tes dari PPIDK: grup ini akan menerima kabar lamaran dan menjawab perintah seperti /rekap. / Test from PPIDK: this group will get application notices and answer commands like /rekap.",
+          html: "",
+        },
+        `wagroup-test:${id}:${deps.now().getTime()}`,
+      );
+      return { status };
+    },
+  });
+
   const remove = createGuardedAction({
     permission: "recruitment.edit",
     input: RefInput,
@@ -107,5 +148,5 @@ export function createRecruitmentActions(deps: RecruitmentDeps) {
     },
   });
 
-  return { save, setPublished, saveRubric, remove };
+  return { save, setPublished, saveRubric, saveWaGroup, testWaGroup, remove };
 }

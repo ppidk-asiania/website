@@ -77,6 +77,7 @@ function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
     personalityTest: (data["personalityTest"] as boolean | undefined) ?? true,
     documentDeadline: toDate(data["documentDeadline"]),
     interviewRubric: (data["interviewRubric"] as Recruitment["interviewRubric"] | undefined) ?? [],
+    waGroup: (data["waGroup"] as Recruitment["waGroup"] | undefined) ?? null,
     published: data["published"] as boolean,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
@@ -104,6 +105,7 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
     ...(r.interviewRubric.length > 0
       ? { interviewRubric: r.interviewRubric.map((a) => ({ ...a, questions: [...a.questions] })) }
       : {}),
+    ...(r.waGroup ? { waGroup: r.waGroup } : {}),
     published: r.published,
   };
 }
@@ -449,6 +451,7 @@ export function createSqlRecruitmentStore(db: Database) {
           personalityTest: input.personalityTest,
           documentDeadline: input.documentDeadline,
           interviewRubric: current?.interviewRubric ?? [],
+          waGroup: current?.waGroup ?? null,
           published: current?.published ?? false,
           version: (current?.version ?? 0) + 1,
           createdAt: current?.createdAt ?? now,

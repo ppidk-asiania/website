@@ -15,11 +15,14 @@ them. It replaced the separate Messages page and the mock Emails page of the acc
 - Log: `packages/db/src/sql/messages.ts` (`createSqlMessageLog`, collection
   `messageLog/{sha256(key)}`).
 - E-mail channel: `packages/email/src/channel.ts` (`emailChannel`, shared by admin and web).
-- WhatsApp channel (admin only): `src/server/whatsapp.ts` (`wahaChannel`: `POST
-{WAHA_BASE_URL}/api/sendText` with `X-Api-Key`, chat id `6281…@c.us` from the E.164 number,
-  the subject in bold above the text, 10 s timeout; errors `not_configured`, `waha_<status>`,
-  `waha_unreachable`). The website has no WhatsApp channel: such a message fails as
-  `not_configured`.
+- WhatsApp channel: `packages/email/src/whatsapp.ts` (`wahaChannel`, re-exported by admin
+  `src/server/whatsapp.ts`: `POST {WAHA_BASE_URL}/api/sendText` with `X-Api-Key`, chat id
+  `6281…@c.us` from the E.164 number, the subject in bold above the text, 10 s timeout; errors
+  `not_configured`, `waha_<status>`, `waha_unreachable`). Recipient kind **group** (step 11.8): a `to`
+  that is a chat id (`…@g.us`) is used as it is; plain text only (WAHA cannot send list messages to
+  groups). `Message.mentions` (E.164 numbers) are appended to the SENT text as `@number` and sent
+  as WAHA `mentions`; the stored/logged text never holds a number. The website has the channel too
+  (needs `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION`), used only for the group notices.
 - Notifications (J2): `src/server/notices.ts` (`createNotices`), recipients from
   `createSqlContactReader` (`packages/db/src/sql/messages.ts`).
 - Admin: `src/server/messaging.ts` (retry action), `src/server/wiring.ts` (`messenger()`), page
@@ -132,6 +135,35 @@ still go to an unverified number. The profile and the Role Manager person popup 
 "not verified" (the popup never shows the number). [OWNER] WAHA dashboard → webhook events =
 `poll.vote` + `message`; set `WAHA_BOT_NUMBER` on the website.
 Tests: `tests/security/whatsapp-webhook.test.ts`, `tests/integration/whatsapp-link.test.ts`.
+
+## Recruitment WhatsApp group (step 11.8)
+
+The committee saves `recruitments.waGroup` `{ id, name }` on the recap page (group id like
+`120363041@g.us`, pasted from WAHA; **Send test message** posts one line to it). Not built: choosing
+the group from a list read from WAHA.
+
+- Notices (web, `apps/web/src/server/group-notice.ts`, hooked into `createApplying` submit, booking
+  and cancel): application submitted (`group:{applicationId}:submitted:{version}`), interview booked
+  (`group:{applicationId}:booked:{slotId}`) and cancelled by the applicant
+  (`group:{applicationId}:cancelled:{choiceId}:{version}`). Text: name (only while the application
+  still runs), campus, choices, link to the application (sign-in needed). The head of each chosen
+  unit and of its parent are mentioned by their VERIFIED numbers (`createSqlGroupNoticeReader`). Sent
+  after the commit; a failure is swallowed and never undoes it.
+- Keywords: `POST /webhooks/waha` `message` from the configured group (`src/server/whatsapp-group.ts`,
+  the same route as the link code; the signature is checked first) answers `/rekap /posisi /ppin
+/kampus /jenjang /wawancara /antrean /tren /bantuan` from `recruitmentRecap()` through
+  `loadRecap(ids, scope)`. The sender is the group `participant` (a LID is resolved through WAHA),
+  recognised by the VERIFIED number (`uidByVerifiedNumber`). Scope = the recap page (`recapScopeOf`):
+  global `recruitment.read` sees all; head / deputy / secretary seats see their unit tree; anyone
+  else gets a short refusal. `/bantuan` is answered to everyone. Group text is counts only: never a
+  phone number, e-mail, score or (outside the notices) a name. At most 20 answers a minute per
+  group (`rateLimits`, key `wagroup-{hash}`); a replayed event is answered once. One group on
+  several recruitments: the one accepting applications, else the one opened last. `/tren` is the
+  entry-year spread.
+- [OWNER] Add the WAHA number to the group, copy the group id into the recap page, set `WAHA_*` on
+  the website too, and keep the webhook events `message` (and `poll.vote`) on.
+- Tests: `tests/integration/whatsapp-group.test.ts`, `tests/unit/recruitment-group.test.ts`,
+  `tests/security/whatsapp-webhook.test.ts` (unsigned group message ignored).
 
 ## WhatsApp chatbot (C4)
 

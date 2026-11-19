@@ -5,6 +5,7 @@ import { TimezoneSchema } from "../members/profile";
 import { APPOINTMENT_SEATS, type AppointmentSeat } from "../organizations";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
 import type { RubricAspect } from "./assessments";
+import type { WaGroup } from "./group";
 import {
   bookingOpen,
   DEFAULT_CUTOFF_HOURS,
@@ -100,6 +101,8 @@ export interface Recruitment extends EntityMeta {
   readonly documentDeadline: Date | null;
   /** Edited by the committee (step 11.6); empty = the default rubric. */
   readonly interviewRubric: readonly RubricAspect[];
+  /** The committee's WhatsApp group for notices and keywords (step 11.8); null = none. */
+  readonly waGroup: WaGroup | null;
   readonly published: boolean;
 }
 
@@ -494,3 +497,4 @@ export * from "./analysis";
 export * from "./interviews";
 export * from "./assessments";
 export * from "./recap";
+export * from "./group";

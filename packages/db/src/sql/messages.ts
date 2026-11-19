@@ -165,3 +165,53 @@ export function createSqlContactReader(db: Database) {
 }
 
 export type SqlContactReader = ReturnType<typeof createSqlContactReader>;
+
+/** Step 11.8: what a notice to the recruitment group needs about an applicant and the heads to mention. */
+export function createSqlGroupNoticeReader(db: Database) {
+  return {
+    async applicant(uid: string): Promise<{ name: string; campus: string } | null> {
+      const profile = (
+        await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", [uid])
+      ).get(uid);
+      return profile
+        ? {
+            name: (profile["fullName"] as string | undefined) ?? "",
+            campus: (profile["university"] as string | undefined) ?? "",
+          }
+        : null;
+    },
+
+    /** Verified WhatsApp numbers of the active head of the unit and of its parent unit. */
+    async headNumbers(periodId: string, unitId: string): Promise<string[]> {
+      const unit = (await getDocumentsByIds<Record<string, unknown>>(db, "orgUnits", [unitId])).get(
+        unitId,
+      );
+      const parent = (unit?.["path"] as string[] | undefined)?.at(-1);
+      const wanted = new Set(parent ? [unitId, parent] : [unitId]);
+      const found = await db
+        .collection("appointments")
+        .where("periodId", "==", safeId.parse(periodId))
+        .where("status", "==", "active")
+        .get();
+      const uids = [
+        ...new Set(
+          found.docs
+            .filter((d) => d.get("seat") === "head" && wanted.has(String(d.get("orgUnitId"))))
+            .map((d) => String(d.get("userId"))),
+        ),
+      ];
+      const [users, profiles] = await Promise.all([
+        getDocumentsByIds<Record<string, unknown>>(db, "users", uids),
+        getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids),
+      ]);
+      return uids.flatMap((uid) => {
+        const profile = profiles.get(uid);
+        return users.get(uid)?.["status"] === "active" &&
+          profile?.["whatsappVerifiedAt"] &&
+          typeof profile["whatsappNumber"] === "string"
+          ? [profile["whatsappNumber"]]
+          : [];
+      });
+    },
+  };
+}

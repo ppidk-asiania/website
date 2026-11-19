@@ -81,6 +81,7 @@ export {
 export { createSqlWebhookEventStore } from "./webhooks";
 export {
   createSqlContactReader,
+  createSqlGroupNoticeReader,
   createSqlMessageLog,
   type SqlContactReader,
   type SqlMessageLog,

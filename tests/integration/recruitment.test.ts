@@ -35,6 +35,7 @@ let saved: Array<{ path: string; bytes: Uint8Array; options: unknown }>;
 const db = () => fake.db as unknown as Db;
 const recruitmentActions = () =>
   createRecruitmentActions({
+    send: () => Promise.resolve("logged" as const),
     recruitments: createSqlRecruitmentStore(db()),
     now: () => clock,
   });

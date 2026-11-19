@@ -101,3 +101,50 @@ describe("WhatsApp link webhook: only a signed request can link a number", () =>
     expect(t.replies).toHaveLength(1);
   });
 });
+
+describe("WhatsApp group keywords: only a signed request is answered", () => {
+  const group = JSON.stringify({
+    event: "message",
+    payload: {
+      id: "g1",
+      from: "120363041@g.us",
+      fromMe: false,
+      body: "/rekap",
+      participant: SENDER,
+    },
+  });
+  const run = async (headers: Record<string, string>) => {
+    const heard: unknown[] = [];
+    const route = createWahaWebhookRoute({
+      secret: SECRET,
+      record: () => Promise.resolve(true),
+      surveys: { vote: () => Promise.resolve(false) },
+      onMessage: (message) => Promise.resolve(void heard.push(message)),
+      now: () => now,
+    });
+    const response = await route(
+      new Request("https://admin.example.org/webhooks/waha", {
+        method: "POST",
+        headers,
+        body: group,
+      }),
+    );
+    return { status: response.status, heard };
+  };
+
+  it("ignores an unsigned or wrongly signed group message", async () => {
+    expect(await run({})).toEqual({ status: 401, heard: [] });
+    const wrong = createHmac("sha512", "another-secret-0000").update(group).digest("hex");
+    expect(await run({ "x-webhook-hmac": wrong })).toEqual({ status: 401, heard: [] });
+  });
+
+  it("hands a signed group message, with its sender, to the keyword handler", async () => {
+    const signed = createHmac("sha512", SECRET).update(group).digest("hex");
+    expect(await run({ "x-webhook-hmac": signed })).toEqual({
+      status: 200,
+      heard: [
+        { id: "g1", from: "120363041@g.us", fromMe: false, text: "/rekap", participant: SENDER },
+      ],
+    });
+  });
+});

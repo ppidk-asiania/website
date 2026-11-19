@@ -23,7 +23,14 @@ const webEnvSchema = baseEnv
   .extend(sessionEnv.shape)
   .extend(captchaEnv.partial().shape)
   .extend(messagingEnv.shape)
-  .extend(wahaEnv.pick({ WAHA_BOT_NUMBER: true }).shape)
+  .extend(
+    wahaEnv.pick({
+      WAHA_BOT_NUMBER: true,
+      WAHA_BASE_URL: true,
+      WAHA_API_KEY: true,
+      WAHA_SESSION: true,
+    }).shape,
+  )
   .extend(resendEnv.partial().shape)
   .extend(newsletterEnv.partial().shape)
   .extend(fieldEncryptionEnv.shape)

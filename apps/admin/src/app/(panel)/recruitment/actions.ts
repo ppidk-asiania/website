@@ -29,6 +29,16 @@ export async function saveInterviewRubricAction(input: unknown) {
   return result;
 }
 
+export async function saveWaGroupAction(input: unknown) {
+  const result = await recruitmentActions().saveWaGroup(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/recruitment", "layout");
+  return result;
+}
+
+export async function testWaGroupAction(input: unknown) {
+  return recruitmentActions().testWaGroup(getPrincipal, getAuditContext)(input);
+}
+
 export async function removeRecruitmentAction(input: unknown) {
   const result = await recruitmentActions().remove(getPrincipal, getAuditContext)(input);
   if (result.ok) revalidatePath("/recruitment");

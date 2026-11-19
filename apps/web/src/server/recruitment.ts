@@ -13,6 +13,7 @@ import {
 import { isPdf, type ImageStorage } from "@website/domain/shared";
 import { jsonError, readBodyLimited } from "@website/security";
 import { safeId, safeText } from "@website/security/validation";
+import type { GroupEvent } from "./group-notice";
 import type { BookedInfo } from "./interview-notice";
 
 export interface ApplyingDeps {
@@ -38,6 +39,8 @@ export interface ApplyingDeps {
   readonly storage: ImageStorage & { readonly remove?: (path: string) => Promise<void> };
   /** Tells the interviewer about a new booking; best effort, never undoes the booking. */
   readonly notifyBooked?: (info: BookedInfo) => Promise<void>;
+  /** Tells the recruitment WhatsApp group (step 11.8); best effort, after the commit. */
+  readonly notifyGroup?: (event: GroupEvent) => Promise<void>;
   readonly now: () => Date;
   readonly uuid: () => string;
 }
@@ -78,6 +81,7 @@ const toResult = (outcome: ApplyOutcome): ApplyResult =>
     : outcome;
 
 export function createApplying(deps: ApplyingDeps) {
+  const tellGroup = (event: GroupEvent) => deps.notifyGroup?.(event).catch(() => undefined);
   const gate = async <S extends z.ZodType>(
     user: Applicant,
     schema: S,
@@ -111,7 +115,9 @@ export function createApplying(deps: ApplyingDeps) {
       const g = await gate(user, Ref, input);
       if (!g.ok) return g.result;
       if (!(await deps.hasProof(g.uid))) return { ok: false, error: "proof" };
-      return toResult(await deps.store.submit(g.data.recruitmentId, g.uid, deps.now()));
+      const outcome = await deps.store.submit(g.data.recruitmentId, g.uid, deps.now());
+      if (outcome.ok) await tellGroup({ kind: "submitted", application: outcome.application });
+      return toResult(outcome);
     },
 
     async respondOffer(user: Applicant, input: unknown): Promise<ApplyResult> {
@@ -132,12 +138,13 @@ export function createApplying(deps: ApplyingDeps) {
         slotId,
         deps.now(),
       );
-      if (outcome.ok && deps.notifyBooked) {
+      if (outcome.ok && (deps.notifyBooked || deps.notifyGroup)) {
         const slot = (await deps.store.slots(recruitmentId)).find((s) => s.id === slotId);
         if (slot) {
           await deps
-            .notifyBooked({ application: outcome.application, slot, choiceId })
+            .notifyBooked?.({ application: outcome.application, slot, choiceId })
             .catch(() => undefined);
+          await tellGroup({ kind: "booked", application: outcome.application, choiceId, slotId });
         }
       }
       return toResult(outcome);
@@ -147,7 +154,11 @@ export function createApplying(deps: ApplyingDeps) {
       const g = await gate(user, Ref.extend({ choiceId: safeId }).strict(), input);
       if (!g.ok) return g.result;
       const { recruitmentId, choiceId } = g.data;
-      return toResult(await deps.store.cancelInterview(recruitmentId, g.uid, choiceId, deps.now()));
+      const outcome = await deps.store.cancelInterview(recruitmentId, g.uid, choiceId, deps.now());
+      if (outcome.ok) {
+        await tellGroup({ kind: "cancelled", application: outcome.application, choiceId });
+      }
+      return toResult(outcome);
     },
 
     async withdraw(user: Applicant, input: unknown): Promise<ApplyResult> {

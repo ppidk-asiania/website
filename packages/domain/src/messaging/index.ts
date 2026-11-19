@@ -7,6 +7,8 @@ export interface Message {
   readonly subject: string;
   readonly text: string;
   readonly html: string;
+  /** WhatsApp only: numbers (E.164) to mention in a group message; the channel adds them to the sent text. */
+  readonly mentions?: readonly string[];
 }
 
 export const MESSAGE_STATUSES = [

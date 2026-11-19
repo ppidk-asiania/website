@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { hasInterviewScope } from "@website/domain/recruitment";
-import { scopedOrgUnitIds } from "@website/permissions";
+import { can, scopedOrgUnitIds } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { RecapPage } from "@/components/recap-page";
+import { WaGroupEditor } from "@/components/wa-group-editor";
 import { requireAdminViewer } from "@/server/context";
 import { adminReads, interviewScopeOf, loadRecap } from "@/server/wiring";
 
@@ -34,10 +35,20 @@ export default async function RecapRoute({
         .map((r) => r.id)
     : [recruitment.id];
   return (
-    <RecapPage
-      recruitment={{ id: recruitment.id, title: recruitment.title }}
-      wholePeriod={wholePeriod}
-      recap={await loadRecap(ids, scope)}
-    />
+    <>
+      <RecapPage
+        recruitment={{ id: recruitment.id, title: recruitment.title }}
+        wholePeriod={wholePeriod}
+        recap={await loadRecap(ids, scope)}
+      />
+      {can(viewer.principal, "recruitment.edit") ? (
+        <WaGroupEditor
+          key={recruitment.version}
+          recruitmentId={recruitment.id}
+          version={recruitment.version}
+          group={recruitment.waGroup}
+        />
+      ) : null}
+    </>
   );
 }

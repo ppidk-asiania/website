@@ -99,6 +99,7 @@ beforeEach(async () => {
     ],
   });
   const actions = createRecruitmentActions({
+    send: () => Promise.resolve("logged" as const),
     recruitments: createSqlRecruitmentStore(db()),
     now: () => clock,
   });

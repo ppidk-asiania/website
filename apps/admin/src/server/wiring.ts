@@ -4,6 +4,7 @@ import { hasTwoSignInMethods } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
 import {
   createSqlUserStore,
+  createSqlRateLimitStore,
   createSqlWebhookEventStore,
   deleteExpired,
   inviteId,
@@ -56,6 +57,7 @@ import { createMessageActions } from "./messaging";
 import { createNotices } from "./notices";
 import { wahaChannel, wahaPoll, wahaResolveLid } from "./whatsapp";
 import { createWhatsappLinking } from "./whatsapp-link";
+import { createGroupBot } from "./whatsapp-group";
 import { WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
 import { createPolls, createWahaWebhookRoute } from "./polls";
 import { cloudApiReply, createChatbot, createWhatsappWebhook } from "./chatbot";
@@ -323,7 +325,11 @@ export const letterActions = lazyEnv(() =>
 );
 
 export const recruitmentActions = lazyEnv(() =>
-  createRecruitmentActions({ recruitments: adminStores().recruitments, now: () => new Date() }),
+  createRecruitmentActions({
+    recruitments: adminStores().recruitments,
+    send: (message, key) => messenger().send(message, key),
+    now: () => new Date(),
+  }),
 );
 
 export const applicationActions = lazyEnv(() =>
@@ -378,6 +384,16 @@ export async function interviewScopeOf(uid: string): Promise<InterviewScope> {
     review: can(principal, "recruitment.review"),
     granted: scopedOrgUnitIds(principal, "recruitment.interview"),
   });
+}
+
+/** Step 11.8: the recap page's scope for a verified WhatsApp sender: global read sees all, else seats. */
+export async function recapScopeOf(
+  uid: string,
+): Promise<Pick<InterviewScope, "all" | "orgUnitIds">> {
+  const principal = await userDirectoryStore().findPrincipalByUid(uid);
+  return scopedOrgUnitIds(principal, "recruitment.read") === "all"
+    ? { all: true, orgUnitIds: new Set<string>() }
+    : interviewScopeOf(uid);
 }
 
 /** Where applicants come from, as the profile says today (chapter resolved to its name). */
@@ -564,29 +580,44 @@ export const wahaWebhook = lazyEnv(() => {
   const env = getAdminEnv();
   const record = (provider: string, eventId: string, now: Date) =>
     createSqlWebhookEventStore(adminDb()).record(provider, eventId, now);
+  const wahaConfig =
+    env.WAHA_BASE_URL && env.WAHA_API_KEY
+      ? { baseUrl: env.WAHA_BASE_URL, apiKey: env.WAHA_API_KEY, session: env.WAHA_SESSION }
+      : null;
+  const reply = (to: string, text: string, key: string) =>
+    messenger().send({ channel: "whatsapp", to, subject: "", text, html: "" }, key);
+  const group = createGroupBot({
+    record,
+    recruitments: () => adminStores().recruitments.listForAdmin(),
+    senderUid: (number) => adminStores().memberProfiles.uidByVerifiedNumber(number),
+    resolveLid: wahaResolveLid(wahaConfig),
+    scopeOf: recapScopeOf,
+    recap: loadRecap,
+    rateLimits: createSqlRateLimitStore(adminDb()),
+    reply,
+    logError: (message, fields) => adminStores().logger.error(message, fields),
+    now: () => new Date(),
+  });
+  const link = createWhatsappLinking({
+    record,
+    profiles: adminStores().memberProfiles,
+    hash: (code) => {
+      if (!env.SUBSCRIBER_HASH_SECRET) {
+        throw new Error("SUBSCRIBER_HASH_SECRET is required to link WhatsApp numbers.");
+      }
+      return keyedHash(WHATSAPP_LINK_PURPOSE, code, env.SUBSCRIBER_HASH_SECRET);
+    },
+    resolveLid: wahaResolveLid(wahaConfig),
+    reply,
+    logError: (message, fields) => adminStores().logger.error(message, fields),
+    now: () => new Date(),
+  });
   return createWahaWebhookRoute({
     secret: env.WAHA_WEBHOOK_SECRET,
     record,
     surveys: adminStores().surveys,
-    onMessage: createWhatsappLinking({
-      record,
-      profiles: adminStores().memberProfiles,
-      hash: (code) => {
-        if (!env.SUBSCRIBER_HASH_SECRET) {
-          throw new Error("SUBSCRIBER_HASH_SECRET is required to link WhatsApp numbers.");
-        }
-        return keyedHash(WHATSAPP_LINK_PURPOSE, code, env.SUBSCRIBER_HASH_SECRET);
-      },
-      resolveLid: wahaResolveLid(
-        env.WAHA_BASE_URL && env.WAHA_API_KEY
-          ? { baseUrl: env.WAHA_BASE_URL, apiKey: env.WAHA_API_KEY, session: env.WAHA_SESSION }
-          : null,
-      ),
-      reply: (to, text, key) =>
-        messenger().send({ channel: "whatsapp", to, subject: "", text, html: "" }, key),
-      logError: (message, fields) => adminStores().logger.error(message, fields),
-      now: () => new Date(),
-    }),
+    // a group chat goes to the keywords, a private chat to the link code (step 10.4)
+    onMessage: (message) => (message.from.endsWith("@g.us") ? group(message) : link(message)),
     now: () => new Date(),
   });
 });

@@ -180,6 +180,7 @@ beforeEach(async () => {
   });
   const committee = staff(["recruitment.edit"]);
   const actions = createRecruitmentActions({
+    send: () => Promise.resolve("logged" as const),
     recruitments: createSqlRecruitmentStore(db()),
     now: () => clock,
   });
@@ -820,6 +821,7 @@ describe("assessments (11.6): rubric, one per interviewer, visibility, locks", (
   it("keeps the rubric it was scored with when the committee changes the rubric", async () => {
     await assess(holder("head-fin"));
     const actions = createRecruitmentActions({
+      send: () => Promise.resolve("logged" as const),
       recruitments: createSqlRecruitmentStore(db()),
       now: () => clock,
     });

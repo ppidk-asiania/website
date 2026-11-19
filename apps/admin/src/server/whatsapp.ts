@@ -1,48 +1,8 @@
 import "server-only";
 import { numberFromChatId } from "@website/domain/members";
-import type { Message, MessageChannel } from "@website/domain/messaging";
+import { whatsappChatId, type WahaConfig } from "@website/email";
 
-export interface WahaConfig {
-  readonly baseUrl: string;
-  readonly apiKey: string;
-  readonly session: string;
-}
-
-export const whatsappChatId = (e164: string) => `${e164.replace(/^\+/, "")}@c.us`;
-
-export const whatsappText = (message: Pick<Message, "subject" | "text">) =>
-  message.subject ? `*${message.subject}*\n\n${message.text}` : message.text;
-
-export function wahaChannel(
-  config: WahaConfig | null,
-  fetchImpl: typeof fetch = fetch,
-): MessageChannel {
-  return {
-    async send(message) {
-      if (!config || !message.to) return { ok: false, error: "not_configured" };
-      try {
-        const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/api/sendText`, {
-          method: "POST",
-          signal: AbortSignal.timeout(10_000),
-          headers: { "Content-Type": "application/json", "X-Api-Key": config.apiKey },
-          body: JSON.stringify({
-            session: config.session,
-            chatId: whatsappChatId(message.to),
-            text: whatsappText(message),
-          }),
-        });
-        if (!response.ok) return { ok: false, error: `waha_${response.status}` };
-        const body = (await response.json().catch(() => ({}))) as {
-          id?: string | { _serialized?: string };
-        };
-        const id = typeof body.id === "string" ? body.id : (body.id?._serialized ?? "");
-        return { ok: true, providerId: id };
-      } catch {
-        return { ok: false, error: "waha_unreachable" };
-      }
-    },
-  };
-}
+export { wahaChannel, whatsappChatId, whatsappText, type WahaConfig } from "@website/email";
 
 export function wahaPoll(config: WahaConfig | null, fetchImpl: typeof fetch = fetch) {
   return async (

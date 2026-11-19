@@ -151,8 +151,7 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
       average (one decimal) and counts them, e.g. "3.2 (2)". All assessments of an application
       count, across its interviews.
     - Tests: `tests/unit/recruitment-assessments.test.ts`, `tests/integration/interviews.test.ts`.
-    - Not built: the PPIDK import of `interview_rubric` and `interview_assessments`, the recap
-      block (11.7) and the group keyword (11.8).
+    - Not built: the PPIDK import of `interview_rubric` and `interview_assessments`.
   - _Notices_ — see `apps/admin/docs/messaging.md` (booked, cancelled, changed) and
     `apps/admin/docs/cron.md` (30 minutes before, inside `meeting-reminders`). The day-before
     reminder of `deadline-reminders` stays.
@@ -255,6 +254,11 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
     seat under the status, short status label with the full sentence (`STATUS_HINTS`) as tooltip;
     the 11.1 seat label and the 11.3 proof mark stay. Each recruitment row menu links to
     Applications, Recap and Interviews.
+  - _WhatsApp group_ (step 11.8, `recruitment/group.ts`): `recruitments.waGroup` `{ id, name }` (saved
+    with `saveWaGroup` on the recap page, `recruitment.edit`; kept through an edit of the recruitment).
+    Pure rules: `parseGroupKeyword`, `pickRecruitment` (the one accepting applications, else the one
+    opened last), `groupAnswer` (text from `recruitmentRecap()`, counts only), `groupNotice` (name only
+    while the application runs). Notices and keywords: `apps/admin/docs/messaging.md`.
 
 ## Import from PPIDK (block J, step 5.8)
 

@@ -4,12 +4,14 @@ import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
 import {
   createSqlContactReader,
+  createSqlGroupNoticeReader,
   createSqlPersonalityStore,
   createSqlRecruitmentWebStore,
 } from "@website/db/sql";
 import type { Recruitment } from "@website/domain/recruitment";
 import { webDb, webStorage } from "./db";
 import { getAppUrls, getWebEnv } from "./env";
+import { createGroupNotice } from "./group-notice";
 import { createBookedNotice } from "./interview-notice";
 import { messenger } from "./messaging";
 import { hasCompleteProfile, hasStudentProof } from "./profile-wiring";
@@ -35,6 +37,12 @@ export const applying = lazyEnv(() =>
       send: (message, key) => messenger().send(message, key),
       adminUrl: getAppUrls().ADMIN_URL ?? "",
     }).booked,
+    notifyGroup: createGroupNotice({
+      recruitment: (id) => recruitmentStore().getVisible(id),
+      people: createSqlGroupNoticeReader(webDb()),
+      send: (message, key) => messenger().send(message, key),
+      webUrl: getAppUrls().WEB_URL ?? "",
+    }),
     storage: {
       save: (path, bytes, options) => webStorage().save(path, bytes, options),
       remove: (path) => webStorage().remove(path),
