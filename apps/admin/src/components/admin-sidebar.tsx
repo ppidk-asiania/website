@@ -1,5 +1,6 @@
 "use client";
 
+import { ORGANISATION_NAME } from "@website/domain/shared";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,7 +23,8 @@ export interface SidebarUser {
   readonly initials: string;
 }
 
-const ORGANISATION = "PPI Dunia Kawasan Asia-Oseania";
+const ORGANISATION = ORGANISATION_NAME.id;
+/** Must match the desktop breakpoint in app/globals.css. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
 function subscribeToViewport(onChange: () => void) {

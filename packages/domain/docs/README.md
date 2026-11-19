@@ -20,3 +20,5 @@
 Add one Markdown file per feature (`<feature>.md`) using the
 [feature doc template](../../../docs/README.md#feature-doc-template), then list it in the table above
 and in the [feature docs index](../../../docs/README.md#feature-docs-index).
+
+The official organisation name (long form, Indonesian and English) is `ORGANISATION_NAME` in `src/shared`; print it from there, never retype it. Issued letters and user-typed text are never rewritten.

@@ -34,6 +34,16 @@ export function isValidSlug(slug: string): boolean {
   return slug.length > 0 && slug.length <= 120 && SLUG.test(slug);
 }
 
+/**
+ * Official organisation name (DECISIONS s.112). Every place that prints the long name uses this.
+ * Short names "PPI Dunia", "PPIDK Asiania" and "PPIDK Asia-Oseania" stay as they are.
+ * The English wording is a proposal until the owner confirms it.
+ */
+export const ORGANISATION_NAME = {
+  id: "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA",
+  en: "Overseas Indonesian Students’ Association Alliance for Asia-Oceania Region",
+} as const;
+
 export * from "./files";
 export * from "./images";
 export * from "./money";
