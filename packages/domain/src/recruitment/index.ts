@@ -420,3 +420,4 @@ export function assertBookable(slot: InterviewSlot | null, now: Date): Interview
   return slot;
 }
 export * from "./personality";
+export * from "./analysis";

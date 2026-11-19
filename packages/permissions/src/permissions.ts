@@ -38,6 +38,7 @@ export const ADMIN_PAGES = {
       review: "Review applications (revision, fail, pass to interview)",
       offer: "Offer seats",
       confirm: "Approve placements and ratify",
+      ai: "Run and read AI analysis",
     },
   },
   letters: {

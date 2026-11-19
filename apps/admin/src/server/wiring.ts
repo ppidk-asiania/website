@@ -73,7 +73,8 @@ import { createMeetingActions } from "./meetings";
 import { createMinutesActions, createMinutesFileRoute } from "./minutes";
 import { modelFor } from "@website/domain/ai";
 import { createAiActions } from "./ai";
-import { createAnthropicDrafter, createCallModel } from "./anthropic";
+import { createAnthropicDrafter, createCallModel, type CallModel } from "./anthropic";
+import { createAnalysisActions } from "./ai-analysis";
 import { createLinkActions } from "./links";
 import { goppiShortener, sidShortener } from "./shorteners";
 import { createZoomActions, createZoomSummary, createZoomTranscript } from "./zoom";
@@ -399,6 +400,7 @@ export const cronRoute = lazyEnv(() =>
       "zoom-rooms": () => zoomActions().retryRooms(),
       "recording-archive": () => recordingArchive()(),
       "deadline-reminders": () => deadlineReminders()(),
+      "ai-jobs": () => analysisActions().runNext(),
     },
     log: ({ message, ...fields }) =>
       message === "cron_job_failed"
@@ -699,26 +701,44 @@ export const meetingActions = lazyEnv(() =>
 
 export const aiActions = lazyEnv(() => createAiActions({ ai: adminStores().ai }));
 
+/** The one AI path (step 10.5): minutes, application analysis and proof check all go through it. */
+const callModel = lazyEnv(() =>
+  getAdminEnv().ANTHROPIC_API_KEY
+    ? createCallModel({
+        apiKey: getAdminEnv().ANTHROPIC_API_KEY as string,
+        fetchImpl: fetch,
+        modelFor: async (feature) =>
+          modelFor(
+            feature,
+            (await adminStores().ai.readSettings()).settings,
+            getAdminEnv().ANTHROPIC_MODEL,
+          ),
+        recordUsage: (row) => adminStores().ai.recordUsage(row),
+        now: () => new Date(),
+      })
+    : null,
+);
+
+export const analysisActions = lazyEnv(() =>
+  createAnalysisActions({
+    analyses: adminStores().analyses,
+    applications: adminStores().applications,
+    recruitments: adminStores().recruitments,
+    formVersion: (formId, n) => adminStores().forms.getVersion(formId, n),
+    profiles: adminStores().memberProfiles,
+    chapterName: async (id) => (await adminStores().chapters.get(id))?.name ?? null,
+    storage: imageStorage(),
+    callModel: callModel(),
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);
+
 export const minutesActions = lazyEnv(() =>
   createMinutesActions({
     meetings: adminStores().meetings,
     actionItems: adminStores().actionItems,
-    drafter: getAdminEnv().ANTHROPIC_API_KEY
-      ? createAnthropicDrafter(
-          createCallModel({
-            apiKey: getAdminEnv().ANTHROPIC_API_KEY as string,
-            fetchImpl: fetch,
-            modelFor: async (feature) =>
-              modelFor(
-                feature,
-                (await adminStores().ai.readSettings()).settings,
-                getAdminEnv().ANTHROPIC_MODEL,
-              ),
-            recordUsage: (row) => adminStores().ai.recordUsage(row),
-            now: () => new Date(),
-          }),
-        )
-      : null,
+    drafter: callModel() ? createAnthropicDrafter(callModel() as CallModel) : null,
     names: accountNames,
     logError: (message, fields) => adminStores().logger.error(message, fields),
     zoomTranscript: createZoomTranscript({

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
 import {
+  analysisActions,
   applicationActions,
   exportLog,
   interviewActions,
@@ -87,4 +88,12 @@ export async function proofFileUrlAction(input: unknown) {
 
 export async function reviewProofAction(input: unknown) {
   return queued(await proofActions().review(getPrincipal, getAuditContext)(input));
+}
+
+export async function queueAnalysisAction(input: unknown) {
+  return queued(await analysisActions().queue(getPrincipal, getAuditContext)(input));
+}
+
+export async function checkProofAction(input: unknown) {
+  return queued(await analysisActions().checkProof(getPrincipal, getAuditContext)(input));
 }

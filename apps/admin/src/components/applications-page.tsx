@@ -17,6 +17,7 @@ import {
   reviewProofAction,
 } from "@/app/(panel)/recruitment/actions";
 import { actionMessage } from "@/components/action-message";
+import { ApplicationAiPanel } from "@/components/application-ai-panel";
 import { downloadCsv } from "@/components/csv";
 import { applicantsCsv } from "@/components/exports-model";
 import { formatInZone } from "@/components/format";
@@ -43,6 +44,7 @@ import {
   type ApplicationItem,
   type QueueTab,
 } from "./applications-model";
+import type { ApplicationAnalysis, ProofCheck } from "@website/domain/recruitment";
 
 type SortKey = "name" | "submitted";
 const sortValue = (a: ApplicationItem, key: SortKey) =>
@@ -81,8 +83,15 @@ export function ApplicationsPage(props: {
   canReview: boolean;
   canOffer: boolean;
   canConfirm: boolean;
+  /** Only for holders of `recruitment.ai`. */
+  ai?:
+    | {
+        analyses: Readonly<Record<string, ApplicationAnalysis>>;
+        proofChecks: Readonly<Record<string, ProofCheck>>;
+      }
+    | undefined;
 }) {
-  const { recruitment, initial: items, canReview, canOffer, canConfirm } = props;
+  const { recruitment, initial: items, canReview, canOffer, canConfirm, ai } = props;
   const router = useRouter();
   const toast = useToastMessage();
   const [tab, setTab] = useState<QueueTab>("review");
@@ -403,6 +412,18 @@ export function ApplicationsPage(props: {
               </>
             ) : null}
           </dl>
+          {ai ? (
+            <ApplicationAiPanel
+              key={current.id}
+              applicationId={current.id}
+              units={Object.fromEntries(recruitment.units.map((u) => [u.id, u.name]))}
+              analysis={ai.analyses[current.id] ?? null}
+              proofCheck={ai.proofChecks[current.userId] ?? null}
+              hasProof={Boolean(current.proof.main)}
+              onMessage={toast.show}
+              onDone={() => router.refresh()}
+            />
+          ) : null}
           {current.revisions.length > 0 ? (
             <div className="admin-form-separator">
               <span className="admin-field__label">Revision rounds</span>

@@ -4,7 +4,7 @@ import { AccessMessage } from "@/components/access-message";
 import { toApplicationItem } from "@/components/applications-model";
 import { ApplicationsPage } from "@/components/applications-page";
 import { requireAdminViewer } from "@/server/context";
-import { adminReads } from "@/server/wiring";
+import { adminReads, analysisActions } from "@/server/wiring";
 
 export const instant = false;
 
@@ -12,7 +12,12 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
   const { id } = await params;
   const viewer = await requireAdminViewer(`/recruitment/${id}/applications`, "recruitment.read");
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
-  const committee = ["recruitment.review", "recruitment.offer", "recruitment.confirm"] as const;
+  const committee = [
+    "recruitment.review",
+    "recruitment.offer",
+    "recruitment.confirm",
+    "recruitment.ai",
+  ] as const;
   if (!committee.some((p) => can(viewer.principal, p))) return <AccessMessage reason="no-access" />;
   const recruitment = await adminReads.getRecruitment(id);
   if (!recruitment || recruitment.deletedAt) notFound();
@@ -27,6 +32,11 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
     adminReads.personalityResults(uids),
     adminReads.studentProofs(uids),
   ]);
+  const ai = await analysisActions().read(
+    viewer.principal,
+    applications.map((a) => a.id),
+    uids,
+  );
   const now = new Date();
   return (
     <ApplicationsPage
@@ -51,6 +61,7 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
       canReview={can(viewer.principal, "recruitment.review")}
       canOffer={can(viewer.principal, "recruitment.offer")}
       canConfirm={can(viewer.principal, "recruitment.confirm")}
+      ai={can(viewer.principal, "recruitment.ai") ? ai : undefined}
     />
   );
 }

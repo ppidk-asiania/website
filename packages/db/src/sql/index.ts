@@ -249,6 +249,7 @@ export {
   type ZoomRequestFields,
 } from "./zoom";
 export { createSqlAiStore, type SqlAiStore } from "./ai";
+export { createSqlAnalysisStore, type SqlAnalysisStore } from "./analyses";
 export { createSqlSurveyStore, type SqlSurveyStore } from "./surveys";
 export {
   createSqlConversationStore,

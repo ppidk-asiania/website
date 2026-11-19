@@ -13,7 +13,8 @@ shows ONE next action.
 ## Where it lives
 
 - Rules: `packages/domain/src/recruitment/index.ts` (statuses and transitions, set-up schema,
-  window, choices, portfolio rule, `nextAction`, offer expiry).
+  window, choices, portfolio rule, `nextAction`, offer expiry); `analysis.ts` (AI result schemas,
+  `pickFiles`).
 - Storage: `packages/db/src/sql/recruitment.ts` — admin store (`recruitments`,
   `seatCounters`) and web store (the applicant's own `applications/{recruitmentId}_{uid}`).
 - Admin: `apps/admin/src/server/recruitment.ts` (set-up) and `applications.ts` (selection), pages
@@ -28,7 +29,8 @@ shows ONE next action.
   `tests/integration/recruitment.test.ts`, `tests/integration/selection.test.ts`,
   `tests/integration/interviews.test.ts`, `tests/integration/ratification.test.ts`,
   `tests/unit/personality.test.ts`, `tests/integration/personality.test.ts`,
-  `tests/integration/student-proof.test.ts`, `tests/security/student-proof.test.ts`.
+  `tests/integration/student-proof.test.ts`, `tests/security/student-proof.test.ts`,
+  `tests/integration/ai-analysis.test.ts`.
 
 ## How to use it
 
@@ -126,6 +128,30 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   revertible). Applicant changes are logged with the member as actor (resource `application`):
   status, choices, round, offer and portfolio name — never the answers.
 
+- **AI analysis and proof check** (step 11.9, extra `recruitment.ai` "Run and read AI analysis";
+  suggested role: the recruitment coordinator; interviewers and other committee members do not
+  get it and see nothing of it). `src/server/ai-analysis.ts`, store `packages/db/src/sql/analyses.ts`,
+  panel `application-ai-panel.tsx` in the application detail. Both go through `callModel` (step 10.5:
+  the `applicationAnalysis` and `proofCheck` model slots, one `aiUsage` row per request).
+  - _Analysis_, one request per application, outside the request: "Run analysis" stores a
+    `queued` row in `applicationAnalyses/{id}` (a new row per run, the latest is shown; one queued
+    row per application); the cron job `ai-jobs` takes ONE queued row per call (`queued` →
+    `running` in one transaction), sends study data (campus, level, programme, entry and
+    graduation year), the chosen units, the text answers and the files, and stores the forced tool
+    output (summary, supporting points and interview questions per chosen unit, things to check).
+    A failure is kept with its error, is never retried and can be run again. The interview
+    questions are read by hand for the rubric (11.5), never copied.
+  - _Files_: PDF, JPEG, PNG or WebP; a file over 5 MB, another type, or a total over 20 MB is
+    skipped; a "may follow" file that has not arrived is noted. Every skipped file is stored with
+    its reason and shown ("Not read").
+  - _Proof check_, on demand in the request: both proof files + name, campus, level, programme,
+    entry year, chapter and today's date; answer per field "match / differs / unreadable" and
+    "active status stated: yes / no / unreadable"; history in `proofChecks/{id}` (newest shown).
+  - _Never sent_: gender, birth date, WhatsApp number, photo, address (the request is built from
+    named fields, never from the whole profile). No score, no recommendation; the status of an
+    application is never changed from here. Every queue, run and check writes an audit entry (the
+    cron job as actor `system`/`ai-jobs`), with the status only, never the answer.
+
 ## Import from PPIDK (block J, step 5.8)
 
 - Mapping: `packages/db/src/ppidk/recruitment.ts` (pure, tested in
@@ -145,5 +171,5 @@ storage>] [--apply]` (dry run by default, writes `import-recruitment-report.json
 
 ## Configuration
 
-`FILE_STORAGE_DIR` on web (portfolio uploads); `LINK_SIGNING_SECRET` on web (the
+`FILE_STORAGE_DIR` on web (portfolio uploads); `ANTHROPIC_API_KEY` and `CRON_SECRET` on admin (AI analysis, cron job `ai-jobs`); `LINK_SIGNING_SECRET` on web (the
 personality test links; the same secret signs newsletter links, the purpose keeps them apart).

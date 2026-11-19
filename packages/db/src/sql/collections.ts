@@ -75,5 +75,7 @@ export const COLLECTIONS = [
   "pageViewStats",
   "pageViewVisits",
   "aiUsage",
+  "applicationAnalyses",
+  "proofChecks",
   "whatsappLinkCodes",
 ] as const;
