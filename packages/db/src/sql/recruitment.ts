@@ -16,8 +16,17 @@ import {
   seatCounterId,
   takeSeat,
   assertBookable,
+  assertBookingChangeable,
+  assertSlotEdit,
+  DEFAULT_CUTOFF_HOURS,
+  slotNoticeChanged,
+  slotOffered,
   slotTimes,
+  type Attendance,
+  type Booking,
   type InterviewSlot,
+  type SlotChange,
+  type SlotMode,
   type SlotPlan,
   type Offer,
   type RevisionRound,
@@ -38,6 +47,7 @@ import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/sh
 import { safeId } from "@website/security/validation";
 import { prepareAppointment, writeAppointment, type AppointmentAudit } from "./appointments";
 import { createSqlAuditWriter } from "./audit";
+import { getDocumentsByIds } from "./batch";
 import { createSluggedStore, toDate } from "./slugged";
 
 export type RecruitmentFields = Omit<Recruitment, "id" | "version" | "createdAt" | "updatedAt">;
@@ -87,16 +97,35 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
   };
 }
 
+interface StoredBooking {
+  slotId: string;
+  startsAt: unknown;
+  attendance?: Attendance | null;
+  attendanceNote?: string | null;
+}
+
+const toBooking = (b: StoredBooking): Booking => ({
+  slotId: b.slotId,
+  startsAt: toDate(b.startsAt) as Date,
+  attendance: b.attendance ?? null,
+  attendanceNote: b.attendanceNote ?? null,
+});
+
 export function toApplication(id: string, data: Record<string, unknown>): Application {
   const offer = data["offer"] as
     { orgUnitId: string; seat?: AppointmentSeat; expiresAt: unknown } | null | undefined;
-  const interview = data["interview"] as { slotId: string; startsAt: unknown } | null | undefined;
+  const choices = data["choices"] as string[];
+  // Before step 11.5 an application had ONE booking (`interview`): it reads as the first choice.
+  const legacy = data["interview"] as StoredBooking | null | undefined;
+  const stored =
+    (data["interviews"] as Record<string, StoredBooking> | undefined) ??
+    (legacy && choices[0] ? { [choices[0]]: legacy } : {});
   return {
     id,
     recruitmentId: data["recruitmentId"] as string,
     userId: data["userId"] as string,
     status: data["status"] as ApplicationStatus,
-    choices: data["choices"] as string[],
+    choices,
     choiceSeats: (data["choiceSeats"] as Application["choiceSeats"] | undefined) ?? {},
     answers: data["answers"] as Answers,
     portfolio: (data["portfolio"] as FileAnswer | null | undefined) ?? null,
@@ -108,9 +137,8 @@ export function toApplication(id: string, data: Record<string, unknown>): Applic
           expiresAt: toDate(offer.expiresAt) as Date,
         }
       : null,
-    interview: interview
-      ? { slotId: interview.slotId, startsAt: toDate(interview.startsAt) as Date }
-      : null,
+    interviews: Object.fromEntries(Object.entries(stored).map(([c, b]) => [c, toBooking(b)])),
+    interviewChanged: (data["interviewChanged"] as string[] | undefined) ?? [],
     pacts: (data["pacts"] as FileAnswer[] | undefined) ?? [],
     pactNote: (data["pactNote"] as string | null | undefined) ?? null,
     appointmentId: (data["appointmentId"] as string | null | undefined) ?? null,
@@ -133,6 +161,17 @@ export function applicationSnapshot(a: Application): Snapshot {
           expiresAt: a.offer.expiresAt.toISOString(),
         }
       : null,
+    // only once someone booked, so older audit entries and tests keep their shape
+    ...(Object.keys(a.interviews).length > 0
+      ? {
+          interviews: Object.fromEntries(
+            Object.entries(a.interviews).map(([c, b]) => [
+              c,
+              b.attendance ? `${b.slotId}:${b.attendance}` : b.slotId,
+            ]),
+          ),
+        }
+      : {}),
     portfolio: a.portfolio ? a.portfolio.name : null,
     pacts: a.pacts.map((p) => p.name),
     appointmentId: a.appointmentId,
@@ -149,7 +188,8 @@ const applicationDoc = (a: Application) => ({
   portfolio: a.portfolio,
   revisionRound: a.revisionRound,
   offer: a.offer,
-  interview: a.interview,
+  interviews: a.interviews,
+  interviewChanged: a.interviewChanged,
   pacts: a.pacts,
   pactNote: a.pactNote,
   appointmentId: a.appointmentId,
@@ -179,6 +219,7 @@ const listRevisions = async (
 };
 
 function toSlot(id: string, data: Record<string, unknown>): InterviewSlot {
+  const location = data["location"] as string;
   return {
     id,
     recruitmentId: data["recruitmentId"] as string,
@@ -186,9 +227,34 @@ function toSlot(id: string, data: Record<string, unknown>): InterviewSlot {
     durationMinutes: data["durationMinutes"] as number,
     capacity: data["capacity"] as number,
     booked: data["booked"] as number,
-    location: data["location"] as string,
+    location,
+    // A slot from before step 11.5 has no mode: a link is online, an address on site.
+    mode:
+      (data["mode"] as SlotMode | undefined) ??
+      (!location || /^https?:/i.test(location) ? "online" : "onsite"),
+    note: (data["note"] as string | undefined) ?? "",
+    interviewerUid: (data["interviewerUid"] as string | null | undefined) ?? null,
+    orgUnitId: (data["orgUnitId"] as string | null | undefined) ?? null,
+    timeZone: (data["timeZone"] as string | undefined) ?? "UTC",
+    bookingCutoffHours: (data["bookingCutoffHours"] as number | undefined) ?? DEFAULT_CUTOFF_HOURS,
+    version: (data["version"] as number | undefined) ?? 1,
     deletedAt: toDate(data["deletedAt"]),
   };
+}
+
+const bump = (a: Application, now: Date, patch: Partial<Application>): Application => ({
+  ...a,
+  ...patch,
+  version: a.version + 1,
+  updatedAt: now,
+});
+
+/** One booked interview with the time it is booked on (reminders). */
+export interface InterviewBooking {
+  readonly application: Application;
+  readonly choiceId: string;
+  readonly booking: Booking;
+  readonly slot: InterviewSlot;
 }
 
 const listSlots = async (slots: CollectionReference, recruitmentId: string) => {
@@ -390,6 +456,7 @@ export function createSqlApplicationStore(db: Database) {
   const applications = db.collection("applications");
   const revisions = db.collection("applicationRevisions");
   const counters = db.collection("seatCounters");
+  const slots = db.collection("interviewSlots");
   const auditLog = createSqlAuditWriter(db);
 
   return {
@@ -403,14 +470,81 @@ export function createSqlApplicationStore(db: Database) {
         .sort((a, b) => submittedTime(a) - submittedTime(b));
     },
 
-    async interviewsBetween(from: Date, to: Date): Promise<Application[]> {
-      const snapshot = await applications
-        .where("interview.startsAt", ">=", from)
-        .where("interview.startsAt", "<", to)
+    /** Bookings of applicants still in `interview` on a time in [from, to) that is not recorded yet. */
+    async bookingsBetween(from: Date, to: Date): Promise<InterviewBooking[]> {
+      const found = await slots.where("startsAt", ">=", from).where("startsAt", "<", to).get();
+      const live = new Map(
+        found.docs
+          .map((doc) => toSlot(doc.id, doc.data()))
+          .filter((slot) => !slot.deletedAt && slot.booked > 0)
+          .map((slot) => [slot.id, slot]),
+      );
+      if (live.size === 0) return [];
+      const rows = await applications
+        .where("recruitmentId", "in", [...new Set([...live.values()].map((s) => s.recruitmentId))])
         .get();
-      return snapshot.docs
+      return rows.docs
         .map((doc) => toApplication(doc.id, doc.data()))
-        .filter((a) => a.status === "interview");
+        .filter((application) => application.status === "interview")
+        .flatMap((application) =>
+          Object.entries(application.interviews).flatMap(([choiceId, booking]) => {
+            const slot = live.get(booking.slotId);
+            return slot && booking.attendance === null
+              ? [{ application, choiceId, booking, slot }]
+              : [];
+          }),
+        );
+    },
+
+    /** The committee, or the interviewer of that very time, records who came. */
+    markAttendance(
+      id: string,
+      choiceId: string,
+      mark: { attendance: Attendance; note: string; version: number },
+      by: { uid: string; review: boolean },
+      audit: ApplicationAudit,
+      now: Date,
+    ): Promise<Application> {
+      const ref = applications.doc(safeId.parse(id));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) throw new RuleViolationError("This application does not exist.");
+        const current = toApplication(snapshot.id, snapshot.data() as Record<string, unknown>);
+        const booking = current.interviews[choiceId];
+        if (!booking) throw new RuleViolationError("No interview is booked for this choice.");
+        const [slot, recruitment] = await Promise.all([
+          tx.get(slots.doc(booking.slotId)),
+          tx.get(recruitments.doc(current.recruitmentId)),
+        ]);
+        if (!by.review && slot.get("interviewerUid") !== by.uid) {
+          throw new RuleViolationError("Only the interviewer of this time records it.");
+        }
+        if (current.version !== mark.version) {
+          throw new ConcurrencyConflictError("applications version changed");
+        }
+        const next = bump(current, now, {
+          interviews: {
+            ...current.interviews,
+            [choiceId]: {
+              ...booking,
+              attendance: mark.attendance,
+              attendanceNote: mark.note || null,
+            },
+          },
+        });
+        const log = await auditLog.begin(tx);
+        tx.set(ref, applicationDoc(next));
+        log.append(
+          audit(
+            applicationSnapshot(current),
+            applicationSnapshot(next),
+            current,
+            next,
+            (recruitment.get("title") as string | undefined) ?? "",
+          ),
+        );
+        return next;
+      });
     },
 
     async get(id: string): Promise<Application | null> {
@@ -610,16 +744,33 @@ export type SqlApplicationStore = ReturnType<typeof createSqlApplicationStore>;
 export function createSqlInterviewStore(db: Database) {
   const slots = db.collection("interviewSlots");
   const recruitments = db.collection("recruitments");
+  const applications = db.collection("applications");
   const auditLog = createSqlAuditWriter(db);
+
+  // Applications of the slot's recruitment holding a booking on it (read before any write).
+  const bookedOn = async (tx: Transaction, slot: InterviewSlot) =>
+    (await tx.get(applications.where("recruitmentId", "==", slot.recruitmentId))).docs
+      .map((doc) => toApplication(doc.id, doc.data()))
+      .filter((a) => Object.values(a.interviews).some((b) => b.slotId === slot.id));
 
   return {
     listForRecruitment: (recruitmentId: string) => listSlots(slots, recruitmentId),
 
+    async get(id: string): Promise<InterviewSlot | null> {
+      if (!safeId.safeParse(id).success) return null;
+      const snapshot = await slots.doc(id).get();
+      return snapshot.exists
+        ? toSlot(snapshot.id, snapshot.data() as Record<string, unknown>)
+        : null;
+    },
+
+    /** `owner`: who opens the times and for which unit; absent = a committee plan. */
     createPlan(
       recruitmentId: string,
       plan: SlotPlan,
       audit: (created: readonly InterviewSlot[], title: string) => AuditEvent,
       now: Date,
+      owner: { interviewerUid: string; orgUnitId: string } | null = null,
     ): Promise<InterviewSlot[]> {
       return db.runTransaction(async (tx) => {
         const r = await tx.get(recruitments.doc(safeId.parse(recruitmentId)));
@@ -636,6 +787,13 @@ export function createSqlInterviewStore(db: Database) {
             capacity: plan.capacity,
             booked: 0,
             location: plan.location,
+            mode: plan.mode,
+            note: plan.note,
+            interviewerUid: owner?.interviewerUid ?? null,
+            orgUnitId: owner?.orgUnitId ?? null,
+            timeZone: plan.timeZone,
+            bookingCutoffHours: plan.bookingCutoffHours,
+            version: 1,
             deletedAt: null,
           }));
         if (created.length === 0)
@@ -644,6 +802,83 @@ export function createSqlInterviewStore(db: Database) {
         for (const { id, ...slot } of created) tx.create(slots.doc(id), slot);
         log.append(audit(created, r.get("title") as string));
         return created;
+      });
+    },
+
+    /**
+     * A booked time keeps its time, length and bookings; link, address and note change. Only a real
+     * change is saved (version + 1); `notify` says an applicant has something to be told.
+     */
+    update(
+      id: string,
+      change: Omit<SlotChange, "id">,
+      audit: (before: InterviewSlot, after: InterviewSlot) => AuditEvent,
+    ): Promise<{
+      before: InterviewSlot;
+      after: InterviewSlot;
+      changed: boolean;
+      applications: Application[];
+    }> {
+      const ref = slots.doc(safeId.parse(id));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        const before = snapshot.exists
+          ? toSlot(snapshot.id, snapshot.data() as Record<string, unknown>)
+          : null;
+        if (!before || before.deletedAt) {
+          throw new RuleViolationError("This interview time does not exist.");
+        }
+        assertSlotEdit(before, change);
+        const patch = Object.fromEntries(
+          Object.entries(change).filter(
+            ([key, value]) =>
+              value !== undefined &&
+              (value instanceof Date
+                ? value.getTime() !== (before[key as keyof InterviewSlot] as Date).getTime()
+                : value !== before[key as keyof InterviewSlot]),
+          ),
+        );
+        if (Object.keys(patch).length === 0) {
+          return { before, after: before, changed: false, applications: [] };
+        }
+        const after: InterviewSlot = { ...before, ...patch, version: before.version + 1 };
+        const booked =
+          before.booked > 0 && slotNoticeChanged(before, after) ? await bookedOn(tx, before) : [];
+        const log = await auditLog.begin(tx);
+        tx.update(ref, { ...patch, version: after.version });
+        log.append(audit(before, after));
+        return { before, after, changed: true, applications: booked };
+      });
+    },
+
+    /** The interviewer (or committee) cancels a time: its bookings go, no change is spent. */
+    cancel(
+      id: string,
+      audit: (slot: InterviewSlot, cancelled: number) => AuditEvent,
+      now: Date,
+    ): Promise<{ slot: InterviewSlot; applications: Application[] }> {
+      const ref = slots.doc(safeId.parse(id));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        const slot = snapshot.exists
+          ? toSlot(snapshot.id, snapshot.data() as Record<string, unknown>)
+          : null;
+        if (!slot || slot.deletedAt) {
+          throw new RuleViolationError("This interview time does not exist.");
+        }
+        const booked = slot.booked > 0 ? await bookedOn(tx, slot) : [];
+        const log = await auditLog.begin(tx);
+        const freed = booked.map((a) =>
+          bump(a, now, {
+            interviews: Object.fromEntries(
+              Object.entries(a.interviews).filter(([, b]) => b.slotId !== slot.id),
+            ),
+          }),
+        );
+        tx.update(ref, { deletedAt: now, booked: 0 });
+        for (const a of freed) tx.set(applications.doc(a.id), applicationDoc(a));
+        log.append(audit(slot, freed.length));
+        return { slot, applications: booked };
       });
     },
 
@@ -714,6 +949,7 @@ export function createSqlRecruitmentWebStore(db: Database) {
   const revisions = db.collection("applicationRevisions");
   const counters = db.collection("seatCounters");
   const slotsCollection = db.collection("interviewSlots");
+  const orgUnits = db.collection("orgUnits");
   const auditLog = createSqlAuditWriter(db);
 
   const readRecruitment = async (tx: Transaction, id: string) => {
@@ -775,7 +1011,8 @@ export function createSqlRecruitmentWebStore(db: Database) {
       portfolio: null,
       revisionRound: 0,
       offer: null,
-      interview: null,
+      interviews: {},
+      interviewChanged: [],
       pacts: [],
       pactNote: null,
       appointmentId: null,
@@ -784,13 +1021,6 @@ export function createSqlRecruitmentWebStore(db: Database) {
       createdAt: now,
       updatedAt: now,
     };
-
-  const bump = (a: Application, now: Date, patch: Partial<Application>): Application => ({
-    ...a,
-    ...patch,
-    version: a.version + 1,
-    updatedAt: now,
-  });
 
   return {
     async listPublished(): Promise<Recruitment[]> {
@@ -980,9 +1210,23 @@ export function createSqlRecruitmentWebStore(db: Database) {
 
     slots: (recruitmentId: string) => listSlots(slotsCollection, recruitmentId),
 
+    /** The ancestors of each unit (an interview time is offered to the units below its unit). */
+    async unitPaths(ids: readonly string[]): Promise<Map<string, readonly string[]>> {
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "orgUnits", [
+        ...new Set(ids),
+      ]);
+      return new Map(
+        [...found].flatMap(([id, data]) =>
+          data ? [[id, (data["path"] as string[] | undefined) ?? []] as const] : [],
+        ),
+      );
+    },
+
+    /** One booking per chosen unit; a second booking for the same unit is the one allowed change. */
     bookInterview(
       recruitmentId: string,
       uid: string,
+      choiceId: string,
       slotId: string,
       now: Date,
     ): Promise<ApplyOutcome> {
@@ -991,13 +1235,22 @@ export function createSqlRecruitmentWebStore(db: Database) {
         if (!r) return { ok: false, error: "closed" };
         const ref = applications.doc(applicationId(r.id, safeId.parse(uid)));
         const newRef = slotsCollection.doc(safeId.parse(slotId));
-        const [snapshot, chosen] = await Promise.all([tx.get(ref), tx.get(newRef)]);
+        const unitRef = orgUnits.doc(safeId.parse(choiceId));
+        const [snapshot, chosen, unit] = await Promise.all([
+          tx.get(ref),
+          tx.get(newRef),
+          tx.get(unitRef),
+        ]);
         const current = snapshot.exists
           ? toApplication(snapshot.id, snapshot.data() as Record<string, unknown>)
           : null;
         if (!current || current.status !== "interview") return { ok: false, error: "locked" };
-        if (current.interview?.slotId === slotId) return { ok: true, application: current };
-        const oldRef = current.interview ? slotsCollection.doc(current.interview.slotId) : null;
+        if (!current.choices.includes(choiceId)) {
+          return { ok: false, error: "refused", message: "You did not choose this unit." };
+        }
+        const existing = current.interviews[choiceId];
+        if (existing?.slotId === slotId) return { ok: true, application: current };
+        const oldRef = existing ? slotsCollection.doc(existing.slotId) : null;
         const old = oldRef ? await tx.get(oldRef) : null;
         const found = chosen.exists
           ? toSlot(chosen.id, chosen.data() as Record<string, unknown>)
@@ -1005,14 +1258,90 @@ export function createSqlRecruitmentWebStore(db: Database) {
         let slot: InterviewSlot;
         try {
           slot = assertBookable(found?.recruitmentId === r.id ? found : null, now);
+          if (existing) {
+            assertBookingChangeable(
+              existing,
+              old?.exists
+                ? toSlot(old.id, old.data() as Record<string, unknown>).bookingCutoffHours
+                : DEFAULT_CUTOFF_HOURS,
+              current.interviewChanged.includes(choiceId),
+              now,
+            );
+          }
+          if (!slotOffered(slot, choiceId, (unit.get("path") as string[] | undefined) ?? [])) {
+            throw new RuleViolationError("This interview time is not offered for this choice.");
+          }
         } catch (error) {
           return { ok: false, error: "refused", message: (error as Error).message };
         }
-        const next = bump(current, now, { interview: { slotId, startsAt: slot.startsAt } });
+        const next = bump(current, now, {
+          interviews: {
+            ...current.interviews,
+            [choiceId]: {
+              slotId,
+              startsAt: slot.startsAt,
+              attendance: null,
+              attendanceNote: null,
+            },
+          },
+          interviewChanged: existing
+            ? [...new Set([...current.interviewChanged, choiceId])]
+            : current.interviewChanged,
+        });
         const log = await auditLog.begin(tx);
         tx.set(ref, applicationDoc(next));
         tx.update(newRef, { booked: slot.booked + 1 });
         if (oldRef && old?.exists) {
+          tx.update(oldRef, { booked: Math.max(0, (old.get("booked") as number) - 1) });
+        }
+        log.append(applicantAudit(uid, now, r.title, current, next));
+        return { ok: true, application: next };
+      });
+    },
+
+    /** Cancelling spends the one change of that choice, like moving the booking does. */
+    cancelInterview(
+      recruitmentId: string,
+      uid: string,
+      choiceId: string,
+      now: Date,
+    ): Promise<ApplyOutcome> {
+      return db.runTransaction(async (tx): Promise<ApplyOutcome> => {
+        const r = await readRecruitment(tx, recruitmentId);
+        if (!r) return { ok: false, error: "closed" };
+        const ref = applications.doc(applicationId(r.id, safeId.parse(uid)));
+        const snapshot = await tx.get(ref);
+        const current = snapshot.exists
+          ? toApplication(snapshot.id, snapshot.data() as Record<string, unknown>)
+          : null;
+        if (!current || current.status !== "interview") return { ok: false, error: "locked" };
+        const existing = current.interviews[choiceId];
+        if (!existing) {
+          return { ok: false, error: "refused", message: "There is no interview to cancel." };
+        }
+        const oldRef = slotsCollection.doc(existing.slotId);
+        const old = await tx.get(oldRef);
+        try {
+          assertBookingChangeable(
+            existing,
+            old.exists
+              ? toSlot(old.id, old.data() as Record<string, unknown>).bookingCutoffHours
+              : DEFAULT_CUTOFF_HOURS,
+            current.interviewChanged.includes(choiceId),
+            now,
+          );
+        } catch (error) {
+          return { ok: false, error: "refused", message: (error as Error).message };
+        }
+        const next = bump(current, now, {
+          interviews: Object.fromEntries(
+            Object.entries(current.interviews).filter(([c]) => c !== choiceId),
+          ),
+          interviewChanged: [...new Set([...current.interviewChanged, choiceId])],
+        });
+        const log = await auditLog.begin(tx);
+        tx.set(ref, applicationDoc(next));
+        if (old.exists) {
           tx.update(oldRef, { booked: Math.max(0, (old.get("booked") as number) - 1) });
         }
         log.append(applicantAudit(uid, now, r.title, current, next));

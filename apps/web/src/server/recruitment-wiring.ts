@@ -2,10 +2,16 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
-import { createSqlPersonalityStore, createSqlRecruitmentWebStore } from "@website/db/sql";
+import {
+  createSqlContactReader,
+  createSqlPersonalityStore,
+  createSqlRecruitmentWebStore,
+} from "@website/db/sql";
 import type { Recruitment } from "@website/domain/recruitment";
 import { webDb, webStorage } from "./db";
-import { getWebEnv } from "./env";
+import { getAppUrls, getWebEnv } from "./env";
+import { createBookedNotice } from "./interview-notice";
+import { messenger } from "./messaging";
 import { hasCompleteProfile, hasStudentProof } from "./profile-wiring";
 import { createPersonalityTest } from "./personality";
 import { createApplying } from "./recruitment";
@@ -24,6 +30,11 @@ export const applying = lazyEnv(() =>
     store: recruitmentStore(),
     profileComplete: hasCompleteProfile,
     hasProof: hasStudentProof,
+    notifyBooked: createBookedNotice({
+      contacts: (uids) => createSqlContactReader(webDb()).contacts(uids),
+      send: (message, key) => messenger().send(message, key),
+      adminUrl: getAppUrls().ADMIN_URL ?? "",
+    }).booked,
     storage: {
       save: (path, bytes, options) => webStorage().save(path, bytes, options),
       remove: (path) => webStorage().remove(path),

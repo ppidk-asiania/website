@@ -4,6 +4,13 @@ import type { Answers, FileAnswer, Question } from "../forms";
 import { TimezoneSchema } from "../members/profile";
 import { APPOINTMENT_SEATS, type AppointmentSeat } from "../organizations";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
+import {
+  bookingOpen,
+  DEFAULT_CUTOFF_HOURS,
+  SLOT_MODES,
+  type Attendance,
+  type SlotMode,
+} from "./interviews";
 
 export const APPLICATION_STATUSES = [
   "draft",
@@ -96,6 +103,9 @@ export interface Recruitment extends EntityMeta {
 export interface Booking {
   readonly slotId: string;
   readonly startsAt: Date;
+  /** Recorded after the interview (step 11.5); null until then. */
+  readonly attendance: Attendance | null;
+  readonly attendanceNote: string | null;
 }
 
 export interface Offer {
@@ -117,7 +127,10 @@ export interface Application {
   readonly portfolio: FileAnswer | null;
   readonly revisionRound: number;
   readonly offer: Offer | null;
-  readonly interview: Booking | null;
+  /** One interview per chosen unit (step 11.5), keyed by the unit id. */
+  readonly interviews: Readonly<Record<string, Booking>>;
+  /** Choices whose booking was already changed or cancelled once. */
+  readonly interviewChanged: readonly string[];
   readonly pacts: readonly FileAnswer[];
   readonly pactNote: string | null;
   readonly appointmentId: string | null;
@@ -389,7 +402,18 @@ export interface InterviewSlot {
   readonly durationMinutes: number;
   readonly capacity: number;
   readonly booked: number;
+  /** The online link or the address, by `mode`. */
   readonly location: string;
+  readonly mode: SlotMode;
+  readonly note: string;
+  /** The interviewer who opened the slot; null = a committee slot. */
+  readonly interviewerUid: string | null;
+  /** Offered to applicants of this unit and every unit below; null = every applicant. */
+  readonly orgUnitId: string | null;
+  readonly timeZone: string;
+  readonly bookingCutoffHours: number;
+  /** Bumped by every real change; part of the "slot changed" notice key. */
+  readonly version: number;
   readonly deletedAt: Date | null;
 }
 
@@ -415,6 +439,9 @@ export const SlotPlanSchema = z
       .max(10),
     capacity: z.number().int().min(1).max(50),
     location: safeText(500, { allowEmpty: true }),
+    mode: z.enum(SLOT_MODES).default("online"),
+    note: safeText(500, { allowEmpty: true }).default(""),
+    bookingCutoffHours: z.number().int().min(0).max(168).default(DEFAULT_CUTOFF_HOURS),
   })
   .strict()
   .refine((p) => minutesOf(p.endTime) > minutesOf(p.startTime), {
@@ -446,7 +473,7 @@ export function slotTimes(plan: SlotPlan): Date[] {
 }
 
 export function canBook(slot: InterviewSlot, now: Date): boolean {
-  return slot.deletedAt === null && slot.startsAt > now && slot.booked < slot.capacity;
+  return slot.deletedAt === null && bookingOpen(slot, now) && slot.booked < slot.capacity;
 }
 
 export function assertBookable(slot: InterviewSlot | null, now: Date): InterviewSlot {
@@ -454,7 +481,11 @@ export function assertBookable(slot: InterviewSlot | null, now: Date): Interview
     throw new RuleViolationError("This interview time is no longer available.");
   }
   if (slot.booked >= slot.capacity) throw new RuleViolationError("This interview time is full.");
+  if (!bookingOpen(slot, now)) {
+    throw new RuleViolationError("Booking for this interview time has closed.");
+  }
   return slot;
 }
 export * from "./personality";
 export * from "./analysis";
+export * from "./interviews";

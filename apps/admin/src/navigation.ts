@@ -17,6 +17,8 @@ export interface NavItem {
 interface NavEntry extends NavItem {
   readonly permission: PagePermission | null;
   readonly also?: readonly AdminPageId[];
+  /** Shown only to people with an interview scope (a seat or the extra), whatever their pages. */
+  readonly interviewer?: true;
 }
 
 export const ADMIN_NAVIGATION: readonly NavEntry[] = [
@@ -40,6 +42,13 @@ export const ADMIN_NAVIGATION: readonly NavEntry[] = [
     label: "Recruitment",
     href: "/recruitment",
     permission: "recruitment.read",
+  },
+  {
+    group: "Organization",
+    label: "My interview times",
+    href: "/interviews",
+    permission: null,
+    interviewer: true,
   },
   {
     group: "Organization",
@@ -72,9 +81,11 @@ export const ADMIN_NAVIGATION: readonly NavEntry[] = [
   { group: "Administration", label: "Email", href: "/emails", permission: "messages.read" },
 ];
 
-export function navigationFor(principal: Principal): NavItem[] {
+export function navigationFor(principal: Principal, interviewer = false): NavItem[] {
   if (!canAccessAdmin(principal)) return [];
-  return ADMIN_NAVIGATION.filter(
-    (entry) => entry.permission === null || canInSomeScope(principal, entry.permission),
+  return ADMIN_NAVIGATION.filter((entry) =>
+    entry.interviewer
+      ? interviewer
+      : entry.permission === null || canInSomeScope(principal, entry.permission),
   ).map(({ group, label, href }) => ({ group, label, href }));
 }

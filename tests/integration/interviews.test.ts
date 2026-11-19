@@ -5,10 +5,18 @@ import {
   createSqlRecruitmentStore,
   createSqlRecruitmentWebStore,
 } from "@website/db/sql";
+import { interviewScope } from "@website/domain/recruitment";
+import type { ActiveSeat } from "@website/domain/organizations";
 import { utcToWallTime } from "@website/domain/shared";
 import { normalizePermissions, type Principal } from "@website/permissions";
 import { createApplicationActions } from "../../apps/admin/src/server/applications";
-import { createInterviewActions } from "../../apps/admin/src/server/interviews";
+import {
+  createInterviewActions,
+  createInterviewNotices,
+  createInterviewReads,
+  createInterviewReminders,
+} from "../../apps/admin/src/server/interviews";
+import { createBookedNotice } from "../../apps/web/src/server/interview-notice";
 import { createRecruitmentActions } from "../../apps/admin/src/server/recruitment";
 import { createApplying } from "../../apps/web/src/server/recruitment";
 import { fakeDb } from "../support/fake-db";
@@ -16,9 +24,9 @@ import { noRatification } from "../support/recruitment";
 
 type Db = Parameters<typeof createSqlInterviewStore>[0];
 let clock = new Date("2026-11-10T05:00:00Z");
-const staff = (permissions: string[]): Principal => ({
+const staff = (permissions: string[], userId = "committee-1"): Principal => ({
   kind: "user",
-  userId: "committee-1",
+  userId,
   active: true,
   assignments: [
     {
@@ -35,11 +43,69 @@ const as = (principal: Principal) => [() => Promise.resolve(principal), context]
 
 let fake: ReturnType<typeof fakeDb>;
 const db = () => fake.db as unknown as Db;
+const units = [
+  { id: "dir", path: [] },
+  { id: "finance", path: ["dir"] },
+  { id: "media", path: ["dir"] },
+];
+const seat = (orgUnitId: string, unitType: ActiveSeat["unitType"], kind: ActiveSeat["seat"]) =>
+  ({
+    orgUnitId,
+    orgUnitPath: [...(units.find((u) => u.id === orgUnitId)?.path ?? []), orgUnitId],
+    unitType,
+    seat: kind,
+  }) satisfies ActiveSeat;
+const seats: Record<string, ActiveSeat[]> = {
+  "head-fin": [seat("finance", "divisi", "head")],
+  "head-dir": [seat("dir", "direktorat", "head")],
+  "member-fin": [seat("finance", "divisi", "member")],
+};
+const scopeOf = (uid: string) =>
+  Promise.resolve(
+    interviewScope({
+      seats: seats[uid] ?? [],
+      units,
+      review: uid === "committee-1",
+      granted: uid === "granted-media" ? ["media"] : [],
+    }),
+  );
+// an officer who only holds a seat: no recruitment permission at all
+const holder = (uid: string) => staff(["calendar.read"], uid);
+const sent: Array<{ key: string; to: string | null; text: string }> = [];
+const send = (message: { to: string | null; text: string }, key: string) => {
+  if (sent.some((m) => m.key === key)) return Promise.resolve("duplicate" as const);
+  sent.push({ key, to: message.to, text: message.text });
+  return Promise.resolve("sent" as const);
+};
+const contacts = (uids: readonly string[]) =>
+  Promise.resolve(
+    new Map(
+      uids.map((u) => [u, { email: `${u}@x.org`, phone: null, timeZone: "Asia/Jakarta" }] as const),
+    ),
+  );
+const notices = () =>
+  createInterviewNotices({
+    contacts,
+    send,
+    webUrl: "https://web.example",
+    adminUrl: "https://admin.example",
+  });
 const interviews = () =>
-  createInterviewActions({ interviews: createSqlInterviewStore(db()), now: () => clock });
+  createInterviewActions({
+    interviews: createSqlInterviewStore(db()),
+    applications: createSqlApplicationStore(db()),
+    scope: scopeOf,
+    notices: notices(),
+    now: () => clock,
+  });
 const web = () => createSqlRecruitmentWebStore(db());
 const applying = () =>
   createApplying({
+    notifyBooked: createBookedNotice({
+      contacts,
+      send,
+      adminUrl: "https://admin.example",
+    }).booked,
     store: web(),
     profileComplete: () => Promise.resolve(true),
     hasProof: () => Promise.resolve(true),
@@ -62,8 +128,8 @@ const plan = {
 const slots = () => createSqlInterviewStore(db()).listForRecruitment(recruitmentId);
 const booked = (id: string) => fake.docs.get(`interviewSlots/${id}`)?.["booked"];
 
-const inInterview = async (uid: string) => {
-  await applying().saveDraft({ uid }, { recruitmentId, choices: ["finance"], answers: {} });
+const inInterview = async (uid: string, choices = ["finance"]) => {
+  await applying().saveDraft({ uid }, { recruitmentId, choices, answers: {} });
   await applying().submit({ uid }, { recruitmentId });
   const version = fake.docs.get(`applications/${recruitmentId}_${uid}`)?.["version"] as number;
   await createApplicationActions({
@@ -77,8 +143,29 @@ const inInterview = async (uid: string) => {
 beforeEach(async () => {
   clock = new Date("2026-11-10T05:00:00Z");
   fake = fakeDb();
+  sent.length = 0;
   fake.docs.set("periods/p2026", { name: "2026/2027", status: "active", deletedAt: null });
-  fake.docs.set("orgUnits/finance", { periodId: "p2026", name: "Keuangan", deletedAt: null });
+  fake.docs.set("orgUnits/dir", {
+    periodId: "p2026",
+    name: "Direktorat",
+    type: "direktorat",
+    path: [],
+    deletedAt: null,
+  });
+  fake.docs.set("orgUnits/finance", {
+    periodId: "p2026",
+    name: "Keuangan",
+    type: "divisi",
+    path: ["dir"],
+    deletedAt: null,
+  });
+  fake.docs.set("orgUnits/media", {
+    periodId: "p2026",
+    name: "Media",
+    type: "divisi",
+    path: ["dir"],
+    deletedAt: null,
+  });
   fake.docs.set("forms/form1", { usage: "recruitment", currentVersion: 1, deletedAt: null });
   fake.docs.set("formVersions/form1_1", {
     formId: "form1",
@@ -97,10 +184,13 @@ beforeEach(async () => {
     description: "",
     opensAt: "2026-11-01T00:00:00.000Z",
     closesAt: "2026-11-20T00:00:00.000Z",
-    maxChoices: 1,
+    maxChoices: 2,
     offerDays: 3,
     formId: "form1",
-    units: [{ orgUnitId: "finance", quota: 3, portfolioRequired: false }],
+    units: [
+      { orgUnitId: "finance", quota: 3, portfolioRequired: false },
+      { orgUnitId: "media", quota: 3, portfolioRequired: false },
+    ],
     version: null,
   });
   recruitmentId = created.ok ? created.data.id : "";
@@ -156,14 +246,26 @@ describe("booking an interview (applicant in `interview`)", () => {
       { recruitmentId, choices: ["finance"], answers: {} },
     );
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: first!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: first!.id },
+      ),
     ).toEqual({ ok: false, error: "locked" });
-    expect(await applying().bookInterview(null, { recruitmentId, slotId: first!.id })).toEqual({
+    expect(
+      await applying().bookInterview(null, {
+        recruitmentId,
+        choiceId: "finance",
+        slotId: first!.id,
+      }),
+    ).toEqual({
       ok: false,
       error: "signin",
     });
     expect(
-      await applying().bookInterview({ uid: "nobody" }, { recruitmentId, slotId: first!.id }),
+      await applying().bookInterview(
+        { uid: "nobody" },
+        { recruitmentId, choiceId: "finance", slotId: first!.id },
+      ),
     ).toEqual({ ok: false, error: "locked" });
     expect(await interviews().removeSlot(...as(reviewer))({ id: "nope" })).toMatchObject({
       error: "refused",
@@ -172,7 +274,7 @@ describe("booking an interview (applicant in `interview`)", () => {
     expect(
       await applying().bookInterview(
         { uid: "ari" },
-        { recruitmentId: "missing", slotId: first!.id },
+        { recruitmentId: "missing", choiceId: "finance", slotId: first!.id },
       ),
     ).toEqual({ ok: false, error: "closed" });
   });
@@ -182,7 +284,10 @@ describe("booking an interview (applicant in `interview`)", () => {
     for (const uid of ["ari", "budi", "cici"]) await inInterview(uid);
     const results = await Promise.all(
       ["ari", "budi", "cici"].map((uid) =>
-        applying().bookInterview({ uid }, { recruitmentId, slotId: first!.id }),
+        applying().bookInterview(
+          { uid },
+          { recruitmentId, choiceId: "finance", slotId: first!.id },
+        ),
       ),
     );
     expect(results.filter((r) => r.ok)).toHaveLength(1);
@@ -197,19 +302,32 @@ describe("booking an interview (applicant in `interview`)", () => {
     const [first, second] = await slots();
     await inInterview("ari");
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: first!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: first!.id },
+      ),
     ).toMatchObject({ ok: true });
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: first!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: first!.id },
+      ),
     ).toMatchObject({ ok: true });
     expect(booked(first!.id)).toBe(1);
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: second!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: second!.id },
+      ),
     ).toMatchObject({ ok: true });
     expect([booked(first!.id), booked(second!.id)]).toEqual([0, 1]);
-    expect((await web().ownApplication(recruitmentId, "ari"))?.interview).toEqual({
-      slotId: second!.id,
-      startsAt: second!.startsAt,
+    expect((await web().ownApplication(recruitmentId, "ari"))?.interviews).toEqual({
+      finance: {
+        slotId: second!.id,
+        startsAt: second!.startsAt,
+        attendance: null,
+        attendanceNote: null,
+      },
     });
     expect(await interviews().removeSlot(...as(reviewer))({ id: second!.id })).toMatchObject({
       error: "refused",
@@ -223,7 +341,10 @@ describe("booking an interview (applicant in `interview`)", () => {
       error: "refused",
     });
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: first!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: first!.id },
+      ),
     ).toEqual({
       ok: false,
       error: "refused",
@@ -239,20 +360,359 @@ describe("booking an interview (applicant in `interview`)", () => {
       recruitmentId: "other",
     });
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: "foreign" }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: "foreign" },
+      ),
     ).toMatchObject({ ok: false, error: "refused" });
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: "nope" }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: "nope" },
+      ),
     ).toMatchObject({ ok: false, error: "refused" });
-    await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: first!.id });
+    await applying().bookInterview(
+      { uid: "ari" },
+      { recruitmentId, choiceId: "finance", slotId: first!.id },
+    );
     fake.docs.delete(`interviewSlots/${first!.id}`);
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: second!.id }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: second!.id },
+      ),
     ).toMatchObject({ ok: true });
     expect((await web().slots(recruitmentId)).map((s) => s.id)).toEqual([second!.id]);
     clock = new Date("2026-11-15T00:30:00Z");
     expect(
-      await applying().bookInterview({ uid: "ari" }, { recruitmentId, slotId: "foreign" }),
+      await applying().bookInterview(
+        { uid: "ari" },
+        { recruitmentId, choiceId: "finance", slotId: "foreign" },
+      ),
     ).toMatchObject({ ok: false, error: "refused" });
+  });
+});
+
+const mine = (orgUnitId: string, overrides: Record<string, unknown> = {}) => ({
+  recruitmentId,
+  orgUnitId,
+  plan: { ...plan, location: "https://meet.example/fin", note: "Bring your CV", ...overrides },
+});
+const applicationOf = (uid: string) => fake.docs.get(`applications/${recruitmentId}_${uid}`);
+const book = (uid: string, choiceId: string, slotId: string) =>
+  applying().bookInterview({ uid }, { recruitmentId, choiceId, slotId });
+const cancel = (uid: string, choiceId: string) =>
+  applying().cancelInterview({ uid }, { recruitmentId, choiceId });
+const slotOf = (id: string) => fake.docs.get(`interviewSlots/${id}`);
+
+describe("interviewers open their own times", () => {
+  it("a division head (seat only, no recruitment permission) opens slots for the own unit", async () => {
+    const result = await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    expect(result).toEqual({ ok: true, data: { created: 2 } });
+    const [first] = await slots();
+    expect(first).toMatchObject({
+      interviewerUid: "head-fin",
+      orgUnitId: "finance",
+      timeZone: "Asia/Tokyo",
+      mode: "online",
+      location: "https://meet.example/fin",
+      note: "Bring your CV",
+      capacity: 1,
+      bookingCutoffHours: 12,
+      version: 1,
+    });
+    const entry = [...fake.docs.values()].find((d) => d["resourceType"] === "interviewSlot");
+    expect(entry).toMatchObject({ action: "CREATE", revertible: false });
+  });
+
+  it("refuses another unit, a member seat, and an account without any scope", async () => {
+    expect(await interviews().createMine(...as(holder("head-fin")))(mine("media"))).toMatchObject({
+      error: "refused",
+    });
+    expect(await interviews().createMine(...as(holder("member-fin")))(mine("finance"))).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+    expect(await interviews().createMine(...as(holder("nobody")))(mine("finance"))).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+    expect(await slots()).toEqual([]);
+  });
+
+  it("a directorate head opens slots for the directorate; recruitment.interview works too", async () => {
+    expect(await interviews().createMine(...as(holder("head-dir")))(mine("dir"))).toMatchObject({
+      ok: true,
+    });
+    const granted = staff(["recruitment.interview"], "granted-media");
+    expect(await interviews().createMine(...as(granted))(mine("media"))).toMatchObject({
+      ok: true,
+    });
+    expect(await interviews().createMine(...as(granted))(mine("finance"))).toMatchObject({
+      error: "refused",
+    });
+  });
+});
+
+describe("one interview per chosen unit", () => {
+  beforeEach(async () => {
+    await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    await interviews().createMine(...as(holder("head-dir")))(mine("dir"));
+  });
+  const slotsOfUnit = async (unit: string) => (await slots()).filter((s) => s.orgUnitId === unit);
+
+  it("books one time per choice and tells the interviewer once", async () => {
+    await inInterview("ari", ["finance", "media"]);
+    const [fin] = await slotsOfUnit("finance");
+    const [dir] = await slotsOfUnit("dir");
+    expect(await book("ari", "finance", fin!.id)).toMatchObject({ ok: true });
+    // the directorate's time serves the choice "media" (a unit below it)
+    expect(await book("ari", "media", dir!.id)).toMatchObject({ ok: true });
+    expect(Object.keys(applicationOf("ari")?.["interviews"] as object).sort()).toEqual([
+      "finance",
+      "media",
+    ]);
+    expect([booked(fin!.id), booked(dir!.id)]).toEqual([1, 1]);
+    expect(sent.map((m) => [m.key, m.to])).toEqual([
+      [`interview:${recruitmentId}_ari:booked:${fin!.id}`, "head-fin@x.org"],
+      [`interview:${recruitmentId}_ari:booked:${dir!.id}`, "head-dir@x.org"],
+    ]);
+    expect(sent[0]!.text).toContain("07:00");
+  });
+
+  it("refuses a time that is not offered for the choice, or a unit that was not chosen", async () => {
+    await inInterview("ari", ["finance", "media"]);
+    const [fin] = await slotsOfUnit("finance");
+    expect(await book("ari", "media", fin!.id)).toMatchObject({
+      ok: false,
+      error: "refused",
+      message: "This interview time is not offered for this choice.",
+    });
+    expect(await book("ari", "dir", fin!.id)).toMatchObject({ ok: false, error: "refused" });
+    expect(booked(fin!.id)).toBe(0);
+  });
+
+  it("a committee time (no unit) is offered for every choice", async () => {
+    await interviews().createPlan(...as(reviewer))({ recruitmentId, plan });
+    await inInterview("ari", ["finance", "media"]);
+    const open = (await slots()).find((s) => s.orgUnitId === null)!;
+    expect(await book("ari", "media", open.id)).toMatchObject({ ok: true });
+  });
+
+  it("lets an applicant change or cancel ONCE; the second change is refused", async () => {
+    await inInterview("ari");
+    const [a, b] = await slotsOfUnit("finance");
+    await book("ari", "finance", a!.id);
+    expect(await book("ari", "finance", b!.id)).toMatchObject({ ok: true });
+    expect(await book("ari", "finance", a!.id)).toEqual({
+      ok: false,
+      error: "refused",
+      message: "You can change or cancel an interview once.",
+    });
+    expect(await cancel("ari", "finance")).toMatchObject({ ok: false, error: "refused" });
+    expect([booked(a!.id), booked(b!.id)]).toEqual([0, 1]);
+  });
+
+  it("a cancel spends the one change; booking again afterwards is final", async () => {
+    await inInterview("ari");
+    const [a, b] = await slotsOfUnit("finance");
+    await book("ari", "finance", a!.id);
+    expect(await cancel("ari", "finance")).toMatchObject({ ok: true });
+    expect(booked(a!.id)).toBe(0);
+    expect(applicationOf("ari")?.["interviews"]).toEqual({});
+    expect(await book("ari", "finance", b!.id)).toMatchObject({ ok: true });
+    expect(await cancel("ari", "finance")).toMatchObject({ ok: false, error: "refused" });
+    expect(await cancel("ari", "media")).toMatchObject({ ok: false, error: "refused" });
+  });
+
+  it("never after the cut-off, for a new booking, a change or a cancel", async () => {
+    await inInterview("ari");
+    const [a, b] = await slotsOfUnit("finance");
+    await book("ari", "finance", a!.id);
+    clock = new Date("2026-11-14T13:00:00Z"); // 11 hours before 2026-11-15T00:00Z, cut-off 12 h
+    expect(await book("ari", "finance", b!.id)).toMatchObject({
+      ok: false,
+      error: "refused",
+      message: "Booking for this interview time has closed.",
+    });
+    expect(await cancel("ari", "finance")).toEqual({
+      ok: false,
+      error: "refused",
+      message: "The time to change this interview has closed.",
+    });
+    expect(booked(a!.id)).toBe(1);
+    await inInterview("budi");
+    expect(await book("budi", "finance", b!.id)).toEqual({
+      ok: false,
+      error: "refused",
+      message: "Booking for this interview time has closed.",
+    });
+  });
+
+  it("a recorded interview cannot be changed or cancelled", async () => {
+    await inInterview("ari");
+    const [a, b] = await slotsOfUnit("finance");
+    await book("ari", "finance", a!.id);
+    expect(
+      await interviews().markAttendance(...as(holder("head-fin")))({
+        id: `${recruitmentId}_ari`,
+        choiceId: "finance",
+        attendance: "attended",
+        note: "",
+        version: applicationOf("ari")?.["version"] as number,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await book("ari", "finance", b!.id)).toEqual({
+      ok: false,
+      error: "refused",
+      message: "This interview was recorded; it cannot be changed.",
+    });
+    expect(await cancel("ari", "finance")).toMatchObject({ ok: false, error: "refused" });
+  });
+
+  it("books under concurrency without passing the capacity", async () => {
+    const [a] = await slotsOfUnit("finance");
+    for (const uid of ["ari", "budi", "cici"]) await inInterview(uid);
+    const results = await Promise.all(
+      ["ari", "budi", "cici"].map((u) => book(u, "finance", a!.id)),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(booked(a!.id)).toBe(1);
+  });
+});
+
+describe("attendance (committee, or the interviewer of the slot)", () => {
+  beforeEach(async () => {
+    await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    await inInterview("ari");
+  });
+  const mark = (principal: Principal, attendance: "attended" | "absent", note = "") =>
+    interviews().markAttendance(...as(principal))({
+      id: `${recruitmentId}_ari`,
+      choiceId: "finance",
+      attendance,
+      note,
+      version: applicationOf("ari")?.["version"] as number,
+    });
+
+  it("refuses without a booking and for a stranger; records for the committee", async () => {
+    expect(await mark(reviewer, "attended")).toMatchObject({ error: "refused" });
+    const [a] = await slots();
+    await book("ari", "finance", a!.id);
+    expect(await mark(holder("head-dir"), "absent")).toMatchObject({ error: "refused" });
+    expect(await mark(staff(["recruitment.offer"], "offer-1"), "absent")).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+    expect(await mark(reviewer, "absent", "no show")).toMatchObject({ ok: true });
+    const booking = (applicationOf("ari")?.["interviews"] as Record<string, unknown>)["finance"];
+    expect(booking).toMatchObject({ attendance: "absent", attendanceNote: "no show" });
+  });
+});
+
+describe("rules of a booked slot", () => {
+  let slotId = "";
+  beforeEach(async () => {
+    await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    slotId = (await slots())[0]!.id;
+    await inInterview("ari");
+    await book("ari", "finance", slotId);
+    sent.length = 0;
+  });
+  const change = (principal: Principal, patch: Record<string, unknown>) =>
+    interviews().updateSlot(...as(principal))({ id: slotId, ...patch });
+
+  it("is not moved, not shrunk, not deleted; only the owner (or the committee) edits", async () => {
+    const head = holder("head-fin");
+    expect(await change(head, { startsAt: "2026-11-15T03:00:00.000Z" })).toMatchObject({
+      error: "refused",
+      issues: ["Someone booked this time; it cannot be moved."],
+    });
+    expect(await change(head, { durationMinutes: 45 })).toMatchObject({ error: "refused" });
+    expect(await change(head, { capacity: 1 })).toMatchObject({ ok: true });
+    expect(await interviews().removeSlot(...as(reviewer))({ id: slotId })).toMatchObject({
+      error: "refused",
+      issues: ["Someone booked this time; it stays."],
+    });
+    expect(await change(holder("head-dir"), { note: "x" })).toMatchObject({ error: "refused" });
+    expect(await change(holder("nobody"), { note: "x" })).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+  });
+
+  it("changes link and note, tells the booked applicant once with the version in the key", async () => {
+    expect(
+      await change(holder("head-fin"), { location: "https://meet.example/new", note: "Room B" }),
+    ).toMatchObject({ ok: true });
+    expect(slotOf(slotId)).toMatchObject({ location: "https://meet.example/new", version: 2 });
+    expect(sent.map((m) => m.key)).toEqual([`interview:${recruitmentId}_ari:changed:2`]);
+    expect(sent[0]!.to).toBe("ari@x.org");
+    expect(sent[0]!.text).toContain("https://meet.example/new");
+  });
+
+  it("sends nothing when nothing really changed, or when only the capacity grows", async () => {
+    expect(await change(holder("head-fin"), { note: "Bring your CV" })).toMatchObject({ ok: true });
+    expect(await change(holder("head-fin"), { capacity: 2 })).toMatchObject({ ok: true });
+    expect(sent).toEqual([]);
+    expect(slotOf(slotId)).toMatchObject({ capacity: 2 });
+  });
+
+  it("tells the interviewer too when someone else changed the slot", async () => {
+    expect(await change(reviewer, { location: "https://meet.example/c" })).toMatchObject({
+      ok: true,
+    });
+    expect(sent.map((m) => [m.key, m.to])).toEqual([
+      [`interview:${recruitmentId}_ari:changed:2`, "ari@x.org"],
+      [`interview:${slotId}:changed:2`, "head-fin@x.org"],
+    ]);
+  });
+
+  it("the interviewer cancels it: bookings are dropped, no change is spent, applicants asked to pick again", async () => {
+    expect(await interviews().cancelSlot(...as(holder("head-dir")))({ id: slotId })).toMatchObject({
+      error: "refused",
+    });
+    expect(await interviews().cancelSlot(...as(holder("head-fin")))({ id: slotId })).toMatchObject({
+      ok: true,
+    });
+    expect(slotOf(slotId)?.["deletedAt"]).toBeTruthy();
+    expect(applicationOf("ari")).toMatchObject({ interviews: {}, interviewChanged: [] });
+    expect(sent.map((m) => [m.key, m.to])).toEqual([
+      [`interview:${recruitmentId}_ari:cancelled:${slotId}`, "ari@x.org"],
+    ]);
+    expect(await book("ari", "finance", slotId)).toMatchObject({ ok: false, error: "refused" });
+  });
+});
+
+describe("reminders 30 minutes before (cron meeting-reminders)", () => {
+  it("tells both sides once, inside the last 30 minutes only", async () => {
+    await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    const [a, b] = await slots();
+    await inInterview("ari");
+    await inInterview("budi");
+    await book("ari", "finance", a!.id);
+    await book("budi", "finance", b!.id);
+    sent.length = 0;
+    const remind = createInterviewReminders({
+      bookings: createSqlApplicationStore(db()).bookingsBetween,
+      contacts,
+      send,
+      webUrl: "https://web.example",
+      adminUrl: "https://admin.example",
+      now: () => clock,
+    });
+    clock = new Date("2026-11-14T23:00:00Z"); // 60 minutes before the first time
+    expect(await remind()).toEqual({ interviewMessages: 0 });
+    clock = new Date("2026-11-14T23:40:00Z"); // 20 minutes before; the second is 50 minutes away
+    expect(await remind()).toEqual({ interviewMessages: 2 });
+    const start = a!.startsAt.getTime();
+    expect(sent.map((m) => m.key).sort()).toEqual(
+      [
+        `interview:${recruitmentId}_ari:start:ari:${start}`,
+        `interview:${recruitmentId}_ari:start:head-fin:${start}`,
+      ].sort(),
+    );
+    expect(sent.find((m) => m.to === "ari@x.org")!.text).toContain("07:00");
+    expect(await remind()).toEqual({ interviewMessages: 0 });
   });
 });

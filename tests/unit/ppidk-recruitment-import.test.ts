@@ -468,7 +468,8 @@ describe("PPIDK recruitment import (step 5.8)", () => {
       },
       revisionRound: 2,
       offer: { orgUnitId: "ppidk-unit-50", expiresAt: new Date("2026-08-13T00:00:00Z") },
-      interview: null,
+      interviews: {},
+      interviewChanged: [],
       pacts: [
         { path: "recruitment/ppidk-recruitment-20/firebase-ana/pact_ppidk_301.pdf", size: 1024 },
       ],
@@ -490,7 +491,15 @@ describe("PPIDK recruitment import (step 5.8)", () => {
       status: "interview",
       answers: { q_motivasi: "Hai", q_bidangminat: ["Video"] },
       portfolio: null,
-      interview: { slotId: "ppidk-slot-600", startsAt: new Date("2026-08-08T02:00:00Z") },
+      interviews: {
+        "ppidk-unit-51": {
+          slotId: "ppidk-slot-600",
+          startsAt: new Date("2026-08-08T02:00:00Z"),
+          attendance: null,
+          attendanceNote: null,
+        },
+      },
+      interviewChanged: [],
     });
     expect(plan.files.map((f) => f.from).sort()).toEqual([
       "lamaran/cv-ana.pdf",

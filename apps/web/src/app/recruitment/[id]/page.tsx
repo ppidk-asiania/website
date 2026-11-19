@@ -2,7 +2,15 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { signInUrl } from "@website/auth";
-import { canBook, lateUploadOpen, nextAction, waitingFor } from "@website/domain/recruitment";
+import {
+  bookingOpen,
+  canBook,
+  DEFAULT_CUTOFF_HOURS,
+  lateUploadOpen,
+  nextAction,
+  slotOffered,
+  waitingFor,
+} from "@website/domain/recruitment";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { formatEventTime } from "@/lib/event-time";
 import { hasCompleteProfile, ownTimezone } from "@/server/profile-wiring";
@@ -62,10 +70,14 @@ export default async function RecruitmentPage({ params }: PageProps<"/recruitmen
   const uploadLater =
     application !== null && waiting.length > 0 && lateUploadOpen(r, application.status, now);
   const action = nextAction(r, application, now, uploadLater);
-  const [slots, zone] =
-    user && action === "interview"
-      ? await Promise.all([recruitmentStore().slots(r.id), ownTimezone(user.uid)])
-      : [[], "UTC"];
+  const [slots, zone, paths] =
+    user && action === "interview" && application
+      ? await Promise.all([
+          recruitmentStore().slots(r.id),
+          ownTimezone(user.uid),
+          recruitmentStore().unitPaths(application.choices),
+        ])
+      : [[], "UTC", new Map<string, readonly string[]>()];
   const path = `/recruitment/${r.id}`;
   const canApply = action === "start" || action === "complete" || action === "revise";
 
@@ -127,15 +139,49 @@ export default async function RecruitmentPage({ params }: PageProps<"/recruitmen
               recruitmentId={r.id}
               zone={zone}
               language={language}
-              current={application.interview?.startsAt.toISOString() ?? null}
-              times={slots
-                .filter((s) => canBook(s, now) && s.id !== application.interview?.slotId)
-                .map((s) => ({
-                  id: s.id,
-                  startsAt: s.startsAt.toISOString(),
-                  minutes: s.durationMinutes,
-                }))}
-              location={slots.find((s) => s.id === application.interview?.slotId)?.location ?? ""}
+              choices={application.choices.map((id) => {
+                const booking = application.interviews[id];
+                const slot = slots.find((s) => s.id === booking?.slotId);
+                // a booking is changed or cancelled once, before its cut-off, until it is recorded
+                const changeable =
+                  booking !== undefined &&
+                  booking.attendance === null &&
+                  !application.interviewChanged.includes(id) &&
+                  bookingOpen(
+                    {
+                      startsAt: booking.startsAt,
+                      bookingCutoffHours: slot?.bookingCutoffHours ?? DEFAULT_CUTOFF_HOURS,
+                    },
+                    now,
+                  );
+                return {
+                  id,
+                  name: r.units.find((u) => u.orgUnitId === id)?.name ?? id,
+                  current: booking
+                    ? {
+                        startsAt: booking.startsAt.toISOString(),
+                        location: slot?.location ?? "",
+                        note: slot?.note ?? "",
+                        changeable,
+                      }
+                    : null,
+                  times:
+                    booking && !changeable
+                      ? []
+                      : slots
+                          .filter(
+                            (s) =>
+                              canBook(s, now) &&
+                              s.id !== booking?.slotId &&
+                              slotOffered(s, id, paths.get(id) ?? []),
+                          )
+                          .map((s) => ({
+                            id: s.id,
+                            startsAt: s.startsAt.toISOString(),
+                            minutes: s.durationMinutes,
+                          })),
+                };
+              })}
               labels={t}
             />
           )}

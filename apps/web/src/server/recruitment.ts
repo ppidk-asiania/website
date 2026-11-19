@@ -13,6 +13,7 @@ import {
 import { isPdf, type ImageStorage } from "@website/domain/shared";
 import { jsonError, readBodyLimited } from "@website/security";
 import { safeId, safeText } from "@website/security/validation";
+import type { BookedInfo } from "./interview-notice";
 
 export interface ApplyingDeps {
   readonly store: Pick<
@@ -26,6 +27,8 @@ export interface ApplyingDeps {
     | "withdraw"
     | "respondOffer"
     | "bookInterview"
+    | "cancelInterview"
+    | "slots"
     | "setPact"
     | "ownApplication"
   >;
@@ -33,6 +36,8 @@ export interface ApplyingDeps {
   /** True when the applicant has a proof of student status, or is exempt (alumni). */
   readonly hasProof: (uid: string) => Promise<boolean>;
   readonly storage: ImageStorage & { readonly remove?: (path: string) => Promise<void> };
+  /** Tells the interviewer about a new booking; best effort, never undoes the booking. */
+  readonly notifyBooked?: (info: BookedInfo) => Promise<void>;
   readonly now: () => Date;
   readonly uuid: () => string;
 }
@@ -117,10 +122,32 @@ export function createApplying(deps: ApplyingDeps) {
     },
 
     async bookInterview(user: Applicant, input: unknown): Promise<ApplyResult> {
-      const g = await gate(user, Ref.extend({ slotId: safeId }).strict(), input);
+      const g = await gate(user, Ref.extend({ choiceId: safeId, slotId: safeId }).strict(), input);
       if (!g.ok) return g.result;
-      const { recruitmentId, slotId } = g.data;
-      return toResult(await deps.store.bookInterview(recruitmentId, g.uid, slotId, deps.now()));
+      const { recruitmentId, choiceId, slotId } = g.data;
+      const outcome = await deps.store.bookInterview(
+        recruitmentId,
+        g.uid,
+        choiceId,
+        slotId,
+        deps.now(),
+      );
+      if (outcome.ok && deps.notifyBooked) {
+        const slot = (await deps.store.slots(recruitmentId)).find((s) => s.id === slotId);
+        if (slot) {
+          await deps
+            .notifyBooked({ application: outcome.application, slot, choiceId })
+            .catch(() => undefined);
+        }
+      }
+      return toResult(outcome);
+    },
+
+    async cancelInterview(user: Applicant, input: unknown): Promise<ApplyResult> {
+      const g = await gate(user, Ref.extend({ choiceId: safeId }).strict(), input);
+      if (!g.ok) return g.result;
+      const { recruitmentId, choiceId } = g.data;
+      return toResult(await deps.store.cancelInterview(recruitmentId, g.uid, choiceId, deps.now()));
     },
 
     async withdraw(user: Applicant, input: unknown): Promise<ApplyResult> {

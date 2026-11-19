@@ -20,7 +20,8 @@ shows ONE next action.
 - Admin: `apps/admin/src/server/recruitment.ts` (set-up) and `applications.ts` (selection), pages
   `/recruitment` (`src/components/recruitment-page.tsx`, `recruitment-model.ts`) and
   `/recruitment/{id}/applications` (`applications-page.tsx`, `applications-model.ts`),
-  `/recruitment/{id}/interviews` (`interviews-page.tsx`; actions `src/server/interviews.ts`).
+  `/recruitment/{id}/interviews` (`interviews-page.tsx`; actions `src/server/interviews.ts`) and
+  `/interviews` ("My interview times", step 11.5; menu Organization, only with an interview scope).
 - Web: `/recruitment`, `/recruitment/[id]` (status + next action), `/recruitment/[id]/apply` (four steps, below),
   `/recruitment` goes straight to the recruitment when exactly one is open (`soleOpen`);
   upload route `POST /api/recruitment/[id]/portfolio[?question=q_…]`; logic
@@ -87,6 +88,44 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   their profile time zone: ONE transaction reads the application, the chosen slot
   (`booked < capacity`, future, same recruitment) and the old slot, so capacity holds under
   concurrency and a re-booking frees the old time. A time with bookings is never deleted.
+- **Interviewers, own times, one interview per choice** (step 11.5; domain
+  `packages/domain/src/recruitment/interviews.ts`):
+  - _Who interviews_ — ONE function, `interviewScope({ seats, units, review, granted })` (server
+    wrapper `interviewScopeOf(uid)` in `wiring.ts`): the seats `head`, `deputy_head`, `secretary` of
+    `activeSeats(uid)` (a division: its applicants; a directorate or bureau: its applicants and every
+    unit below, by the unit `path`), the extra `recruitment.interview` (the scope of the assignment;
+    global = everyone) and `recruitment.review` (everyone). Treasurer and member seats give nothing.
+    An applicant is in scope when a chosen unit is in the scope units, or when they booked that
+    person's time (`applicantInScope`). Suggested role for the extra: none by default; the seats
+    already give scope.
+  - _Slots_ — `interviewerUid`, `orgUnitId` (offered to that unit and every unit below it;
+    `null` = a committee time, offered for every choice), `timeZone`, `mode` + `location` (link or
+    address), `note`, `capacity` (default 1), `bookingCutoffHours` (default 12), `version`.
+    "My interview times" (`/interviews`): tab _My times_ (add a day, change, cancel own times; the
+    unit must be one of the viewer's seat units or `recruitment.interview` units, refused on the
+    server otherwise; `recruitment.review` may use any unit) and tab _Interviews_ (applicants on
+    my times; `?scope=all` = everyone in scope). The committee page keeps all times.
+  - _Booking_ — `application.interviews` is keyed by the chosen unit (it replaces `interview`; old
+    documents read as the first choice). `bookInterview(recruitmentId, uid, choiceId, slotId)` locks
+    application + slot + old slot, checks the time is offered for that choice and not past its
+    cut-off. A booking is changed or cancelled ONCE per choice (`interviewChanged`; a cancel spends
+    it), never after the cut-off and never after attendance was recorded. A cancel by the
+    interviewer does not spend it.
+  - _Rules of a booked time_ — time and length cannot change, capacity cannot go below the
+    bookings, it cannot be removed; link, address, note and mode can change (only a real change is
+    saved and sent). The interviewer (or the committee) cancels it: bookings are dropped and the
+    applicants asked to pick again.
+  - _Read-only application page_ — interviewers without `recruitment.read` open
+    `/recruitment/{id}/applications` for the applicants in scope who passed the document check
+    (`createInterviewReads`, status `passedReview`); they get no selection button, no AI panel.
+  - _Attendance_ — the committee button "Record result" is now "Record attendance": attended or
+    absent with a note (`markAttendance`, `recruitment.review` or the interviewer of that very
+    time). Selection buttons (pass, offer, ratify) keep their own permissions.
+  - _Notices_ — see `apps/admin/docs/messaging.md` (booked, cancelled, changed) and
+    `apps/admin/docs/cron.md` (30 minutes before, inside `meeting-reminders`). The day-before
+    reminder of `deadline-reminders` stays.
+  - Tests: `tests/unit/recruitment.test.ts`, `tests/integration/interviews.test.ts`,
+    `tests/security/interview-scope.test.ts`.
 - **Placement, pact, ratification** (C3 steps 7-9): `recruitment.confirm` (give it only to the
   Sekjen's role) approves the placement (accepted → approved). The applicant downloads the pact
   template (the recruitment's "Integrity pact template" link — [OWNER] provides the file) and
@@ -177,7 +216,7 @@ storage>] [--apply]` (dry run by default, writes `import-recruitment-report.json
 - Forms keep their versions and responses; guest forms get two extra questions (name and e-mail
   of the respondent). PPIDK `url` fields become short answers.
 - Only the latest application per person and recruitment is imported, with its ranked choices,
-  revision rounds, interview and pact; seat counters are rebuilt from the applications that hold
+  revision rounds, the interview (one booking, for the booking's own choice) and pact; seat counters are rebuilt from the applications that hold
   a seat. Personality results keep the scores only.
 - Files: only real PDFs (checked by their first bytes) found under `--files` are referenced and
   copied privately to `FILE_STORAGE_DIR`; other files are listed in the report as skipped.

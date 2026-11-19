@@ -63,6 +63,8 @@ export function createGuardedAction<S extends z.ZodType, T>(definition: {
   input: S;
   resource?: (input: z.infer<S>) => ResourceContext | Promise<ResourceContext>;
   inSomeScope?: boolean;
+  /** A second way in when the permission is missing (a board seat, step 11.5); the handler still checks the record. */
+  orIf?: (principal: Principal) => Promise<boolean>;
   recentSignIn?: boolean;
   handler: (input: z.infer<S>, principal: Principal, audit: AuditBuilder) => Promise<T>;
 }) {
@@ -90,7 +92,10 @@ export function createGuardedAction<S extends z.ZodType, T>(definition: {
         };
       }
       if (definition.inSomeScope) {
-        if (!canInSomeScope(principal, definition.permission as PagePermission)) {
+        if (
+          !canInSomeScope(principal, definition.permission as PagePermission) &&
+          !(await definition.orIf?.(principal))
+        ) {
           return { ok: false, error: "forbidden" };
         }
       } else {
@@ -105,7 +110,10 @@ export function createGuardedAction<S extends z.ZodType, T>(definition: {
           }
           throw error;
         }
-        if (!can(principal, definition.permission, resource)) {
+        if (
+          !can(principal, definition.permission, resource) &&
+          !(await definition.orIf?.(principal))
+        ) {
           return { ok: false, error: "forbidden" };
         }
       }

@@ -39,6 +39,7 @@ export const ADMIN_PAGES = {
       offer: "Offer seats",
       confirm: "Approve placements and ratify",
       ai: "Run and read AI analysis",
+      interview: "Interview applicants (scope of the assignment; global = everyone)",
     },
   },
   letters: {

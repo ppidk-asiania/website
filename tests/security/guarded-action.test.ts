@@ -30,6 +30,24 @@ describe("race conditions in admin writes", () => {
     });
   });
 
+  it("orIf lets a seat holder in when the permission is missing, and only then", async () => {
+    const make = (allowed: boolean, inSomeScope: boolean) =>
+      createGuardedAction({
+        permission: "recruitment.interview",
+        inSomeScope,
+        orIf: () => Promise.resolve(allowed),
+        input: z.object({ id: z.string() }),
+        handler: () => Promise.resolve("saved"),
+      })(() => Promise.resolve(editor));
+    for (const inSomeScope of [true, false]) {
+      expect(await make(true, inSomeScope)({ id: "n1" })).toEqual({ ok: true, data: "saved" });
+      expect(await make(false, inSomeScope)({ id: "n1" })).toEqual({
+        ok: false,
+        error: "forbidden",
+      });
+    }
+  });
+
   it("a missing resource reads as 'forbidden'; a failing lookup is an error", async () => {
     const make = (resource: () => Promise<{ orgUnitPath: string[] }>) =>
       createGuardedAction({

@@ -4,8 +4,16 @@ import {
   applicationId,
   assertTransition,
   canTransition,
+  applicantInScope,
   assertBookable,
+  assertBookingChangeable,
+  assertSlotEdit,
+  bookingOpen,
   canBook,
+  hasInterviewScope,
+  interviewScope,
+  passedReview,
+  slotOffered,
   checkChoices,
   checkChoiceSeats,
   makeOffer,
@@ -273,6 +281,13 @@ describe("interview slots (C3-I)", () => {
       booked: 1,
       location: "",
       deletedAt: null,
+      interviewerUid: null,
+      orgUnitId: null,
+      timeZone: "UTC",
+      mode: "online" as const,
+      note: "",
+      bookingCutoffHours: 12,
+      version: 1,
     };
     const before = new Date("2026-11-14T00:00:00Z");
     expect(canBook(slot, before)).toBe(true);
@@ -283,6 +298,161 @@ describe("interview slots (C3-I)", () => {
     expect(() => assertBookable({ ...slot, booked: 2 }, before)).toThrow(/full/);
     expect(() => assertBookable(null, before)).toThrow(/no longer available/);
     expect(() => assertBookable(slot, slot.startsAt)).toThrow(/no longer available/);
+  });
+
+  it("closes booking bookingCutoffHours before the start (default 12)", () => {
+    const slot = {
+      id: "s1",
+      recruitmentId: "rec1",
+      startsAt: new Date("2026-11-15T12:00:00Z"),
+      durationMinutes: 30,
+      capacity: 2,
+      booked: 0,
+      location: "",
+      deletedAt: null,
+      interviewerUid: null,
+      orgUnitId: null,
+      timeZone: "UTC",
+      mode: "online" as const,
+      note: "",
+      bookingCutoffHours: 12,
+      version: 1,
+    };
+    expect(bookingOpen(slot, new Date("2026-11-14T23:59:00Z"))).toBe(true);
+    expect(bookingOpen(slot, new Date("2026-11-15T00:00:00Z"))).toBe(false);
+    expect(canBook(slot, new Date("2026-11-15T01:00:00Z"))).toBe(false);
+    expect(() => assertBookable(slot, new Date("2026-11-15T01:00:00Z"))).toThrow(/closed/);
+    expect(bookingOpen({ ...slot, bookingCutoffHours: 0 }, new Date("2026-11-15T11:59:00Z"))).toBe(
+      true,
+    );
+  });
+});
+
+describe("who interviews (11.5)", () => {
+  const units = [
+    { id: "dir", path: [] },
+    { id: "finance", path: ["dir"] },
+    { id: "media", path: ["dir"] },
+    { id: "other", path: [] },
+  ];
+  const seat = (orgUnitId: string, unitType: string, kind: string) => ({
+    orgUnitId,
+    orgUnitPath: [...(units.find((u) => u.id === orgUnitId)?.path ?? []), orgUnitId],
+    unitType: unitType as "divisi",
+    seat: kind as "head",
+  });
+  const scope = (
+    seats: ReturnType<typeof seat>[],
+    review = false,
+    granted: "all" | string[] = [],
+  ) => interviewScope({ seats, units, review, granted });
+
+  it("head, deputy head and secretary of a division interview that unit only", () => {
+    for (const kind of ["head", "deputy_head", "secretary"]) {
+      const s = scope([seat("finance", "divisi", kind)]);
+      expect([...s.orgUnitIds]).toEqual(["finance"]);
+      expect([...s.slotUnitIds]).toEqual(["finance"]);
+      expect(s.all).toBe(false);
+      expect(hasInterviewScope(s)).toBe(true);
+    }
+  });
+
+  it("treasurer and member seats give no scope", () => {
+    for (const kind of ["treasurer", "member"]) {
+      expect(hasInterviewScope(scope([seat("finance", "divisi", kind)]))).toBe(false);
+    }
+    expect(hasInterviewScope(scope([]))).toBe(false);
+  });
+
+  it("a directorate or bureau head interviews the unit and every unit below it", () => {
+    for (const type of ["direktorat", "biro"]) {
+      const s = scope([seat("dir", type, "head")]);
+      expect([...s.orgUnitIds].sort()).toEqual(["dir", "finance", "media"]);
+      expect([...s.slotUnitIds]).toEqual(["dir"]);
+    }
+  });
+
+  it("recruitment.review and a global recruitment.interview mean everyone; a scoped one its unit tree", () => {
+    expect(scope([], true).all).toBe(true);
+    expect(scope([], false, "all").all).toBe(true);
+    const scoped = scope([], false, ["dir"]);
+    expect(scoped.all).toBe(false);
+    expect([...scoped.orgUnitIds].sort()).toEqual(["dir", "finance", "media"]);
+    expect([...scoped.slotUnitIds]).toEqual(["dir"]);
+  });
+
+  it("an applicant is in scope by a chosen unit, or by booking my slot", () => {
+    const s = scope([seat("finance", "divisi", "head")]);
+    const slots = new Map([
+      ["mine", { interviewerUid: "me" }],
+      ["theirs", { interviewerUid: "x" }],
+    ]);
+    const app = (choices: string[], slotId?: string) => ({
+      choices,
+      interviews: slotId ? { [choices[0] ?? ""]: { slotId } } : {},
+    });
+    expect(applicantInScope(s, "me", app(["media", "finance"]), slots)).toBe(true);
+    expect(applicantInScope(s, "me", app(["media"]), slots)).toBe(false);
+    expect(applicantInScope(s, "me", app(["media"], "mine"), slots)).toBe(true);
+    expect(applicantInScope(s, "me", app(["media"], "theirs"), slots)).toBe(false);
+    expect(applicantInScope(scope([], true), "me", app(["media"]), slots)).toBe(true);
+  });
+
+  it("only applicants past the document check are shown to interviewers", () => {
+    expect(passedReview("interview")).toBe(true);
+    expect(passedReview("confirmed")).toBe(true);
+    for (const status of [
+      "draft",
+      "submitted",
+      "revision",
+      "admin_rejected",
+      "withdrawn",
+    ] as const) {
+      expect(passedReview(status)).toBe(false);
+    }
+  });
+
+  it("a slot is offered to its unit and every unit below it; a committee slot to all", () => {
+    expect(slotOffered({ orgUnitId: "dir" }, "finance", ["dir"])).toBe(true);
+    expect(slotOffered({ orgUnitId: "finance" }, "finance", ["dir"])).toBe(true);
+    expect(slotOffered({ orgUnitId: "finance" }, "media", ["dir"])).toBe(false);
+    expect(slotOffered({ orgUnitId: null }, "media", ["dir"])).toBe(true);
+  });
+
+  it("a booked slot cannot move, shrink below its bookings or lose its unit; text fields can change", () => {
+    const slot = {
+      startsAt: new Date("2026-11-15T00:00:00Z"),
+      capacity: 2,
+      booked: 2,
+      durationMinutes: 30,
+    };
+    expect(() => assertSlotEdit(slot, { startsAt: new Date("2026-11-15T01:00:00Z") })).toThrow(
+      /booked/,
+    );
+    expect(() => assertSlotEdit(slot, { capacity: 1 })).toThrow(/bookings/);
+    expect(() => assertSlotEdit(slot, { durationMinutes: 45 })).toThrow(/booked/);
+    expect(() => assertSlotEdit(slot, { capacity: 3, location: "x", note: "y" })).not.toThrow();
+    expect(() =>
+      assertSlotEdit({ ...slot, booked: 0 }, { capacity: 1, startsAt: new Date() }),
+    ).not.toThrow();
+  });
+
+  it("a booking is changed once, never after it was recorded or past the cut-off", () => {
+    const booking = {
+      slotId: "s",
+      startsAt: new Date("2026-11-15T12:00:00Z"),
+      attendance: null,
+      attendanceNote: null,
+    };
+    const early = new Date("2026-11-14T00:00:00Z");
+    expect(() => assertBookingChangeable(booking, 12, false, early)).not.toThrow();
+    expect(() => assertBookingChangeable(booking, 12, true, early)).toThrow(/once/);
+    expect(() =>
+      assertBookingChangeable({ ...booking, attendance: "attended" }, 12, false, early),
+    ).toThrow(/recorded/);
+    expect(() =>
+      assertBookingChangeable(booking, 12, false, new Date("2026-11-15T01:00:00Z")),
+    ).toThrow(/closed/);
   });
 });
 

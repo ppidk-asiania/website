@@ -369,6 +369,10 @@ export function mapPpidkRecruitment(
       capacity: Number(s["capacity"] ?? 1),
       booked,
       location: s["location"] ?? "",
+      // columns of PPIDK s.96 / s.99; a missing one falls back to the committee defaults
+      timeZone: s["timezone"] ?? "UTC",
+      bookingCutoffHours: s["batas_pesan_jam"] ? Number(s["batas_pesan_jam"]) : 12,
+      interviewerUid: uid(s["interviewer_id"]),
       deletedAt: s["is_open"] === "0" && booked === 0 ? now : null,
     });
   }
@@ -443,6 +447,10 @@ export function mapPpidkRecruitment(
     const booking = bookings.find((i) => i["application_id"] === a["id"]);
     const slot =
       booking && tables.interview_slots.find((s) => s["id"] === booking["interview_slot_id"]);
+    const bookedUnit = id(
+      "unit",
+      (choices.find((c) => c["id"] === booking?.["choice_id"]) ?? choices[0])?.["org_unit_id"],
+    );
     const pact = pdf(
       "recruitment_applications",
       a["id"] ?? "",
@@ -472,9 +480,18 @@ export function mapPpidkRecruitment(
             expiresAt: at(a["offer_deadline"]) ?? at(a["offered_at"]) ?? now,
           }
         : null,
-      interview: slot
-        ? { slotId: id("slot", slot["id"]), startsAt: at(slot["starts_at"]) ?? now }
-        : null,
+      // one booking per choice (11.5): the booking's own choice, else the first one
+      interviews: slot
+        ? {
+            [bookedUnit]: {
+              slotId: id("slot", slot["id"]),
+              startsAt: at(slot["starts_at"]) ?? now,
+              attendance: booking?.["status"] === "attended" ? "attended" : null,
+              attendanceNote: null,
+            },
+          }
+        : {},
+      interviewChanged: slot && Number(booking?.["perubahan_pelamar"] ?? 0) > 0 ? [bookedUnit] : [],
       pacts: pact ? [pact] : [],
       pactNote: a["pakta_rejection_note"] ?? null,
       appointmentId: null,

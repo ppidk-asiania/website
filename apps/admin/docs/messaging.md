@@ -58,6 +58,16 @@ Meeting notices (step 12.1) use this: `meeting:{id}:invite:{uid}`,
 `meeting:{id}:change:{uid}:{version}`, `meeting:{id}:cancel:{uid}`
 (`packages/domain/docs/meetings.md` → Notices).
 
+Interview notices (step 11.5; `createInterviewNotices`, `createInterviewReminders` in
+`src/server/interviews.ts`, `apps/web/src/server/interview-notice.ts`), one message per person in
+the recipient's own time zone: `interview:{applicationId}:booked:{slotId}` (to the interviewer, sent
+by the website by e-mail when an applicant books), `interview:{applicationId}:cancelled:{slotId}`
+(to the applicant when the interviewer cancels a time),
+`interview:{applicationId}:changed:{slotVersion}` (to each booked applicant) and
+`interview:{slotId}:changed:{slotVersion}` (to the interviewer when someone else changed the time,
+mode, link, address or note), `interview:{applicationId}:start:{uid}:{startsAtMs}` (30 minutes
+before, both sides, cron `meeting-reminders`). A save without a real change sends nothing.
+
 ## Notification sources (J2)
 
 Sent after the action's transaction committed; a failure is logged (`notice failed`) and never

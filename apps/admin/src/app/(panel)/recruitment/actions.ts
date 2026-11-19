@@ -74,6 +74,22 @@ export async function createInterviewPlanAction(input: unknown) {
   return queued(await interviewActions().createPlan(getPrincipal, getAuditContext)(input));
 }
 
+export async function createMyInterviewTimesAction(input: unknown) {
+  return queued(await interviewActions().createMine(getPrincipal, getAuditContext)(input));
+}
+
+export async function updateInterviewSlotAction(input: unknown) {
+  return queued(await interviewActions().updateSlot(getPrincipal, getAuditContext)(input));
+}
+
+export async function cancelInterviewSlotAction(input: unknown) {
+  return queued(await interviewActions().cancelSlot(getPrincipal, getAuditContext)(input));
+}
+
+export async function recordAttendanceAction(input: unknown) {
+  return queued(await interviewActions().markAttendance(getPrincipal, getAuditContext)(input));
+}
+
 export async function removeInterviewSlotAction(input: unknown) {
   return queued(await interviewActions().removeSlot(getPrincipal, getAuditContext)(input));
 }

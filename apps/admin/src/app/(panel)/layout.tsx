@@ -4,6 +4,8 @@ import { AdminSidebar } from "@/components/admin-sidebar";
 import { navigationFor } from "@/navigation";
 import { getAdminViewer } from "@/server/context";
 import { getAppUrls } from "@/server/env";
+import { interviewScopeOf } from "@/server/wiring";
+import { hasInterviewScope } from "@website/domain/recruitment";
 
 export default function PanelLayout({ children }: { children: ReactNode }) {
   return (
@@ -18,9 +20,10 @@ async function Panel({ children }: { children: ReactNode }) {
   if (!viewer) return <SignedOutFrame>{children}</SignedOutFrame>;
 
   const name = viewer.name ?? viewer.email ?? "Staff member";
+  const interviewer = hasInterviewScope(await interviewScopeOf(viewer.principal.userId));
   return (
     <AdminSidebar
-      items={navigationFor(viewer.principal)}
+      items={navigationFor(viewer.principal, interviewer)}
       user={{ name, email: viewer.email, initials: initials(name) }}
       webUrl={getAppUrls().WEB_URL}
     >

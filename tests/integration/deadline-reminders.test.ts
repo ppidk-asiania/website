@@ -12,8 +12,18 @@ describe("deadline reminders (M6)", () => {
     recruitmentId: "r1",
     userId: "applicant",
     status,
-    interview: { slotId: "s1", startsAt: new Date(startsAt) },
+    choices: ["finance"],
+    interviews: { finance: { slotId: `s-${startsAt}`, startsAt: new Date(startsAt) } },
   });
+  const slot = (startsAt: string) =>
+    fake.docs.set(`interviewSlots/s-${startsAt}`, {
+      recruitmentId: "r1",
+      startsAt: new Date(startsAt),
+      booked: 1,
+      deletedAt: null,
+    });
+  for (const at of ["2026-11-11T09:00:00Z", "2026-11-12T09:00:00Z", "2026-11-11T10:00:00Z"])
+    slot(at);
   fake.docs.set("applications/r1_a", booked("2026-11-11T09:00:00Z"));
   fake.docs.set("applications/r1_b", booked("2026-11-12T09:00:00Z"));
   fake.docs.set("applications/r1_c", booked("2026-11-11T10:00:00Z", "withdrawn"));
@@ -65,7 +75,7 @@ describe("deadline reminders (M6)", () => {
   it("reminds interviews tomorrow, milestones and LPJs due within 3 days, and overdue LPJs, once", async () => {
     expect(await reminders()).toEqual({ messages: 5 });
     expect(sent).toEqual([
-      "reminder:interview:r1_a:2026-11-11:applicant",
+      "reminder:interview:r1_a_finance:2026-11-11:applicant",
       "reminder:milestone:p1_m1:2026-11-13:pic1",
       "reminder:milestone:p1_m1:2026-11-13:pic2",
       "reminder:lpj-due:l-due:2026-11-12:pic1",
@@ -80,7 +90,7 @@ describe("deadline reminders (M6)", () => {
     const week = (programs: Program[], at: string) => {
       const keys: string[] = [];
       const remind = createDeadlineReminders({
-        applications: { interviewsBetween: () => Promise.resolve([]) },
+        applications: { bookingsBetween: () => Promise.resolve([]) },
         checkedIn: createSqlProgramStore(fake.db as unknown as Db).checkedIn,
         programs: () => Promise.resolve(programs),
         lpj: () => Promise.resolve([]),

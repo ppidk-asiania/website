@@ -22,7 +22,7 @@ interface Reminder {
 }
 
 export function createDeadlineReminders(deps: {
-  applications: Pick<SqlApplicationStore, "interviewsBetween">;
+  applications: Pick<SqlApplicationStore, "bookingsBetween">;
   checkedIn: SqlProgramStore["checkedIn"];
   programs: () => Promise<Program[]>;
   lpj: () => Promise<LpjReport[]>;
@@ -40,7 +40,7 @@ export function createDeadlineReminders(deps: {
     const thursday = now.getUTCDay() === 4;
     const week = weekStartUtc(now);
     const [interviews, programs, lpjs, checkedIn] = await Promise.all([
-      deps.applications.interviewsBetween(
+      deps.applications.bookingsBetween(
         new Date(`${tomorrow}T00:00:00Z`),
         new Date(`${addDaysUtc(now, 2)}T00:00:00Z`),
       ),
@@ -50,10 +50,10 @@ export function createDeadlineReminders(deps: {
     ]);
 
     const reminders: Reminder[] = [
-      ...interviews.map((a) => {
-        const at = `${a.interview?.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+      ...interviews.map(({ application: a, choiceId, booking }) => {
+        const at = `${booking.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
         return {
-          key: `reminder:interview:${a.id}:${tomorrow}`,
+          key: `reminder:interview:${a.id}_${choiceId}:${tomorrow}`,
           uids: [a.userId],
           subject: "Wawancara besok / Interview tomorrow",
           text: both(`Wawancara Anda besok, ${at}.`, `Your interview is tomorrow, ${at}.`),

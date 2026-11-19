@@ -27,3 +27,7 @@ export async function respondOfferAction(input: unknown) {
 export async function bookInterviewAction(input: unknown) {
   return applying().bookInterview(await applicant(), input);
 }
+
+export async function cancelInterviewAction(input: unknown) {
+  return applying().cancelInterview(await applicant(), input);
+}

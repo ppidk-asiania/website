@@ -38,7 +38,12 @@ import { createGalleryActions } from "./gallery";
 import { getAdminEnv, getAppUrls } from "./env";
 import { createImageUploads } from "./images";
 import { createIncomingActions } from "./incoming";
-import { createInterviewActions } from "./interviews";
+import {
+  createInterviewActions,
+  createInterviewNotices,
+  createInterviewReads,
+  createInterviewReminders,
+} from "./interviews";
 import { createLetterActions } from "./letters";
 import {
   createCertificateActions,
@@ -56,7 +61,12 @@ import { createPolls, createWahaWebhookRoute } from "./polls";
 import { cloudApiReply, createChatbot, createWhatsappWebhook } from "./chatbot";
 import { geminiCampusMatcher } from "./gemini";
 import { createFirebaseAccountCreator } from "@website/auth/firebase-admin";
-import { isRecruitmentOpen } from "@website/domain/recruitment";
+import {
+  interviewScope,
+  isRecruitmentOpen,
+  type InterviewScope,
+} from "@website/domain/recruitment";
+import { can, scopedOrgUnitIds } from "@website/permissions";
 import { createNewsletterActions } from "./newsletter";
 import { createNewsActions } from "./news";
 import { createOrgUnitActions } from "./org-units";
@@ -353,8 +363,53 @@ export const proofActions = lazyEnv(() =>
   }),
 );
 
+/** Block N, step 11.5: who interviews (seats, `recruitment.interview`, `recruitment.review`). */
+export async function interviewScopeOf(uid: string): Promise<InterviewScope> {
+  const [principal, seats, period] = await Promise.all([
+    userDirectoryStore().findPrincipalByUid(uid),
+    adminStores().appointments.activeSeats(uid),
+    activePeriod(),
+  ]);
+  const units = period ? await adminStores().orgUnits.listForPeriod(period.id) : [];
+  return interviewScope({
+    seats,
+    units,
+    review: can(principal, "recruitment.review"),
+    granted: scopedOrgUnitIds(principal, "recruitment.interview"),
+  });
+}
+
+const interviewMessaging = () => ({
+  contacts: (uids: readonly string[]) => adminStores().contacts.contacts(uids),
+  send: (message: Message, key: string) => messenger().send(message, key),
+  webUrl: getAppUrls().WEB_URL ?? "",
+  adminUrl: getAppUrls().ADMIN_URL ?? "",
+});
+
 export const interviewActions = lazyEnv(() =>
-  createInterviewActions({ interviews: adminStores().interviews, now: () => new Date() }),
+  createInterviewActions({
+    interviews: adminStores().interviews,
+    applications: adminStores().applications,
+    scope: interviewScopeOf,
+    notices: createInterviewNotices(interviewMessaging()),
+    now: () => new Date(),
+  }),
+);
+
+export const interviewReads = lazyEnv(() =>
+  createInterviewReads({
+    applications: adminStores().applications,
+    interviews: adminStores().interviews,
+    scope: interviewScopeOf,
+  }),
+);
+
+export const interviewReminders = lazyEnv(() =>
+  createInterviewReminders({
+    ...interviewMessaging(),
+    bookings: (from, to) => adminStores().applications.bookingsBetween(from, to),
+    now: () => new Date(),
+  }),
 );
 
 export const universityActions = lazyEnv(() =>
@@ -396,7 +451,10 @@ export const cronRoute = lazyEnv(() =>
       ...CRON_JOBS,
       "newsletter-send": () => newsletterActions().runBatch(),
       expire: () => deleteExpired(adminDb(), new Date()),
-      "meeting-reminders": () => meetingActions().sendReminders(),
+      "meeting-reminders": async () => ({
+        ...(await meetingActions().sendReminders()),
+        ...(await interviewReminders()()),
+      }),
       "zoom-rooms": () => zoomActions().retryRooms(),
       "recording-archive": () => recordingArchive()(),
       "deadline-reminders": () => deadlineReminders()(),

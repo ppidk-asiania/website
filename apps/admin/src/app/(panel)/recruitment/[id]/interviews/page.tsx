@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { can } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { InterviewsPage } from "@/components/interviews-page";
+import { toSlotItems } from "@/components/interviews-model";
 import { requireAdminViewer } from "@/server/context";
 import { adminReads } from "@/server/wiring";
 
@@ -19,23 +20,21 @@ export default async function InterviewsRoute({ params }: { params: Promise<{ id
     adminReads.listInterviewSlots(recruitment.id),
     adminReads.listApplications(recruitment.id),
   ]);
-  const booking = applications.filter((a) => a.status === "interview" && a.interview);
-  const users = await adminReads.getUsers(booking.map((a) => a.userId));
+  const people = await adminReads.getUsers([
+    ...applications.map((a) => a.userId),
+    ...slots.flatMap((s) => (s.interviewerUid ? [s.interviewerUid] : [])),
+  ]);
+  const units = await adminReads.listOrgUnits(recruitment.periodId);
+  const names = new Map<string, string>([
+    ...units.map((u) => [u.id, u.name] as const),
+    ...[...people].map(([uid, p]) => [uid, p.name ?? p.email ?? uid] as const),
+  ]);
+  const review = can(viewer.principal, "recruitment.review");
   return (
     <InterviewsPage
       recruitment={{ id: recruitment.id, title: recruitment.title }}
-      slots={slots.map((s) => ({
-        id: s.id,
-        startsAt: s.startsAt.toISOString(),
-        durationMinutes: s.durationMinutes,
-        capacity: s.capacity,
-        booked: s.booked,
-        location: s.location,
-        applicants: booking
-          .filter((a) => a.interview?.slotId === s.id)
-          .map((a) => users.get(a.userId)?.name ?? users.get(a.userId)?.email ?? a.userId),
-      }))}
-      canEdit={can(viewer.principal, "recruitment.review")}
+      slots={toSlotItems(slots, applications, names, () => review)}
+      canEdit={review}
     />
   );
 }

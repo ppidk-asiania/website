@@ -190,6 +190,7 @@ export {
   type ApplicationAudit,
   type ApplyOutcome,
   type Decision,
+  type InterviewBooking,
   type SqlApplicationStore,
   type SqlInterviewStore,
   type SqlRecruitmentStore,

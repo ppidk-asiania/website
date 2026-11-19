@@ -85,6 +85,12 @@ describe("admin side panel navigation", () => {
     ]);
   });
 
+  it("adds My interview times only for people with an interview scope", () => {
+    const officer = staff("viewer");
+    expect(labels(officer)).not.toContain("My interview times");
+    expect(navigationFor(officer, true).map((item) => item.label)).toContain("My interview times");
+  });
+
   it("shows nothing to members, customers and inactive accounts", () => {
     expect(navigationFor(staff("visitor"))).toEqual([]);
     expect(navigationFor(staff(SUPERADMIN_ROLE_ID, { type: "global" }, false))).toEqual([]);

@@ -1,28 +1,33 @@
 import { notFound } from "next/navigation";
-import { can } from "@website/permissions";
+import { can, canInSomeScope } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { toApplicationItem } from "@/components/applications-model";
 import { ApplicationsPage } from "@/components/applications-page";
 import { requireAdminViewer } from "@/server/context";
-import { adminReads, analysisActions } from "@/server/wiring";
+import { adminReads, analysisActions, interviewReads } from "@/server/wiring";
 
 export const instant = false;
 
 export default async function ApplicationsRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const viewer = await requireAdminViewer(`/recruitment/${id}/applications`, "recruitment.read");
+  const viewer = await requireAdminViewer(`/recruitment/${id}/applications`);
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
-  const committee = [
+  const committeePermissions = [
     "recruitment.review",
     "recruitment.offer",
     "recruitment.confirm",
     "recruitment.ai",
   ] as const;
-  if (!committee.some((p) => can(viewer.principal, p))) return <AccessMessage reason="no-access" />;
+  const committee =
+    canInSomeScope(viewer.principal, "recruitment.read") &&
+    committeePermissions.some((p) => can(viewer.principal, p));
   const recruitment = await adminReads.getRecruitment(id);
   if (!recruitment || recruitment.deletedAt) notFound();
+  // Without a committee permission an interviewer opens, read-only, the applicants in their scope.
+  const own = committee ? null : await interviewReads().applicants(viewer.principal.userId, id);
+  if (own !== null && own.length === 0) return <AccessMessage reason="no-access" />;
   const [applications, revisions, version] = await Promise.all([
-    adminReads.listApplications(recruitment.id),
+    own ?? adminReads.listApplications(recruitment.id),
     adminReads.listRevisions(recruitment.id),
     adminReads.getFormVersion(recruitment.formId, recruitment.formVersion),
   ]);
@@ -32,11 +37,13 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
     adminReads.personalityResults(uids),
     adminReads.studentProofs(uids),
   ]);
-  const ai = await analysisActions().read(
-    viewer.principal,
-    applications.map((a) => a.id),
-    uids,
-  );
+  const ai = committee
+    ? await analysisActions().read(
+        viewer.principal,
+        applications.map((a) => a.id),
+        uids,
+      )
+    : undefined;
   const unitTypes = new Map(
     (await adminReads.listOrgUnits(recruitment.periodId)).map((u) => [u.id, u.type]),
   );
