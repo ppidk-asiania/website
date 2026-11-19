@@ -335,7 +335,13 @@ describe("PPIDK import of meetings, Zoom, short links and messages (step 7.12)",
       { uid: "ppidk-8", role: "member" },
       { uid: "ppidk-9", role: "secretary" },
     ]);
-    expect(Object.keys(meeting?.attendance ?? {}).sort()).toEqual(["ppidk-8", "uid-rina"]);
+    expect(Object.keys(meeting?.attendance ?? {}).sort()).toEqual([
+      "ppidk-8",
+      "ppidk-9",
+      "uid-rina",
+    ]);
+    expect(meeting?.attendance["ppidk-9"]?.status).toBe("excused");
+    expect(meeting?.attendance["uid-rina"]?.status).toBe("present");
     expect(meeting?.attendance["uid-rina"]?.method).toBe("code");
     expect(meeting?.room).toEqual({ zoomRequestId: "ppidk-zoom-1", externalUrl: null });
     expect(meeting?.agenda.map((a) => a.title)).toEqual(["Pembukaan", "Anggaran"]);

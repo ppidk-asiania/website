@@ -1,5 +1,5 @@
-import type { MeetingRole } from "@website/domain/meetings";
-import { MEETING_ROLE_LABELS } from "@website/domain/meetings";
+import type { AttendanceState, MeetingRole } from "@website/domain/meetings";
+import { ATTENDANCE_STATE_LABELS, MEETING_ROLE_LABELS } from "@website/domain/meetings";
 import type { HealthStatus, ProgramStatus } from "@website/domain/programs";
 import { HEALTH_STATUS_LABELS, label, PROGRAM_STATUS_LABELS } from "../labels";
 import { esc } from "./format";
@@ -57,6 +57,7 @@ export function attendanceCsv(
     role: MeetingRole;
     presentAt: string | null;
     method: string | null;
+    state: AttendanceState;
   }>,
 ): string[][] {
   return table(
@@ -64,7 +65,7 @@ export function attendanceCsv(
     rows.map((p) => [
       p.name,
       MEETING_ROLE_LABELS[p.role],
-      p.presentAt ? "present" : "absent",
+      ATTENDANCE_STATE_LABELS[p.state].toLowerCase(),
       utc(p.presentAt),
       p.method ?? "",
     ]),

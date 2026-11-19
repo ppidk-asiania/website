@@ -26,16 +26,16 @@ scheduled ──(end time passes, read-time)──→ finished
 
 ## Fields
 
-| Field                        | Rule                                                                  |
-| ---------------------------- | --------------------------------------------------------------------- |
-| `title`                      | 2-200 characters                                                      |
-| `orgUnitId`                  | a unit (scope via `orgUnitPath`) or null = whole region (global edit) |
-| `startsAtLocal` + `timeZone` | wall time in an IANA zone → `startsAt` in UTC; never in the past      |
-| `durationMinutes`            | 5-720 → `endsAt`                                                      |
-| `agenda[]`                   | ≤ 30 items; ids kept for unchanged titles (minutes are per item)      |
-| `participants[]`             | account e-mails → uids; exactly one chair, at most one secretary      |
-| `room`                       | `{ zoomRequestId, externalUrl }`: saving one clears the other         |
-| `attendance`                 | uid → `{ at, method: code \| manual }`; the first sign-in counts      |
+| Field                        | Rule                                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                      | 2-200 characters                                                                                                                         |
+| `orgUnitId`                  | a unit (scope via `orgUnitPath`) or null = whole region (global edit)                                                                    |
+| `startsAtLocal` + `timeZone` | wall time in an IANA zone → `startsAt` in UTC; never in the past                                                                         |
+| `durationMinutes`            | 5-720 → `endsAt`                                                                                                                         |
+| `agenda[]`                   | ≤ 30 items; ids kept for unchanged titles (minutes are per item)                                                                         |
+| `participants[]`             | account e-mails → uids; exactly one chair, at most one secretary                                                                         |
+| `room`                       | `{ zoomRequestId, externalUrl }`: saving one clears the other                                                                            |
+| `attendance`                 | uid → `{ at, method: code \| manual, status: present \| excused \| sick, note }`; records without a status (before 12.2) read as present |
 
 ## Rules
 
@@ -50,14 +50,33 @@ scheduled ──(end time passes, read-time)──→ finished
   accepted from 30 minutes before the start to 30 minutes after the end, only from a signed-in
   participant; typing ignores case, spaces and dashes. Wrong, expired and other people's codes
   get the same kind of answer.
-- The chair or secretary may tick someone present (paper list) once the meeting has started, or
-  remove a wrong tick.
+- The chair or secretary may mark one or several people at once (`mark`: `uids[]`, `status`
+  present / excused / sick / none, optional note) or clear a mark (`none`). "Present" needs the
+  meeting to have started; excused and sick may be noted earlier. Signing with the code turns an
+  excused or sick mark into present. A cancelled meeting or approved minutes refuse changes.
+- **Attendance states (step 12.2)**: present, excused and sick are stored; "not yet" (meeting
+  not over) and "no news" (over, no record) are computed by `attendanceState`. Only "present"
+  counts for the quorum, the minutes' frozen `attendanceSnapshot` and the minutes PDF "present"
+  (`presentUids`); the PDFs print excused / sick, and the attendance CSV has the state.
+- **Admin meeting page**: a box with the viewer's own attendance and the state of the window
+  (not shown for a cancelled meeting or a non-participant); the agenda card comes before the
+  participants table. The participants are a `ListCard` (25 per page, search by name, tabs All /
+  Not yet / Present / Excused-Sick / No news with counts, empty tabs hidden, select several and
+  mark them). The summary says "N participants not signed yet" and never "0".
+- **PIC of an action item**: a participant, or an active officer of the meeting's period
+  (appointment, listed after the participants with the seat label, `seatLabel`). The save checks
+  it in the transaction; an unchanged PIC who has since left office stays shown and valid.
+- **Web `/attend/[code]`**: for a signed-in participant a card shows the title, the time in
+  their zone, the unit, the place (the external link, or "Zoom") and the name that will be
+  recorded; someone already present sees "Your attendance at ... was recorded at 20.10 WIB"
+  instead of the button. Looking a code up (`createAttendCard`) never records; only the button
+  does.
 - **Reminders** (cron `meeting-reminders`): start reminder in the 15 minutes before the start,
   end reminder in the hour after the end, to every participant on their channel (WhatsApp when
   a number exists, else e-mail), keys `meeting:{id}:start:{uid}` and `meeting:{id}:end:{uid}`,
   so a job interval up to 15 minutes works and a repeated call sends nothing twice. The start
   reminder adds the unit, the link and the Zoom passcode, and the chair and secretary get one
-  more line ("open the attendance"). Its key carries the start time
+  more line ("open the attendance"); people marked excused or sick get no start reminder. Its key carries the start time
   (`meeting:{id}:start:{uid}:{startsAtMs}`), so a moved meeting reminds again.
 
 ## Notices (step 12.1)
@@ -76,7 +95,6 @@ told about their own change.
   only relabels the time zone (same instants), sends nothing.
 - "Link" is the external link or the Zoom booking's join link; the passcode is the booking's.
   There is no separate "place" field on a meeting yet.
-- Not yet: skipping people marked excused or sick (needs the attendance states of step 12.2).
 
 ## Minutes and action items (F5)
 
@@ -90,13 +108,13 @@ told about their own change.
 - Quorum met = present (the snapshot once approved) ≥ quorum; shown on the PDF.
 - **Action items** (`actionItems/{id}`: meetingId, meetingTitle, periodId, orgUnitPath, title,
   pic, dueOn, doneAt): added and edited by whoever runs the meeting; the PIC must be a
-  participant (checked in the transaction on every save); the PIC or the chair marks them done;
+  participant or an active officer of the period (checked in the transaction on every save); the PIC or the chair marks them done;
   they stay editable after approval. Overdue = due date before today and not done (read-time;
   My Tasks reads them by PIC).
 - **PDF** at `/api/meetings/[id]/minutes`, rendered on request (`minutesSheet`), never stored:
   attendance (frozen list once approved), quorum, notes per item, action items, approval line.
   `?sheet=attendance` prints the attendance list alone (`attendanceSheet`: present with the
-  time signed and the method, or absent) — M8.
+  time signed and the method; excused / sick with the note; or absent) — M8.
 
 ## Machine-drafted minutes (F6)
 
@@ -136,7 +154,7 @@ freezing the PPIDK meeting, Zoom and Tools screens:
 
 - `meetings` + `meeting_participants` (pemimpin → chair, notulis → secretary, peserta and
   undangan → participant; a second leader becomes a participant; no leader → the creator, else
-  the first participant, chairs), attendance `hadir` (kode → code, else manual), agenda items
+  the first participant, chairs), attendance `hadir` (kode → code, else manual), `izin` → excused, `sakit` → sick (`belum` and `alfa` are not stored, they are computed), agenda items
   with discussion + decision as the notes, `minutes_status` disahkan → approved (snapshot =
   those present), `minutes_assisted_source` → source; the Zoom room or `meeting_url`.
 - `meeting_action_items` (cancelled ones skipped; the PIC kept as history).

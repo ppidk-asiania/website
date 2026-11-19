@@ -27,6 +27,12 @@ export const MinutesInputSchema = z
   .strict();
 export type MinutesInput = z.infer<typeof MinutesInputSchema>;
 
+/** Only these count for the quorum, the minutes' frozen list and the exports' "present". */
+export const presentUids = (meeting: Pick<Meeting, "attendance">): string[] =>
+  Object.entries(meeting.attendance)
+    .filter(([, a]) => a.status === "present")
+    .map(([uid]) => uid);
+
 export const isApproved = (meeting: Pick<Meeting, "minutes">): boolean =>
   (meeting.minutes?.approvedAt ?? null) !== null;
 
@@ -95,7 +101,7 @@ export function approveMinutes(meeting: Meeting, uid: string, now: Date): Meetin
       ...meeting.minutes,
       approvedAt: now,
       approvedBy: uid,
-      attendanceSnapshot: Object.keys(meeting.attendance).sort(),
+      attendanceSnapshot: presentUids(meeting).sort(),
     },
   };
 }
@@ -103,7 +109,7 @@ export function approveMinutes(meeting: Meeting, uid: string, now: Date): Meetin
 export function quorumMet(meeting: Pick<Meeting, "minutes" | "attendance">): boolean | null {
   const quorum = meeting.minutes?.quorum ?? null;
   if (quorum === null) return null;
-  const present = meeting.minutes?.attendanceSnapshot ?? Object.keys(meeting.attendance);
+  const present = meeting.minutes?.attendanceSnapshot ?? presentUids(meeting);
   return present.length >= quorum;
 }
 
@@ -128,9 +134,15 @@ export interface ActionItem extends EntityMeta {
   readonly createdBy: string;
 }
 
-export function assertPicIsParticipant(meeting: Pick<Meeting, "participantIds">, pic: string) {
-  if (!meeting.participantIds.includes(pic)) {
-    throw new RuleViolationError("The PIC must be a participant of the meeting.");
+export function assertPicQualifies(
+  meeting: Pick<Meeting, "participantIds">,
+  pic: string,
+  officerIds: readonly string[],
+) {
+  if (!meeting.participantIds.includes(pic) && !officerIds.includes(pic)) {
+    throw new RuleViolationError(
+      "The PIC must be a participant or an active officer of the meeting's period.",
+    );
   }
 }
 

@@ -741,6 +741,10 @@ export const minutesActions = lazyEnv(() =>
     meetings: adminStores().meetings,
     actionItems: adminStores().actionItems,
     drafter: callModel() ? createAnthropicDrafter(callModel() as CallModel) : null,
+    officerIds: async (periodId) =>
+      (await adminStores().appointments.listForPeriod(periodId))
+        .filter((a) => a.status === "active")
+        .map((a) => a.userId),
     names: accountNames,
     logError: (message, fields) => adminStores().logger.error(message, fields),
     zoomTranscript: createZoomTranscript({

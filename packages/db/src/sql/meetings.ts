@@ -52,7 +52,13 @@ const toMeeting = (id: string, data: Record<string, unknown>): Meeting => ({
     Object.entries(data["attendance"] as Record<string, Record<string, unknown>>).map(
       ([uid, a]) => [
         uid,
-        { at: toDate(a["at"]) as Date, method: a["method"] as Attendance["method"] },
+        {
+          at: toDate(a["at"]) as Date,
+          method: a["method"] as Attendance["method"],
+          // Records written before step 12.2 have no state: they were all "present".
+          status: (a["status"] as Attendance["status"] | undefined) ?? "present",
+          note: (a["note"] as string | undefined) ?? "",
+        },
       ],
     ),
   ),

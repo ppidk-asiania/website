@@ -38,11 +38,12 @@ export function useListTable<T extends { id: string }, K extends string>(
   sortValue: (row: T, key: K) => string | number,
   initialSort: SortState<K> = { key: null, dir: "asc" },
   filterText: (row: T, key: K) => string = (row, key) => String(sortValue(row, key)),
+  initialPageSize = 10,
 ) {
   const [sort, setSort] = useState<SortState<K>>(initialSort);
   const [filters, setFilters] = useState<ColumnFilters<K>>({});
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(initialPageSize);
   const [picked, setSelected] = useState<Set<string>>(() => new Set());
 
   /* eslint-disable react-hooks/exhaustive-deps */

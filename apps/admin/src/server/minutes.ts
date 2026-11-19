@@ -12,7 +12,8 @@ import {
   parseVtt,
   type DraftOutput,
   type MinutesDrafter,
-  assertPicIsParticipant,
+  assertPicQualifies,
+  presentUids,
   MEETING_ROLE_LABELS,
   MinutesInputSchema,
   quorumMet,
@@ -32,6 +33,8 @@ export interface MinutesDeps {
   readonly meetings: Pick<SqlMeetingStore, "get" | "write">;
   readonly actionItems: Pick<SqlActionItemStore, "get" | "write" | "readMeeting">;
   readonly drafter: MinutesDrafter | null;
+  /** Uids of the officers with an active seat in the period (they may be a PIC without attending). */
+  readonly officerIds: (periodId: string) => Promise<readonly string[]>;
   readonly names: (uids: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   readonly logError: (message: string, fields: Record<string, unknown>) => void;
   readonly zoomTranscript: (meeting: Meeting) => Promise<string | null>;
@@ -185,7 +188,10 @@ export function createMinutesActions(deps: MinutesDeps) {
             throw new RuleViolationError("Only the meeting's chair or secretary can do this.");
           }
           if (meeting.cancelledAt) throw new RuleViolationError("This meeting is cancelled.");
-          assertPicIsParticipant(meeting, input.pic);
+          // An unchanged PIC stays even after leaving office.
+          if (current?.pic !== input.pic && !meeting.participantIds.includes(input.pic)) {
+            assertPicQualifies(meeting, input.pic, await deps.officerIds(meeting.periodId));
+          }
           return {
             meetingId: meeting.id,
             meetingTitle: meeting.title,
@@ -311,6 +317,12 @@ export function createMinutesActions(deps: MinutesDeps) {
   return { save, approve, saveItem, setItemDone, removeItem, draft };
 }
 
+// A person who is not "present" is excused, sick or just absent (no record).
+const away = (meeting: Meeting, uid: string) => {
+  const status = meeting.attendance[uid]?.status;
+  return status && status !== "present" ? status : "absent";
+};
+
 export function minutesSheet(
   meeting: Meeting,
   names: ReadonlyMap<string, string>,
@@ -324,7 +336,7 @@ export function minutesSheet(
     timeStyle: "short",
   });
   const minutes = meeting.minutes;
-  const present = new Set(minutes?.attendanceSnapshot ?? Object.keys(meeting.attendance));
+  const present = new Set(minutes?.attendanceSnapshot ?? presentUids(meeting));
   const quorum = quorumMet(meeting);
   return {
     title: `Notulen / Minutes: ${meeting.title}`,
@@ -335,7 +347,7 @@ export function minutesSheet(
         lines: [
           ...meeting.participants.map(
             (p) =>
-              `${name(p.uid)} (${MEETING_ROLE_LABELS[p.role]}): ${present.has(p.uid) ? "present" : "absent"}`,
+              `${name(p.uid)} (${MEETING_ROLE_LABELS[p.role]}): ${present.has(p.uid) ? "present" : away(meeting, p.uid)}`,
           ),
           quorum === null
             ? "Quorum: not set"
@@ -376,7 +388,7 @@ export function attendanceSheet(
     dateStyle: "long",
     timeStyle: "short",
   });
-  const present = Object.keys(meeting.attendance).length;
+  const present = presentUids(meeting).length;
   return {
     title: `Daftar hadir / Attendance: ${meeting.title}`,
     subtitle: `${when.format(meeting.startsAt)} (${meeting.timeZone})`,
@@ -386,9 +398,9 @@ export function attendanceSheet(
         lines: meeting.participants.map((p) => {
           const a = meeting.attendance[p.uid];
           const who = `${names.get(p.uid) ?? p.uid} (${MEETING_ROLE_LABELS[p.role]})`;
-          return a
+          return a?.status === "present"
             ? `${who}: present ${a.at.toISOString().slice(0, 16).replace("T", " ")} UTC (${a.method})`
-            : `${who}: absent`;
+            : `${who}: ${away(meeting, p.uid)}${a?.note ? ` (${a.note})` : ""}`;
         }),
       },
     ],

@@ -24,10 +24,25 @@ export interface MeetingRoom {
   readonly externalUrl: string | null;
 }
 
+export const ATTENDANCE_STATUSES = ["present", "excused", "sick"] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+
 export interface Attendance {
   readonly at: Date;
   readonly method: "code" | "manual";
+  readonly status: AttendanceStatus;
+  readonly note: string;
 }
+
+/** "No news" is never stored: it is a person without a record once the meeting has ended. */
+export type AttendanceState = AttendanceStatus | "not_yet" | "no_news";
+export const ATTENDANCE_STATE_LABELS: Record<AttendanceState, string> = {
+  present: "Present",
+  excused: "Excused",
+  sick: "Sick",
+  not_yet: "Not signed yet",
+  no_news: "No news",
+};
 
 export interface AgendaItem {
   readonly id: string;
@@ -177,11 +192,28 @@ export function attendanceOpen(
   );
 }
 
+export function attendanceState(
+  meeting: Pick<Meeting, "attendance" | "endsAt">,
+  uid: string,
+  now: Date,
+): AttendanceState {
+  const record = meeting.attendance[uid];
+  if (record) return record.status;
+  return now.getTime() >= meeting.endsAt.getTime() ? "no_news" : "not_yet";
+}
+
+export const isAway = (meeting: Pick<Meeting, "attendance">, uid: string): boolean => {
+  const status = meeting.attendance[uid]?.status;
+  return status === "excused" || status === "sick";
+};
+
 export function markAttendance(
   meeting: Meeting,
   uid: string,
   method: Attendance["method"],
   now: Date,
+  status: AttendanceStatus = "present",
+  note = "",
 ): Meeting {
   if (roleIn(meeting, uid) === null) {
     throw new RuleViolationError("You are not a participant of this meeting.");
@@ -191,8 +223,14 @@ export function markAttendance(
   if (method === "code" && !attendanceOpen(meeting, now)) {
     throw new RuleViolationError("Attendance for this meeting is not open.");
   }
-  if (meeting.attendance[uid]) return meeting;
-  return { ...meeting, attendance: { ...meeting.attendance, [uid]: { at: now, method } } };
+  if (status === "present" && meeting.attendance[uid]?.status === "present") return meeting;
+  return {
+    ...meeting,
+    attendance: {
+      ...meeting.attendance,
+      [uid]: { at: now, method, status, note: status === "present" ? "" : note },
+    },
+  };
 }
 
 export function unmarkAttendance(meeting: Meeting, uid: string): Meeting {

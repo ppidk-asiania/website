@@ -1,4 +1,4 @@
-import { meetingStatus } from "@website/domain/meetings";
+import { meetingStatus, presentUids } from "@website/domain/meetings";
 import { canChangePeriod, inTreeOrder, orgUnitPath } from "@website/domain/organizations";
 import { can, canInSomeScope } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
@@ -57,7 +57,7 @@ export default async function AdminMeetingsPage({
           timeZone: m.timeZone,
           status: meetingStatus(m, now),
           participants: m.participants.length,
-          present: Object.keys(m.attendance).length,
+          present: presentUids(m).length,
           mine: m.participantIds.includes(principal.userId),
         }))}
     />

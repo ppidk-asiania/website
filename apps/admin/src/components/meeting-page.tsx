@@ -1,11 +1,14 @@
 "use client";
 
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ATTENDANCE_STATE_LABELS,
   MEETING_ROLE_LABELS,
   MEETING_STATUS_LABELS,
+  type AttendanceState,
+  type AttendanceStatus,
   type MeetingRole,
   type MeetingStatus,
 } from "@website/domain/meetings";
@@ -27,7 +30,15 @@ import { ChoiceField, Field, FormModal, NotifyField, text } from "@/components/p
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  SearchBox,
+  SelectCheckbox,
+  Tabs,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 
@@ -65,8 +76,28 @@ export interface MeetingView {
     role: MeetingRole;
     presentAt: string | null;
     method: "code" | "manual" | null;
+    state: AttendanceState;
+    note: string;
   }>;
+  /** Active officers of the period who are not participants, for the PIC list (name has the seat). */
+  officers: Array<{ uid: string; name: string }>;
+  /** The viewer's own attendance; null when they are not a participant or the meeting is cancelled. */
+  own: { state: AttendanceState; at: string | null; windowOpen: boolean } | null;
+  /** Approved minutes freeze the attendance. */
+  locked: boolean;
 }
+
+type Row = MeetingView["participants"][number] & { id: string };
+type Tab = "all" | "not_yet" | "present" | "away" | "no_news";
+const TAB_LABELS: Record<Tab, string> = {
+  all: "All",
+  not_yet: "Not yet",
+  present: "Present",
+  away: "Excused / Sick",
+  no_news: "No news",
+};
+const inTab = (r: Row, tab: Tab) =>
+  tab === "all" || (tab === "away" ? r.state === "excused" || r.state === "sick" : r.state === tab);
 
 function CodeScreen({ meetingId, onClose }: { meetingId: string; onClose: () => void }) {
   const [code, setCode] = useState<{ code: string; qr: string } | null>(null);
@@ -139,47 +170,93 @@ export function MeetingPage({
     downloadCsv(`attendance-${m.id}`, attendanceCsv(m.participants));
   };
 
-  const tick = async (uid: string, present: boolean) => {
-    const result = await markAttendanceAction({ id: m.id, version: m.version, uid, present });
-    if (!result.ok) return toast.show(actionMessage(result));
-    router.refresh();
+  const [tab, setTab] = useState<Tab>("all");
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [away, setAway] = useState<"excused" | "sick" | null>(null);
+  const canMark = runs && !m.locked;
+
+  const rows = useMemo<Row[]>(() => m.participants.map((p) => ({ ...p, id: p.uid })), [m]);
+  const count = (t: Tab) => rows.filter((r) => inTab(r, t)).length;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => inTab(r, tab) && (!q || r.name.toLowerCase().includes(q)));
+  }, [rows, tab, query]);
+  const table = useListTable(
+    visible,
+    (r: Row, key: "name" | "role" | "state") =>
+      key === "role" ? MEETING_ROLE_LABELS[r.role] : key === "state" ? r.state : r.name,
+    undefined,
+    undefined,
+    25,
+  );
+  const presentCount = count("present");
+  const unsigned = rows.filter((r) => r.state === "not_yet" || r.state === "no_news").length;
+
+  const markSelected = async (status: AttendanceStatus | "none", note = "") => {
+    setBusy(true);
+    const result = await markAttendanceAction({
+      id: m.id,
+      version: m.version,
+      uids: [...table.selected],
+      status,
+      note,
+    });
+    setBusy(false);
+    if (result.ok) {
+      table.clearSelection();
+      router.refresh();
+    }
+    return result;
   };
 
-  type P = MeetingView["participants"][number];
-  const columns: Column<P>[] = [
-    {
-      key: "name",
-      header: "Participant",
-      render: (p) => <span className="admin-table__title">{p.name}</span>,
-    },
-    { key: "role", header: "Role", render: (p) => MEETING_ROLE_LABELS[p.role] },
-    {
-      key: "present",
-      header: "Attendance",
-      render: (p) =>
-        p.presentAt
-          ? `Present · ${formatInZone(p.presentAt, m.timeZone)}${p.method === "manual" ? " (ticked)" : ""}`
-          : "—",
-    },
-    ...(runs && m.started
+  const columns: Column<Row>[] = [
+    ...(canMark
       ? [
           {
-            key: "tick",
-            header: "",
-            align: "right" as const,
-            render: (p: P) => (
-              <Button
-                size="sm"
-                icon={p.presentAt ? "x" : "check"}
-                variant="outline"
-                onClick={() => tick(p.uid, !p.presentAt)}
-              >
-                {p.presentAt ? "Remove" : "Mark present"}
-              </Button>
+            key: "check",
+            width: "24px",
+            header: (
+              <SelectCheckbox
+                label="Select all on page"
+                checked={table.pageAll}
+                indeterminate={table.pageSome && !table.pageAll}
+                onChange={table.togglePage}
+              />
+            ),
+            render: (r: Row) => (
+              <SelectCheckbox
+                label={`Select ${r.name}`}
+                checked={table.selected.has(r.id)}
+                onChange={() => table.toggle(r.id)}
+              />
             ),
           },
         ]
       : []),
+    {
+      key: "name",
+      header: table.header("name", "Participant"),
+      render: (p) => <span className="admin-table__title">{p.name}</span>,
+    },
+    {
+      key: "role",
+      header: table.header("role", "Role"),
+      render: (p) => MEETING_ROLE_LABELS[p.role],
+    },
+    {
+      key: "state",
+      header: table.header("state", "Attendance"),
+      render: (p) => (
+        <>
+          {ATTENDANCE_STATE_LABELS[p.state]}
+          {p.presentAt && p.state === "present"
+            ? ` · ${formatInZone(p.presentAt, m.timeZone)}${p.method === "manual" ? " (ticked)" : ""}`
+            : ""}
+          {p.note ? ` · ${p.note}` : ""}
+        </>
+      ),
+    },
   ];
 
   return (
@@ -230,6 +307,21 @@ export function MeetingPage({
           ) : null}
         </div>
       </div>
+      {m.own ? (
+        <Card>
+          <CardBody>
+            <strong>Your attendance:</strong>{" "}
+            {m.own.state === "present" && m.own.at
+              ? `present ${formatInZone(m.own.at, m.timeZone)}`
+              : m.own.state === "excused" || m.own.state === "sick"
+                ? ATTENDANCE_STATE_LABELS[m.own.state].toLowerCase()
+                : "not recorded yet"}{" "}
+            <Badge tone={m.own.windowOpen ? "success" : "neutral"}>
+              {m.own.windowOpen ? "Attendance is open" : "Attendance is closed"}
+            </Badge>
+          </CardBody>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader title="Details" />
         <CardBody>
@@ -259,12 +351,108 @@ export function MeetingPage({
       <Card>
         <CardHeader
           title="Attendance"
-          subtitle={`${m.participants.filter((p) => p.presentAt).length} of ${m.participants.length} present`}
+          subtitle={`${presentCount} of ${rows.length} present · ${
+            unsigned > 0
+              ? `${unsigned} participant${unsigned === 1 ? "" : "s"} not signed yet`
+              : "everyone has a record"
+          }`}
         />
-        <CardBody flush>
-          <DataTable columns={columns} rows={m.participants} rowKey={(p) => p.uid} />
+        <CardBody>
+          <SearchBox
+            placeholder="Search by name..."
+            label="Search participants"
+            onSearch={(q) => {
+              setQuery(q);
+              table.setPage(1);
+            }}
+          />
+          <Tabs
+            label="Attendance lists"
+            tabs={(Object.keys(TAB_LABELS) as Tab[])
+              .filter((t) => t === "all" || t === tab || count(t) > 0)
+              .map((t) => ({ key: t, label: TAB_LABELS[t], count: count(t) }))}
+            active={tab}
+            onSelect={(t) => {
+              setTab(t);
+              table.setPage(1);
+              table.clearSelection();
+            }}
+          />
         </CardBody>
+        <ListCard
+          table={table}
+          noun="participant"
+          columns={columns}
+          empty={
+            <ListEmpty
+              noun="participant"
+              query={query}
+              filters={0}
+              emptyHint="Nobody is in this list."
+              onClear={() => setQuery("")}
+            />
+          }
+          bulkActions={
+            canMark ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon="check"
+                  disabled={busy || !m.started}
+                  title={
+                    m.started ? undefined : "Attendance can be ticked once the meeting has started"
+                  }
+                  onClick={async () => {
+                    const result = await markSelected("present");
+                    if (!result.ok) toast.show(actionMessage(result));
+                  }}
+                >
+                  Mark present
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  icon="note"
+                  disabled={busy}
+                  onClick={() => setAway("excused")}
+                >
+                  Excused
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  icon="clock"
+                  disabled={busy}
+                  onClick={() => setAway("sick")}
+                >
+                  Sick
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  icon="x"
+                  disabled={busy}
+                  onClick={async () => {
+                    const result = await markSelected("none");
+                    if (!result.ok) toast.show(actionMessage(result));
+                  }}
+                >
+                  Clear
+                </Button>
+              </>
+            ) : null
+          }
+        />
       </Card>
+      <FormModal
+        open={away !== null}
+        title={away === "sick" ? "Mark as sick" : "Mark as excused"}
+        onClose={() => setAway(null)}
+        onSubmit={(form) => markSelected(away ?? "excused", text(form, "note"))}
+      >
+        <Field label="Note (optional)" name="note" maxLength={200} />
+      </FormModal>
       {m.zoomSummaries.length > 0 ? (
         <Card>
           <CardHeader
@@ -301,6 +489,7 @@ export function MeetingPage({
         minutes={m.minutes}
         items={m.actionItems}
         participants={m.participants.map((p) => ({ uid: p.uid, name: p.name }))}
+        officers={m.officers}
         runs={runs}
         canApprove={canApprove}
         extra={

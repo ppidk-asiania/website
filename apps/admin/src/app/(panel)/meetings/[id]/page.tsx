@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { meetingStatus } from "@website/domain/meetings";
+import { attendanceOpen, attendanceState, meetingStatus } from "@website/domain/meetings";
 import { summaryFolded } from "@website/domain/zoom";
 import { utcToWallTime } from "@website/domain/shared";
-import { inTreeOrder, orgUnitPath } from "@website/domain/organizations";
+import { inTreeOrder, orgUnitPath, seatLabel } from "@website/domain/organizations";
 import { can } from "@website/permissions";
 import { safeId } from "@website/security/validation";
 import { AccessMessage } from "@/components/access-message";
@@ -24,7 +24,7 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
   const meeting = await adminReads.getMeeting(id);
   if (!meeting || meeting.deletedAt || !canSeeMeeting(principal, meeting)) notFound();
   const DAY = 86_400_000;
-  const [units, items, bookings, sessions] = await Promise.all([
+  const [units, items, bookings, sessions, appointments] = await Promise.all([
     adminReads.listOrgUnits(meeting.periodId),
     adminReads.listActionItems(meeting.id),
     adminReads.listZoom(
@@ -32,6 +32,7 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
       new Date(meeting.startsAt.getTime() + DAY),
     ),
     meeting.room.zoomRequestId ? adminReads.zoomSessions([meeting.room.zoomRequestId]) : [],
+    adminReads.listAppointments(meeting.periodId),
   ]);
   const summaries = sessions
     .flatMap((s) => (s.summary ? [s.summary] : []))
@@ -45,6 +46,15 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
   const canEdit =
     status === "scheduled" && can(principal, "meetings.edit", { orgUnitPath: meeting.orgUnitPath });
   const name = (uid: string) => people.get(uid)?.name ?? people.get(uid)?.email ?? uid;
+  // PIC candidates after the participants: officers of the meeting's period, with their seat.
+  const officers = new Map<string, { uid: string; name: string; seats: string[] }>();
+  for (const a of appointments) {
+    const unit = units.find((u) => u.id === a.orgUnitId);
+    if (a.status !== "active" || !unit || meeting.participantIds.includes(a.userId)) continue;
+    const officer = officers.get(a.userId) ?? { uid: a.userId, name: a.name, seats: [] };
+    officer.seats.push(seatLabel(a.seat, unit));
+    officers.set(a.userId, officer);
+  }
   return (
     <MeetingPage
       meeting={{
@@ -99,7 +109,22 @@ export default async function MeetingRoute({ params }: { params: Promise<{ id: s
           role: p.role,
           presentAt: meeting.attendance[p.uid]?.at.toISOString() ?? null,
           method: meeting.attendance[p.uid]?.method ?? null,
+          state: attendanceState(meeting, p.uid, now),
+          note: meeting.attendance[p.uid]?.note ?? "",
         })),
+        officers: [...officers.values()].map((o) => ({
+          uid: o.uid,
+          name: `${o.name} - ${o.seats.join(", ")}`,
+        })),
+        own:
+          status !== "cancelled" && meeting.participantIds.includes(principal.userId)
+            ? {
+                state: attendanceState(meeting, principal.userId, now),
+                at: meeting.attendance[principal.userId]?.at.toISOString() ?? null,
+                windowOpen: attendanceOpen(meeting, now),
+              }
+            : null,
+        locked: Boolean(meeting.minutes?.approvedAt),
       }}
       runs={runs && status !== "cancelled"}
       canDraft={Boolean(getAdminEnv().ANTHROPIC_API_KEY)}

@@ -10,6 +10,7 @@ import {
   changeKey,
   CODE_LIFETIME_MS,
   dueReminder,
+  isAway,
   markAttendance,
   MAX_PARTICIPANTS,
   MEETING_ROLES,
@@ -18,6 +19,7 @@ import {
   noticeKey,
   reminderKey,
   runsMeeting,
+  ATTENDANCE_STATUSES,
   setRoom,
   unmarkAttendance,
   type Meeting,
@@ -99,7 +101,11 @@ const Cancel = Ref.extend({
   reason: safeText(500).pipe(z.string().min(2, "Give a reason.")),
   notify: z.boolean().default(true),
 });
-const Mark = Ref.extend({ uid: safeId, present: z.boolean() }).strict();
+const Mark = Ref.extend({
+  uids: z.array(safeId).min(1).max(MAX_PARTICIPANTS),
+  status: z.enum([...ATTENDANCE_STATUSES, "none"]),
+  note: safeText(200, { allowEmpty: true }).default(""),
+}).strict();
 
 const meetingAudit =
   (audit: AuditBuilder, action: AuditAction, revertible = true): MeetingAudit =>
@@ -435,17 +441,24 @@ export function createMeetingActions(deps: MeetingDeps) {
     permission: "meetings.read",
     inSomeScope: true,
     input: Mark,
-    handler: async ({ id, version, uid, present }, principal, audit) => {
+    handler: async ({ id, version, uids, status, note }, principal, audit) => {
       const now = deps.now();
       const saved = await run(
         principal,
         id,
         version,
         (m) => {
-          if (now.getTime() < m.startsAt.getTime()) {
+          // Excused and sick can be noted ahead of time; "present" only once it has started.
+          if (status === "present" && now.getTime() < m.startsAt.getTime()) {
             throw new RuleViolationError("Attendance can be ticked once the meeting has started.");
           }
-          return present ? markAttendance(m, uid, "manual", now) : unmarkAttendance(m, uid);
+          return uids.reduce(
+            (current, uid) =>
+              status === "none"
+                ? unmarkAttendance(current, uid)
+                : markAttendance(current, uid, "manual", now, status, note),
+            m,
+          );
         },
         meetingAudit(audit, "UPDATE"),
       );
@@ -480,7 +493,10 @@ export function createMeetingActions(deps: MeetingDeps) {
       const facts = kind === "start" ? await factsOf(meeting) : null;
       messages += await tell(
         meeting,
-        meeting.participantIds,
+        // Only the start reminder skips people already excused or sick.
+        kind === "start"
+          ? meeting.participantIds.filter((uid) => !isAway(meeting, uid))
+          : meeting.participantIds,
         (uid) => reminderKey(meeting, kind, uid),
         (uid, zone) =>
           kind === "start"

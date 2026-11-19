@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { Dictionary } from "@/i18n/dictionaries";
+import type { Dictionary, Language } from "@/i18n/dictionaries";
+import { formatAttendTime } from "@/lib/attend-time";
 import { attendAction } from "./actions";
 
-export function AttendForm({ code, labels: t }: { code: string; labels: Dictionary["attend"] }) {
+export function AttendForm({
+  code,
+  labels: t,
+  language,
+}: {
+  code: string;
+  labels: Dictionary["attend"];
+  language: Language;
+}) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -12,7 +21,12 @@ export function AttendForm({ code, labels: t }: { code: string; labels: Dictiona
     setBusy(true);
     try {
       const result = await attendAction(new FormData(event.currentTarget).get("code"));
-      if (result.ok) setMessage(`${t.done} "${result.title}".`);
+      if (result.ok)
+        setMessage(
+          t.done
+            .replace("{title}", `"${result.title}"`)
+            .replace("{time}", formatAttendTime(result.at, result.zone, language)),
+        );
       else
         setMessage(
           {

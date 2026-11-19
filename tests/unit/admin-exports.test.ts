@@ -79,12 +79,26 @@ describe("admin CSV exports (M8)", () => {
     ]);
     expect(
       attendanceCsv([
-        { name: "Rina", role: "chair", presentAt: "2026-11-10T10:01:00.000Z", method: "code" },
-        { name: "Budi", role: "member", presentAt: null, method: null },
+        {
+          name: "Rina",
+          role: "chair",
+          presentAt: "2026-11-10T10:01:00.000Z",
+          method: "code",
+          state: "present",
+        },
+        { name: "Budi", role: "member", presentAt: null, method: null, state: "no_news" },
+        {
+          name: "Sari",
+          role: "member",
+          presentAt: "2026-11-10T09:00:00.000Z",
+          method: "manual",
+          state: "sick",
+        },
       ]).slice(1),
     ).toEqual([
       ['"Rina"', '"Chair"', '"present"', '"2026-11-10 10:01"', '"code"'],
-      ['"Budi"', '"Participant"', '"absent"', '""', '""'],
+      ['"Budi"', '"Participant"', '"no news"', '""', '""'],
+      ['"Sari"', '"Participant"', '"sick"', '"2026-11-10 09:00"', '"manual"'],
     ]);
     expect(
       applicantsCsv([

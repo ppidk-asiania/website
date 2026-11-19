@@ -199,20 +199,30 @@ export function mapPpidkMeetings(
         return body ? [[id("agenda", a["id"]), body]] : [];
       }),
     );
+    // belum and alfa are not stored: they are computed from the missing record.
+    const STATUS: Readonly<Record<string, "present" | "excused" | "sick">> = {
+      hadir: "present",
+      izin: "excused",
+      sakit: "sick",
+    };
     const attendance = Object.fromEntries(
-      participants.flatMap((p) =>
-        p.row["attendance"] === "hadir"
+      participants.flatMap((p) => {
+        const status = STATUS[p.row["attendance"] as string];
+        return status
           ? [
               [
                 p.uid,
                 {
                   at: at(p.row["checked_in_at"]) ?? startsAt,
-                  method: p.row["check_in_method"] === "kode" ? "code" : "manual",
+                  method:
+                    status === "present" && p.row["check_in_method"] === "kode" ? "code" : "manual",
+                  status,
+                  note: "",
                 },
               ],
             ]
-          : [],
-      ),
+          : [];
+      }),
     );
     const approvedAt = at(m["minutes_approved_at"]);
     const hasMinutes = m["minutes_status"] !== "kosong" || Object.keys(notes).length > 0;
@@ -263,7 +273,12 @@ export function mapPpidkMeetings(
                 ? (person(m["minutes_approved_by_user_id"]) ?? "ppidk")
                 : null,
             attendanceSnapshot:
-              m["minutes_status"] === "disahkan" ? Object.keys(attendance).sort() : null,
+              m["minutes_status"] === "disahkan"
+                ? Object.entries(attendance)
+                    .filter(([, a]) => a.status === "present")
+                    .map(([uid]) => uid)
+                    .sort()
+                : null,
           }
         : null,
       ...meta(m),

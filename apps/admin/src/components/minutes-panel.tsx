@@ -51,6 +51,7 @@ export function MinutesPanel({
   minutes,
   items,
   participants,
+  officers,
   runs,
   canApprove,
   extra,
@@ -61,6 +62,8 @@ export function MinutesPanel({
   minutes: MinutesView | null;
   items: ActionItemView[];
   participants: Array<{ uid: string; name: string }>;
+  /** Active officers of the meeting's period who are not participants (name includes the seat). */
+  officers: Array<{ uid: string; name: string }>;
   runs: boolean;
   canApprove: boolean;
   extra?: ReactNode;
@@ -248,10 +251,17 @@ export function MinutesPanel({
             defaultValue={item === "new" ? "" : item.title}
           />
           <ChoiceField
-            label="PIC (a participant)"
+            label="PIC (a participant or an officer)"
             name="pic"
             defaultValue={item === "new" ? (participants[0]?.uid ?? "") : item.pic}
-            options={participants.map((p) => ({ value: p.uid, label: p.name }))}
+            options={[
+              ...participants,
+              ...officers,
+              // A PIC who no longer qualifies stays shown.
+              ...(item !== "new" && ![...participants, ...officers].some((p) => p.uid === item.pic)
+                ? [{ uid: item.pic, name: item.picName }]
+                : []),
+            ].map((p) => ({ value: p.uid, label: p.name }))}
           />
           <Field
             label="Due"

@@ -3,15 +3,18 @@ import { createSqlMeetingStore, createSqlMessageLog, deleteExpired } from "@webs
 import {
   attendanceCode,
   CODE_ALPHABET,
+  attendanceState,
   dueReminder,
   meetingStatus,
+  presentUids,
+  type Meeting,
   normalizeCode,
   setRoom,
 } from "@website/domain/meetings";
 import { createMessenger } from "@website/domain/messaging";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { createMeetingActions } from "../../apps/admin/src/server/meetings";
-import { createAttend } from "../../apps/web/src/server/attendance";
+import { createAttend, createAttendCard } from "../../apps/web/src/server/attendance";
 import { fakeDb } from "../support/fake-db";
 
 type Db = Parameters<typeof createSqlMeetingStore>[0];
@@ -106,6 +109,8 @@ const actions = () =>
     now: () => clock,
     uuid: () => "u1",
   });
+
+const zoneOf = (uid: string) => Promise.resolve(uid === "sec" ? "America/New_York" : null);
 
 const input = {
   title: "Rapat kerja",
@@ -259,7 +264,7 @@ describe("meetings (F4)", () => {
     expect(opened.data.url).toBe(`https://example.org/attend/${code}`);
     expect([...fake.docs.keys()].some((k) => k.includes(code))).toBe(false);
 
-    const attend = createAttend({ meetings: store(), now: () => clock });
+    const attend = createAttend({ meetings: store(), zoneOf, now: () => clock });
     expect(await attend(null, code)).toEqual({ ok: false, error: "signin" });
     expect(await attend("member", code)).toEqual({ ok: false, error: "closed" });
     clock = new Date("2026-11-10T09:31:00Z");
@@ -273,6 +278,8 @@ describe("meetings (F4)", () => {
     expect(await attend("member", fresh.data.code.toLowerCase())).toEqual({
       ok: true,
       title: "Rapat kerja",
+      at: clock.toISOString(),
+      zone: "Asia/Tokyo",
     });
     const once = (await store().get(m.id))?.attendance["member"];
     clock = new Date("2026-11-10T09:32:00Z");
@@ -289,17 +296,25 @@ describe("meetings (F4)", () => {
 
   it("the chair ticks someone present once started; a cancelled meeting is history", async () => {
     const m = await create();
-    const early = await actions().mark(...as(chair))({ ...m, uid: "member", present: true });
+    const early = await actions().mark(...as(chair))({
+      ...m,
+      uids: ["member"],
+      status: "present",
+    });
     expect(early).toMatchObject({ ok: false, error: "refused" });
     clock = new Date("2026-11-10T10:05:00Z");
-    const ticked = await actions().mark(...as(chair))({ ...m, uid: "member", present: true });
+    const ticked = await actions().mark(...as(chair))({
+      ...m,
+      uids: ["member"],
+      status: "present",
+    });
     if (!ticked.ok) throw new Error("tick failed");
     expect((await store().get(m.id))?.attendance["member"]?.method).toBe("manual");
     const untick = await actions().mark(...as(chair))({
       id: m.id,
       version: ticked.data.version,
-      uid: "member",
-      present: false,
+      uids: ["member"],
+      status: "none",
     });
     if (!untick.ok) throw new Error("untick failed");
     expect((await store().get(m.id))?.attendance).toEqual({});
@@ -481,10 +496,14 @@ describe("meeting edits and lists (F4)", () => {
   it("a manual tick also refuses strangers and cancelled meetings", async () => {
     const m = await create();
     clock = new Date("2026-11-10T10:05:00Z");
-    const stranger = await actions().mark(...as(chair))({ ...m, uid: "nobody", present: true });
+    const stranger = await actions().mark(...as(chair))({
+      ...m,
+      uids: ["nobody"],
+      status: "present",
+    });
     expect(stranger).toMatchObject({ issues: ["You are not a participant of this meeting."] });
     fake.docs.set(`meetings/${m.id}`, { ...fake.docs.get(`meetings/${m.id}`), cancelledAt: clock });
-    const attend = createAttend({ meetings: store(), now: () => clock });
+    const attend = createAttend({ meetings: store(), zoneOf, now: () => clock });
     const opened = await actions().openCode(...as(planner))({ id: "missing" });
     expect(opened).toMatchObject({ ok: false, issues: ["This meeting does not exist."] });
     await store().saveCode("ABCDEF", m.id, new Date("2026-11-10T11:00:00Z"));
@@ -499,6 +518,7 @@ describe("meeting edits and lists (F4)", () => {
         findCode: () => Promise.resolve("m"),
         attend: () => Promise.reject(new Error("database down")),
       },
+      zoneOf,
       now: () => clock,
     });
     await expect(broken("member", "ABCDEF")).rejects.toThrow("database down");
@@ -676,5 +696,118 @@ describe("meeting notices (12.1)", () => {
     clock = new Date("2026-11-10T10:20:00Z");
     expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 2 });
     expect(sent[0]).toBe(`meeting:${m.id}:start:chair:${start + 30 * 60_000}`);
+  });
+  it("the start reminder skips people marked excused or sick, and only the start reminder", async () => {
+    const m = await create();
+    clock = new Date("2026-11-10T09:30:00Z");
+    const marked = await actions().mark(...as(chair))({
+      ...m,
+      uids: ["member"],
+      status: "sick",
+      note: "Flu",
+    });
+    if (!marked.ok) throw new Error(JSON.stringify(marked));
+    sent.length = 0;
+    clock = new Date("2026-11-10T09:50:00Z");
+    expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 1 });
+    expect(sent).toEqual([`meeting:${m.id}:start:chair:${start}`]);
+    clock = new Date("2026-11-10T11:31:00Z");
+    expect(await actions().sendReminders()).toEqual({ meetings: 1, messages: 2 });
+  });
+
+  it("marks several people at once with a state and a note; clearing removes the record", async () => {
+    const m = await create();
+    clock = new Date("2026-11-10T09:30:00Z");
+    const excused = await actions().mark(...as(chair))({
+      ...m,
+      uids: ["chair", "member"],
+      status: "excused",
+      note: "Exam",
+    });
+    if (!excused.ok) throw new Error(JSON.stringify(excused));
+    expect((await store().get(m.id))?.attendance).toMatchObject({
+      chair: { status: "excused", note: "Exam", method: "manual" },
+      member: { status: "excused", note: "Exam", method: "manual" },
+    });
+    const early = await actions().mark(...as(chair))({
+      id: m.id,
+      version: excused.data.version,
+      uids: ["member"],
+      status: "present",
+    });
+    expect(early).toMatchObject({ ok: false, error: "refused" });
+    const nobody = await actions().mark(...as(chair))({
+      id: m.id,
+      version: excused.data.version,
+      uids: ["member", "nobody"],
+      status: "sick",
+    });
+    expect(nobody).toMatchObject({ issues: ["You are not a participant of this meeting."] });
+    expect((await store().get(m.id))?.version).toBe(excused.data.version);
+    const cleared = await actions().mark(...as(chair))({
+      id: m.id,
+      version: excused.data.version,
+      uids: ["chair", "member"],
+      status: "none",
+    });
+    expect(cleared.ok).toBe(true);
+    expect((await store().get(m.id))?.attendance).toEqual({});
+  });
+
+  it("the attendance state is computed: no news appears only after the meeting ended", async () => {
+    const m = (await store().get((await create()).id)) as Meeting;
+    const withSick = {
+      ...m,
+      attendance: { chair: { at: clock, method: "manual", status: "sick", note: "" } },
+    } as Meeting;
+    expect(attendanceState(withSick, "chair", clock)).toBe("sick");
+    expect(attendanceState(withSick, "member", clock)).toBe("not_yet");
+    expect(attendanceState(withSick, "member", new Date("2026-11-10T11:30:00Z"))).toBe("no_news");
+    expect(presentUids(withSick)).toEqual([]);
+  });
+
+  it("looking a code up shows the card and never records; a dead code shows nothing", async () => {
+    const m = await create();
+    await store().saveCode("ABCDEF", m.id, new Date("2026-11-10T11:00:00Z"));
+    const card = createAttendCard({
+      meetings: store(),
+      unitName: (id) => Promise.resolve(id === "media" ? "Media team" : null),
+      zoneOf,
+      now: () => clock,
+    });
+    clock = new Date("2026-11-10T09:31:00Z");
+    expect(await card("sec", "abcdef")).toBeNull();
+    expect(await card("member", "abcdef")).toEqual({
+      title: "Rapat kerja",
+      startsAt: "2026-11-10T10:00:00.000Z",
+      zone: "Asia/Tokyo",
+      unit: "Media team",
+      place: null,
+      recordedAt: null,
+    });
+    expect(await card("member", "ZZZZZZ")).toBeNull();
+    expect((await store().get(m.id))?.attendance).toEqual({});
+    const attend = createAttend({ meetings: store(), zoneOf, now: () => clock });
+    const done = await attend("member", "abcdef");
+    expect(done).toEqual({
+      ok: true,
+      title: "Rapat kerja",
+      at: clock.toISOString(),
+      zone: "Asia/Tokyo",
+    });
+    expect((await card("member", "ABCDEF"))?.recordedAt).toBe(clock.toISOString());
+    expect((await store().get(m.id))?.attendance["member"]?.status).toBe("present");
+  });
+
+  it("signing with the code turns an excused mark into present", async () => {
+    const m = await create();
+    clock = new Date("2026-11-10T09:31:00Z");
+    await actions().mark(...as(chair))({ ...m, uids: ["member"], status: "excused" });
+    await store().saveCode("ABCDEF", m.id, new Date("2026-11-10T11:00:00Z"));
+    await createAttend({ meetings: store(), zoneOf, now: () => clock })("member", "ABCDEF");
+    expect((await store().get(m.id))?.attendance["member"]).toMatchObject({
+      status: "present",
+      method: "code",
+    });
   });
 });

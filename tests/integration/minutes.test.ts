@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createSqlActionItemStore, createSqlAiStore, createSqlMeetingStore } from "@website/db/sql";
 import { modelFor } from "@website/domain/ai";
 import {
+  approveMinutes,
   isOverdue,
   mergeDraft,
   parseVtt,
@@ -13,7 +14,11 @@ import {
 import type { ReportPdfInput } from "@website/pdf";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { createAnthropicDrafter, createCallModel } from "../../apps/admin/src/server/anthropic";
-import { createMinutesActions, createMinutesFileRoute } from "../../apps/admin/src/server/minutes";
+import {
+  attendanceSheet,
+  createMinutesActions,
+  createMinutesFileRoute,
+} from "../../apps/admin/src/server/minutes";
 import { fakeDb } from "../support/fake-db";
 
 type Db = Parameters<typeof createSqlMeetingStore>[0];
@@ -48,6 +53,7 @@ const actions = () =>
     meetings: meetings(),
     actionItems: items(),
     drafter,
+    officerIds: (periodId) => Promise.resolve(periodId === "p1" ? ["officer"] : []),
     names: (uids) =>
       Promise.resolve(new Map(uids.filter((u) => u !== "member").map((u) => [u, u.toUpperCase()]))),
     logError: (message) => errors.push(message),
@@ -237,7 +243,9 @@ describe("action items (F5)", () => {
       pic: "nobody",
       dueOn: "2026-11-20",
     });
-    expect(stranger).toMatchObject({ issues: ["The PIC must be a participant of the meeting."] });
+    expect(stranger).toMatchObject({
+      issues: ["The PIC must be a participant or an active officer of the meeting's period."],
+    });
     const byMember = await actions().saveItem(...as(member))({
       version: null,
       meetingId: "m1",
@@ -347,6 +355,76 @@ describe("action items (F5)", () => {
         dueOn: null,
       }),
     ).toMatchObject({ issues: ["This meeting does not exist."] });
+  });
+
+  it("the PIC can be an active officer of the meeting's period; one who no longer qualifies stays on an unchanged item", async () => {
+    const save = (pic: string, extra: Record<string, unknown> = {}) =>
+      actions().saveItem(...as(chair))({
+        version: null,
+        meetingId: "m1",
+        title: "Book the venue",
+        pic,
+        dueOn: null,
+        ...extra,
+      });
+    const created = await save("officer");
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    const onlyOfficers = createMinutesActions({
+      meetings: meetings(),
+      actionItems: items(),
+      drafter: null,
+      officerIds: () => Promise.resolve([]),
+      names: () => Promise.resolve(new Map()),
+      logError: () => undefined,
+      zoomTranscript: () => Promise.resolve(null),
+      zoomSummary: () => Promise.resolve(null),
+      now: () => clock,
+    });
+    const edit = (title: string, pic: string) =>
+      onlyOfficers.saveItem(...as(chair))({
+        id: created.data.id,
+        version: created.data.version,
+        meetingId: "m1",
+        title,
+        pic,
+        dueOn: null,
+      });
+    expect(await edit("Book the big venue", "officer")).toMatchObject({ ok: true });
+    expect(await edit("Book the big venue", "other-officer")).toMatchObject({ ok: false });
+  });
+
+  it("the attendance sheet and minutes print the state; the frozen snapshot keeps only present", async () => {
+    const base = (await meetings().get("m1")) as Meeting;
+    const meeting = {
+      ...base,
+      attendance: {
+        chair: { at: clock, method: "code", status: "present", note: "" },
+        sec: { at: clock, method: "manual", status: "excused", note: "Exam" },
+        member: { at: clock, method: "manual", status: "sick", note: "" },
+      },
+    } as Meeting;
+    const names = new Map([["chair", "Chair"]]);
+    const lines = attendanceSheet(meeting, names, clock).sections[0]?.lines ?? [];
+    expect(attendanceSheet(meeting, names, clock).sections[0]?.heading).toBe("1 of 3 present");
+    expect(lines.join("\n")).toContain("sec (Secretary (minutes)): excused");
+    expect(lines.join("\n")).toContain("member (Participant): sick");
+    const approved = approveMinutes(
+      {
+        ...meeting,
+        minutes: {
+          notes: {},
+          other: "",
+          quorum: null,
+          source: "manual",
+          approvedAt: null,
+          approvedBy: null,
+          attendanceSnapshot: null,
+        },
+      } as Meeting,
+      "chair",
+      clock,
+    );
+    expect(approved.minutes?.attendanceSnapshot).toEqual(["chair"]);
   });
 });
 
