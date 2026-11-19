@@ -64,13 +64,18 @@ const actions = () =>
     logExport: (actorId, details) => securityEvents.push({ actorId, details }),
   });
 const captcha = vi.fn((token: string) => Promise.resolve(token === "human"));
-const submit = (input: unknown) =>
+type Signed = { uid: string; email: string | null; name: string | null };
+const guestOf = { name: "Guest", email: "guest@example.org" };
+const submit = (input: unknown, user: Signed | null = null) =>
   createFormSubmission({
-    submit: (token, version, answers, now) => web.submit(token, version, answers, now),
+    submit: (token, version, answers, now, who) => web.submit(token, version, answers, now, who),
     captcha,
     now: () => clock,
-  })(input);
-const reader = () => createPublicFormReader({ find: (token) => web.findPublic(token, clock) });
+  })(user, { guest: guestOf, ...(input as object) });
+const reader =
+  (user: Signed | null = null) =>
+  (token: string) =>
+    createPublicFormReader({ find: (t, who) => web.findPublic(t, clock, who) })(token, user);
 const auditEntries = () =>
   [...fake.docs.entries()].filter(([p]) => p.startsWith("auditLogs/")).map(([, d]) => d);
 const responses = () => [...fake.docs.keys()].filter((p) => p.startsWith("formResponses/"));
@@ -310,10 +315,10 @@ describe("responses and export (forms.responses, forms.export)", () => {
       ok: true,
       data: {
         title: "Feedback Kongres 2026",
-        header: ["Submitted at (UTC)", "Version", "Full name", "Rating"],
+        header: ["Submitted at (UTC)", "Version", "Name", "E-mail", "Full name", "Rating"],
         rows: [
-          ["2026-10-20T07:00:00.000Z", "1", "=HYPERLINK(1)", "Bad"],
-          ["2026-10-20T06:00:00.000Z", "1", "Ari", "Bad"],
+          ["2026-10-20T07:00:00.000Z", "1", "Guest", "guest@example.org", "=HYPERLINK(1)", "Bad"],
+          ["2026-10-20T06:00:00.000Z", "1", "Guest", "guest@example.org", "Ari", "Bad"],
         ],
       },
     });
@@ -321,6 +326,230 @@ describe("responses and export (forms.responses, forms.export)", () => {
     expect(await actions().exportResponses(...as(owner))({ id: "missing" })).toMatchObject({
       ok: false,
       error: "refused",
+    });
+  });
+});
+
+describe("who may answer (10.3)", () => {
+  const ari: Signed = { uid: "u1", email: "ari@example.org", name: "Ari Account" };
+  const budi: Signed = { uid: "u2", email: "budi@example.org", name: null };
+  const seed = () => {
+    fake.docs.set("memberProfiles/u1", {
+      userId: "u1",
+      fullName: "Ari Wibowo",
+      whatsappNumber: "+61400000000",
+      university: "UGM",
+      dateOfBirth: "2000-02-03",
+      chapterId: "c1",
+      privacyPolicyVersion: "x",
+      consentedAt: new Date("2026-10-01T00:00:00Z"),
+      createdAt: new Date("2026-10-01T00:00:00Z"),
+      updatedAt: new Date("2026-10-01T00:00:00Z"),
+    });
+    fake.docs.set("chapters/c1", { name: "PPI Sydney" });
+  };
+  const appoint = (userId: string, status = "active", periodId = "p1") =>
+    fake.docs.set(`appointments/a-${userId}-${status}-${periodId}`, {
+      userId,
+      periodId,
+      status,
+      seat: "head",
+      title: "Kepala Bidang Desain",
+      createdAt: new Date("2026-10-01T00:00:00Z"),
+    });
+  const answerNow = (token: string, ids: string[], user: Signed | null, name = "Ari") =>
+    submit(
+      { token, version: 1, answers: { [ids[0]!]: name, [ids[1]!]: "Good" }, captcha: "human" },
+      user,
+    );
+
+  beforeEach(() => fake.docs.set("settings/activePeriod", { periodId: "p1" }));
+
+  it("guest asks for name and e-mail and stores them; no sign-in needed", async () => {
+    const { id, publicToken } = await published();
+    const ids = await questionIds(id);
+    expect(
+      await submit({
+        token: publicToken,
+        version: 1,
+        answers: { [ids[0]!]: "x", [ids[1]!]: "Good" },
+        captcha: "human",
+        guest: { name: "", email: "" },
+      }),
+    ).toEqual({ ok: false, error: "guest" });
+    expect(await answerNow(publicToken, ids, null)).toEqual({ ok: true });
+    expect(fake.docs.get(responses()[0]!)).toMatchObject({
+      name: "Guest",
+      email: "guest@example.org",
+    });
+    expect(fake.docs.get(responses()[0]!)).not.toHaveProperty("uid");
+  });
+
+  it("anonymous stores no identity, uid or profile even for a signed-in visitor", async () => {
+    seed();
+    const { id, publicToken } = await published({ respondents: "anonymous" });
+    const ids = await questionIds(id);
+    expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: true });
+    const row = fake.docs.get(responses()[0]!) as Record<string, unknown>;
+    expect(Object.keys(row).sort()).toEqual(["answers", "formId", "submittedAt", "version"]);
+  });
+
+  it("account forms ask for sign-in, keep a copy of the profile and one editable response", async () => {
+    seed();
+    appoint("u1");
+    const { id, publicToken } = await published({
+      respondents: "account",
+      profileFields: ["seat", "whatsapp", "chapter", "campus", "birthPlace", "birthDate"],
+    });
+    const ids = await questionIds(id);
+    expect(await answerNow(publicToken, ids, null)).toEqual({ ok: false, error: "signin" });
+    expect(responses()).toHaveLength(0);
+    expect(await reader(ari)(publicToken)).toMatchObject({
+      mine: {
+        name: "Ari Wibowo",
+        officer: true,
+        answers: null,
+        profile: { seat: "Kepala Bidang Desain", campus: "UGM", chapter: "PPI Sydney" },
+      },
+    });
+    expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: true });
+    expect(responses()).toEqual([`formResponses/${id}_u1`]);
+    expect(fake.docs.get(`formResponses/${id}_u1`)).toMatchObject({
+      uid: "u1",
+      name: "Ari Wibowo",
+      email: "ari@example.org",
+      profile: {
+        seat: "Kepala Bidang Desain",
+        whatsapp: "+61400000000",
+        chapter: "PPI Sydney",
+        campus: "UGM",
+        birthPlace: "",
+        birthDate: "2000-02-03",
+      },
+    });
+    fake.docs.set("memberProfiles/u1", {
+      ...fake.docs.get("memberProfiles/u1"),
+      university: "ITB",
+    });
+    expect(await answerNow(publicToken, ids, ari, "Ari B")).toEqual({ ok: true });
+    expect(responses()).toHaveLength(1);
+    expect(fake.docs.get(`formResponses/${id}_u1`)).toMatchObject({
+      answers: { [ids[0]!]: "Ari B" },
+      profile: { campus: "ITB" },
+    });
+    expect(await store.get(id)).toMatchObject({ responseCount: 1 });
+    expect(await reader(ari)(publicToken)).toMatchObject({
+      mine: { answers: { [ids[0]!]: "Ari B" } },
+    });
+    expect(await answerNow(publicToken, ids, budi)).toEqual({ ok: true });
+    expect(await store.get(id)).toMatchObject({ responseCount: 2 });
+    clock = new Date("2027-01-01T00:00:00Z");
+    await actions().close(...as(owner))({ id, version: (await store.get(id))?.version ?? 0 });
+    expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: false, error: "closed" });
+  });
+
+  it("officers forms refuse accounts without an active seat in the active period", async () => {
+    seed();
+    appoint("u1", "ended");
+    appoint("u1", "active", "p0");
+    const { id, publicToken } = await published({ respondents: "officers" });
+    const ids = await questionIds(id);
+    expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: false, error: "officers" });
+    expect(await reader(ari)(publicToken)).toMatchObject({ mine: { officer: false } });
+    expect(responses()).toHaveLength(0);
+    appoint("u1");
+    expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: true });
+    expect(await answerNow(publicToken, ids, budi)).toEqual({ ok: false, error: "officers" });
+  });
+
+  it("allows file questions on account forms only", async () => {
+    const file = { questions: [question({ type: "file", label: "CV" })] };
+    for (const [respondents, ok] of [
+      ["account", true],
+      ["guest", false],
+    ] as const) {
+      const saved = await actions().save(...as(owner))({
+        ...formInput({ ...file, respondents }),
+        version: null,
+      });
+      const result = await actions().publish(...as(owner))({
+        id: saved.ok ? saved.data.id : "",
+        version: 1,
+      });
+      expect(result.ok).toBe(ok);
+    }
+  });
+
+  it("export adds name, e-mail and profile columns", async () => {
+    seed();
+    const { id, publicToken } = await published({
+      respondents: "account",
+      profileFields: ["campus"],
+    });
+    const ids = await questionIds(id);
+    await answerNow(publicToken, ids, ari);
+    const exported = await actions().exportResponses(...as(owner))({ id });
+    expect(exported).toMatchObject({
+      ok: true,
+      data: {
+        header: [
+          "Submitted at (UTC)",
+          "Version",
+          "Name",
+          "E-mail",
+          "Profile: campus",
+          "Full name",
+          "Rating",
+        ],
+        rows: [[expect.any(String), "1", "Ari Wibowo", "ari@example.org", "UGM", "Ari", "Good"]],
+      },
+    });
+  });
+});
+
+describe("own forms (forms.edit in a unit scope)", () => {
+  const unitStaff = (userId: string): Principal => ({
+    kind: "user",
+    userId,
+    active: true,
+    assignments: [
+      {
+        roleId: "r",
+        scope: { type: "orgUnit", orgUnitId: "design" },
+        permissions: new Set(normalizePermissions(["forms.edit"])),
+      },
+    ],
+  });
+
+  it("a unit-scoped editor creates forms and changes only their own; global covers all", async () => {
+    const mine = await actions().save(...as(unitStaff("w1")))({ ...formInput(), version: null });
+    expect(mine).toMatchObject({ ok: true });
+    const id = mine.ok ? mine.data.id : "";
+    expect(await store.get(id)).toMatchObject({ createdBy: "w1" });
+    expect(
+      await actions().save(...as(unitStaff("w1")))({
+        ...formInput({ title: "Renamed" }),
+        id,
+        version: 1,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await actions().save(...as(unitStaff("w2")))({
+        ...formInput({ title: "Hijack" }),
+        id,
+        version: 2,
+      }),
+    ).toMatchObject({ ok: false, error: "refused" });
+    expect(await actions().remove(...as(unitStaff("w2")))({ id, version: 2 })).toMatchObject({
+      ok: false,
+      error: "refused",
+    });
+    expect(
+      await actions().save(...as(owner))({ ...formInput({ title: "By global" }), id, version: 2 }),
+    ).toMatchObject({ ok: true });
+    expect(await store.get(id)).toMatchObject({ createdBy: "w1", title: "By global" });
+    expect(await actions().remove(...as(unitStaff("w1")))({ id, version: 3 })).toMatchObject({
+      ok: true,
     });
   });
 });

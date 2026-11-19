@@ -1,10 +1,12 @@
 import type {
   Form,
+  FormProfileField,
   FormStatus,
   FormUsage,
   FormVersion,
   Question,
   QuestionType,
+  RespondentMode,
 } from "@website/domain/forms";
 import { FORM_STATUS_LABELS, FORM_USAGE_LABELS, label } from "../labels";
 import type { Author } from "./authors";
@@ -18,6 +20,10 @@ export interface FormItem {
   description: string;
   usage: FormUsage;
   usageLabel: string;
+  respondents: RespondentMode;
+  profileFields: FormProfileField[];
+  /** may this viewer change the form (global forms.edit, or their own form) */
+  canEdit: boolean;
   status: FormStatus;
   statusLabel: string;
   opensAt: string | null;
@@ -35,6 +41,7 @@ export function toFormItem(
   form: Form,
   current: FormVersion | undefined,
   author: Author | null,
+  canEdit: boolean,
 ): FormItem {
   return {
     id: form.id,
@@ -43,6 +50,9 @@ export function toFormItem(
     description: form.description,
     usage: form.usage,
     usageLabel: label(FORM_USAGE_LABELS, form.usage),
+    respondents: form.respondents,
+    profileFields: [...form.profileFields],
+    canEdit,
     status: form.status,
     statusLabel: label(FORM_STATUS_LABELS, form.status),
     opensAt: form.opensAt?.toISOString() ?? null,

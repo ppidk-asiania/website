@@ -15,6 +15,9 @@ const form: Form = {
   title: "Survey",
   description: "",
   usage: "public",
+  respondents: "account",
+  profileFields: ["campus"],
+  createdBy: "w1",
   status: "published",
   publicToken: "tok",
   currentVersion: 2,
@@ -49,7 +52,10 @@ const version: FormVersion = {
 
 describe("Forms page model", () => {
   it("maps a form and its current version to a row with labels", () => {
-    expect(toFormItem(form, version, null)).toMatchObject({
+    expect(toFormItem(form, version, null, true)).toMatchObject({
+      respondents: "account",
+      profileFields: ["campus"],
+      canEdit: true,
       usageLabel: "Public form",
       statusLabel: "Published",
       opensAt: "2026-10-01T00:00:00.000Z",
@@ -60,7 +66,10 @@ describe("Forms page model", () => {
       questions: version.questions,
       modifiedAt: "2026-10-02T00:00:00.000Z",
     });
-    expect(toFormItem(form, undefined, null)).toMatchObject({ answered: false, questions: [] });
+    expect(toFormItem(form, undefined, null, false)).toMatchObject({
+      answered: false,
+      questions: [],
+    });
   });
 
   it("filters by tab", () => {

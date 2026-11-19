@@ -3,6 +3,8 @@ import {
   answersSchema,
   answerText,
   assertPublishable,
+  checkRespondent,
+  copyProfile,
   isPublicToken,
   publicAnswerState,
   toPublicForm,
@@ -179,15 +181,25 @@ describe("version freezing (C1)", () => {
 });
 
 describe("publishing and the answer window (C2)", () => {
-  it("publishes public forms without file questions only", () => {
-    expect(() => assertPublishable({ usage: "public" }, [question("q_1", "email")])).not.toThrow();
-    expect(() => assertPublishable({ usage: "recruitment" }, [question("q_1", "email")])).toThrow(
-      /application/,
-    );
-    expect(() => assertPublishable({ usage: "public" }, [])).toThrow(/question/);
-    expect(() => assertPublishable({ usage: "public" }, [question("q_1", "file")])).toThrow(
-      /files/,
-    );
+  it("publishes public forms without file questions only (files need an account)", () => {
+    const guest = { respondents: "guest" } as const;
+    expect(() =>
+      assertPublishable({ usage: "public", ...guest }, [question("q_1", "email")]),
+    ).not.toThrow();
+    expect(() =>
+      assertPublishable({ usage: "recruitment", ...guest }, [question("q_1", "email")]),
+    ).toThrow(/application/);
+    expect(() => assertPublishable({ usage: "public", ...guest }, [])).toThrow(/question/);
+    for (const respondents of ["guest", "anonymous"] as const) {
+      expect(() =>
+        assertPublishable({ usage: "public", respondents }, [question("q_1", "file")]),
+      ).toThrow(/files/);
+    }
+    for (const respondents of ["account", "officers"] as const) {
+      expect(() =>
+        assertPublishable({ usage: "public", respondents }, [question("q_1", "file")]),
+      ).not.toThrow();
+    }
   });
 
   it("is upcoming before opensAt, open inside the window, closed after closesAt or when not published", () => {
@@ -247,6 +259,9 @@ describe("the public path guard (C2: recruitment never accepted at /f/{token})",
         id: "f1",
         title: "Survey",
         description: "Hi",
+        respondents: "account",
+        profileFields: ["campus"],
+        createdBy: "w1",
         currentVersion: 3,
         responseCount: 9,
         version: 5,
@@ -258,6 +273,8 @@ describe("the public path guard (C2: recruitment never accepted at /f/{token})",
     expect(view).toEqual({
       title: "Survey",
       description: "Hi",
+      respondents: "account",
+      profileFields: ["campus"],
       version: 3,
       questions: [q],
       opensAt: null,
@@ -380,6 +397,114 @@ describe("answers schema built from a version (C1)", () => {
     expect(parseAnswers(many, { q_many: ["Red", "Pink"] })).toMatchObject({ ok: true });
     expect(parseAnswers(many, { q_many: ["Pink", "Black"] })).toMatchObject({ ok: false });
     expect(parseAnswers(many, { q_many: ["Red", "Blue", "Green"] })).toMatchObject({ ok: true });
+  });
+});
+
+describe("who may answer (10.3)", () => {
+  const user = { uid: "u1", name: "Ari", email: "ari@example.org" };
+  const check = (
+    respondents: "guest" | "anonymous" | "account" | "officers",
+    who: { user?: typeof user | null; guest?: unknown; officer?: boolean } = {},
+  ) =>
+    checkRespondent({ id: "f1", respondents }, who.user ?? null, who.guest, who.officer ?? false);
+
+  it("defaults to guest and validates the form input", () => {
+    const form = {
+      title: "Survey",
+      description: "",
+      usage: "public",
+      opensAt: null,
+      closesAt: null,
+    };
+    const parsed = FormInputSchema.parse({ ...form, questions: [input()] });
+    expect(parsed).toMatchObject({ respondents: "guest", profileFields: [] });
+    const withQuestions = { ...form, questions: [input()] };
+    expect(FormInputSchema.safeParse({ ...withQuestions, respondents: "everyone" }).success).toBe(
+      false,
+    );
+    expect(FormInputSchema.safeParse({ ...withQuestions, profileFields: ["campus"] }).success).toBe(
+      false,
+    );
+    expect(
+      FormInputSchema.safeParse({
+        ...withQuestions,
+        respondents: "officers",
+        profileFields: ["seat", "campus"],
+      }).success,
+    ).toBe(true);
+    expect(
+      FormInputSchema.safeParse({
+        ...withQuestions,
+        respondents: "account",
+        profileFields: ["campus", "campus"],
+      }).success,
+    ).toBe(false);
+    expect(
+      FormInputSchema.safeParse({
+        ...withQuestions,
+        respondents: "account",
+        profileFields: ["shoeSize"],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("guest needs a name and e-mail; anonymous keeps nobody", () => {
+    expect(check("guest", { guest: { name: " Ari ", email: "ARI@Example.org" } })).toEqual({
+      ok: true,
+      responseId: null,
+      who: { name: "Ari", email: "ari@example.org" },
+    });
+    expect(check("guest")).toEqual({ ok: false, error: "guest" });
+    expect(check("guest", { guest: { name: "Ari", email: "nope" } })).toEqual({
+      ok: false,
+      error: "guest",
+    });
+    expect(check("anonymous", { user, guest: { name: "Ari", email: "a@b.co" } })).toEqual({
+      ok: true,
+      responseId: null,
+      who: null,
+    });
+  });
+
+  it("account needs a sign-in, officers also a seat; one response id per account", () => {
+    expect(check("account")).toEqual({ ok: false, error: "signin" });
+    expect(check("officers")).toEqual({ ok: false, error: "signin" });
+    expect(check("officers", { user })).toEqual({ ok: false, error: "officers" });
+    const who = { uid: "u1", name: "Ari", email: "ari@example.org" };
+    expect(check("account", { user })).toEqual({ ok: true, responseId: "f1_u1", who });
+    expect(check("officers", { user, officer: true })).toEqual({
+      ok: true,
+      responseId: "f1_u1",
+      who,
+    });
+  });
+
+  it("copies only the asked profile fields, blank when unknown", () => {
+    expect(copyProfile(["campus", "birthPlace"], { campus: "UGM", whatsapp: "+62" })).toEqual({
+      campus: "UGM",
+      birthPlace: "",
+    });
+    expect(copyProfile([], { campus: "UGM" })).toEqual({});
+  });
+
+  it("adds name, e-mail and profile columns to the export only when present", () => {
+    const v = version(1, [question("q_a", "short_text", { label: "Name" })], true);
+    const response = {
+      id: "f1_u1",
+      formId: "f1",
+      version: 1,
+      answers: { q_a: "x" },
+      submittedAt: new Date("2026-10-01T01:00:00Z"),
+    };
+    expect(
+      responseTable(
+        [v],
+        [{ ...response, name: "Ari", email: "a@b.co", profile: { campus: "UGM" } }],
+      ),
+    ).toEqual({
+      header: ["Submitted at (UTC)", "Version", "Name", "E-mail", "Profile: campus", "Name"],
+      rows: [["2026-10-01T01:00:00.000Z", "1", "Ari", "a@b.co", "UGM", "x"]],
+    });
   });
 });
 

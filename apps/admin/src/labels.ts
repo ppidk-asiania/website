@@ -9,9 +9,13 @@ import { EVENT_TYPES, type EventType } from "@website/domain/events";
 import {
   FORM_STATUSES,
   FORM_USAGES,
+  PROFILE_FIELDS,
   QUESTION_TYPES,
+  RESPONDENT_MODES,
+  type FormProfileField,
   type FormStatus,
   type FormUsage,
+  type RespondentMode,
   type QuestionType,
 } from "@website/domain/forms";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@website/domain/recruitment";
@@ -151,6 +155,22 @@ export const FORM_USAGE_LABELS = {
   recruitment: { id: "Formulir Oprec", en: "Recruitment form" },
 } as const satisfies Record<FormUsage, Label>;
 
+export const RESPONDENT_MODE_LABELS = {
+  guest: { id: "Tamu (nama + e-mail)", en: "Guest (name + e-mail)" },
+  anonymous: { id: "Anonim (identitas tidak disimpan)", en: "Anonymous (identity not stored)" },
+  account: { id: "Akun yang masuk", en: "Signed-in account" },
+  officers: { id: "Pengurus dengan jabatan aktif", en: "Officers with an active seat" },
+} as const satisfies Record<RespondentMode, Label>;
+
+export const PROFILE_FIELD_LABELS = {
+  seat: { id: "Jabatan", en: "Seat" },
+  whatsapp: { id: "WhatsApp", en: "WhatsApp" },
+  chapter: { id: "Chapter", en: "Chapter" },
+  campus: { id: "Kampus", en: "Campus" },
+  birthPlace: { id: "Tempat lahir", en: "Place of birth" },
+  birthDate: { id: "Tanggal lahir", en: "Date of birth" },
+} as const satisfies Record<FormProfileField, Label>;
+
 export const FORM_STATUS_LABELS = {
   draft: { id: "Draf", en: "Draft" },
   published: { id: "Dipublikasikan", en: "Published" },
@@ -267,6 +287,8 @@ export const LABEL_MAPS: ReadonlyArray<{
   { name: "chapter risk", keys: CHAPTER_RISKS, labels: CHAPTER_RISK_LABELS },
   { name: "chapter region", keys: CHAPTER_REGIONS, labels: CHAPTER_REGION_LABELS },
   { name: "form usage", keys: FORM_USAGES, labels: FORM_USAGE_LABELS },
+  { name: "respondent mode", keys: RESPONDENT_MODES, labels: RESPONDENT_MODE_LABELS },
+  { name: "form profile field", keys: PROFILE_FIELDS, labels: PROFILE_FIELD_LABELS },
   { name: "form status", keys: FORM_STATUSES, labels: FORM_STATUS_LABELS },
   { name: "question type", keys: QUESTION_TYPES, labels: QUESTION_TYPE_LABELS },
   { name: "application status", keys: APPLICATION_STATUSES, labels: APPLICATION_STATUS_LABELS },

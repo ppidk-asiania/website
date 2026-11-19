@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { Question } from "@website/domain/forms";
 import { FormFields } from "@/components/form-fields";
 import type { Dictionary } from "@/i18n/dictionaries";
@@ -14,9 +14,16 @@ export function PublicFormClient(props: {
   version: number;
   questions: readonly Question[];
   labels: Dictionary["forms"];
+  /** guest forms ask for name and e-mail first */
+  askGuest: boolean;
+  /** account / officers forms: answers can be changed until the form closes */
+  signedIn: boolean;
+  initial: FieldValues;
+  children?: ReactNode;
 }) {
   const t = props.labels;
-  const [value, setValue] = useState<FieldValues>(EMPTY_VALUES);
+  const [value, setValue] = useState<FieldValues>(props.initial);
+  const [guest, setGuest] = useState({ name: "", email: "" });
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,6 +35,9 @@ export function PublicFormClient(props: {
     if (result.error === "closed" || result.error === "not_found") return t.closed;
     if (result.error === "changed") return t.changed;
     if (result.error === "answers") return t.checkAnswers;
+    if (result.error === "signin") return t.signIn;
+    if (result.error === "officers") return t.officersOnly;
+    if (result.error === "guest") return t.guestInvalid;
     return t.failed;
   };
 
@@ -40,6 +50,7 @@ export function PublicFormClient(props: {
         token: props.token,
         version: props.version,
         answers: answersFrom(props.questions, value),
+        ...(props.askGuest && { guest }),
         captcha,
       });
       setErrors(
@@ -71,12 +82,12 @@ export function PublicFormClient(props: {
           className="ui-button"
           type="button"
           onClick={() => {
-            setValue(EMPTY_VALUES);
+            if (!props.signedIn) setValue(EMPTY_VALUES);
             setDone(false);
             setMessage(null);
           }}
         >
-          {t.another}
+          {props.signedIn ? t.edit : t.another}
         </button>
       </div>
     );
@@ -84,6 +95,32 @@ export function PublicFormClient(props: {
 
   return (
     <form className="ui-form site-form" onSubmit={(e) => void submit(e)}>
+      {props.children}
+      {props.askGuest && (
+        <>
+          <label className="ui-field">
+            {t.yourName} *
+            <input
+              required
+              maxLength={200}
+              autoComplete="name"
+              value={guest.name}
+              onChange={(e) => setGuest({ ...guest, name: e.target.value })}
+            />
+          </label>
+          <label className="ui-field">
+            {t.yourEmail} *
+            <input
+              type="email"
+              required
+              maxLength={254}
+              autoComplete="email"
+              value={guest.email}
+              onChange={(e) => setGuest({ ...guest, email: e.target.value })}
+            />
+          </label>
+        </>
+      )}
       <FormFields
         questions={props.questions}
         value={value}

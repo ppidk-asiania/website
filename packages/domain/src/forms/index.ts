@@ -18,6 +18,21 @@ export type QuestionType = (typeof QUESTION_TYPES)[number];
 export const FORM_USAGES = ["public", "recruitment"] as const;
 export type FormUsage = (typeof FORM_USAGES)[number];
 
+export const RESPONDENT_MODES = ["guest", "anonymous", "account", "officers"] as const;
+export type RespondentMode = (typeof RESPONDENT_MODES)[number];
+export const isSignedInMode = (mode: RespondentMode) => mode === "account" || mode === "officers";
+
+export const PROFILE_FIELDS = [
+  "seat",
+  "whatsapp",
+  "chapter",
+  "campus",
+  "birthPlace",
+  "birthDate",
+] as const;
+export type FormProfileField = (typeof PROFILE_FIELDS)[number];
+export type FormProfile = Readonly<Partial<Record<FormProfileField, string>>>;
+
 export const FORM_STATUSES = ["draft", "published", "closed"] as const;
 export type FormStatus = (typeof FORM_STATUSES)[number];
 
@@ -42,6 +57,9 @@ export interface Form extends EntityMeta {
   readonly title: string;
   readonly description: string;
   readonly usage: FormUsage;
+  readonly respondents: RespondentMode;
+  readonly profileFields: readonly FormProfileField[];
+  readonly createdBy: string | null;
   readonly status: FormStatus;
   readonly publicToken: string | null;
   readonly currentVersion: number;
@@ -73,6 +91,11 @@ export interface FormResponse {
   readonly version: number;
   readonly answers: Answers;
   readonly submittedAt: Date;
+  /** Who answered: absent on anonymous forms. `uid` only on account / officers forms. */
+  readonly name?: string;
+  readonly email?: string;
+  readonly uid?: string;
+  readonly profile?: FormProfile;
 }
 
 export const versionDocId = (formId: string, n: number) => `${formId}_${n}`;
@@ -139,6 +162,12 @@ export const FormInputSchema = z
     title: safeText(120).pipe(z.string().min(3, "Enter a title (at least 3 characters).")),
     description: safeText(2000, { multiline: true, allowEmpty: true }),
     usage: z.enum(FORM_USAGES, { error: "Choose where the form is used." }),
+    respondents: z.enum(RESPONDENT_MODES).default("guest"),
+    profileFields: z
+      .array(z.enum(PROFILE_FIELDS))
+      .max(PROFILE_FIELDS.length)
+      .default([])
+      .refine((v) => new Set(v).size === v.length, "Each profile field once."),
     opensAt: optionalDate,
     closesAt: optionalDate,
     questions: z
@@ -150,6 +179,13 @@ export const FormInputSchema = z
   .superRefine((f, ctx) => {
     if (f.opensAt && f.closesAt && f.closesAt <= f.opensAt) {
       ctx.addIssue({ code: "custom", path: ["closesAt"], message: "Close after the opening." });
+    }
+    if (f.profileFields.length > 0 && !isSignedInMode(f.respondents)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["profileFields"],
+        message: "Profile data needs a form answered with an account.",
+      });
     }
     const ids = f.questions.map((q) => q.id).filter(Boolean);
     if (new Set(ids).size !== ids.length) {
@@ -195,12 +231,15 @@ export function planVersion(current: FormVersion | null, questions: readonly Que
     : ({ write: "overwrite", number: current.number } as const satisfies VersionPlan);
 }
 
-export function assertPublishable(form: Pick<Form, "usage">, questions: readonly Question[]) {
+export function assertPublishable(
+  form: Pick<Form, "usage" | "respondents">,
+  questions: readonly Question[],
+) {
   if (form.usage !== "public") {
     throw new RuleViolationError("Recruitment forms are answered in the application, not here.");
   }
   if (questions.length === 0) throw new RuleViolationError("Add at least one question.");
-  if (questions.some((q) => q.type === "file")) {
+  if (!isSignedInMode(form.respondents) && questions.some((q) => q.type === "file")) {
     throw new RuleViolationError("Public forms cannot ask for files.");
   }
 }
@@ -236,6 +275,8 @@ export function publicAnswerState(
 export interface PublicForm {
   readonly title: string;
   readonly description: string;
+  readonly respondents: RespondentMode;
+  readonly profileFields: readonly FormProfileField[];
   readonly version: number;
   readonly questions: readonly Question[];
   readonly opensAt: Date | null;
@@ -246,12 +287,63 @@ export function toPublicForm(form: Form, version: FormVersion): PublicForm {
   return {
     title: form.title,
     description: form.description,
+    respondents: form.respondents,
+    profileFields: form.profileFields,
     version: version.number,
     questions: version.questions,
     opensAt: form.opensAt,
     closesAt: form.closesAt,
   };
 }
+
+export interface Respondent {
+  readonly uid: string;
+  readonly name: string;
+  readonly email: string;
+}
+
+export const GuestSchema = z
+  .object({
+    name: safeText(200),
+    email: z.string().trim().toLowerCase().max(254).pipe(z.email("Enter a valid e-mail.")),
+  })
+  .strict();
+
+export type RespondentCheck =
+  | {
+      readonly ok: true;
+      /** `{formId}_{uid}` for account forms (one response each), null = a new response. */
+      readonly responseId: string | null;
+      readonly who: { readonly name: string; readonly email: string; readonly uid?: string } | null;
+    }
+  | { readonly ok: false; readonly error: "signin" | "officers" | "guest" };
+
+/** Who may answer and what is stored about them, per `form.respondents`. */
+export function checkRespondent(
+  form: Pick<Form, "id" | "respondents">,
+  user: Respondent | null,
+  guest: unknown,
+  isOfficer: boolean,
+): RespondentCheck {
+  if (form.respondents === "anonymous") return { ok: true, responseId: null, who: null };
+  if (form.respondents === "guest") {
+    const parsed = GuestSchema.safeParse(guest);
+    return parsed.success
+      ? { ok: true, responseId: null, who: parsed.data }
+      : { ok: false, error: "guest" };
+  }
+  if (user === null) return { ok: false, error: "signin" };
+  if (form.respondents === "officers" && !isOfficer) return { ok: false, error: "officers" };
+  return {
+    ok: true,
+    responseId: `${form.id}_${user.uid}`,
+    who: { uid: user.uid, name: user.name, email: user.email },
+  };
+}
+
+/** The copy stored on the response: only the fields the form asks for, blank when unknown. */
+export const copyProfile = (fields: readonly FormProfileField[], own: FormProfile): FormProfile =>
+  Object.fromEntries(fields.map((f) => [f, own[f] ?? ""]));
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isRealDate = (value: string) => {
@@ -379,11 +471,21 @@ export function responseTable(
     for (const q of v.questions) if (!columns.has(q.id)) columns.set(q.id, q.label);
   }
   const ids = [...columns.keys()];
+  const named = responses.some((r) => r.name !== undefined);
+  const profile = PROFILE_FIELDS.filter((f) => responses.some((r) => r.profile?.[f] !== undefined));
   return {
-    header: ["Submitted at (UTC)", "Version", ...columns.values()],
+    header: [
+      "Submitted at (UTC)",
+      "Version",
+      ...(named ? ["Name", "E-mail"] : []),
+      ...profile.map((f) => `Profile: ${f}`),
+      ...columns.values(),
+    ],
     rows: responses.map((r) => [
       r.submittedAt.toISOString(),
       String(r.version),
+      ...(named ? [r.name ?? "", r.email ?? ""] : []),
+      ...profile.map((f) => r.profile?.[f] ?? ""),
       ...ids.map((id) => answerText(r.answers[id])),
     ]),
   };

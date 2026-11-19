@@ -165,6 +165,8 @@ export {
   createSqlFormStore,
   createSqlFormWebStore,
   formSnapshot,
+  type OwnFormData,
+  type SignedInAccount,
   type SqlFormStore,
   type SqlFormWebStore,
   type SubmitOutcome,

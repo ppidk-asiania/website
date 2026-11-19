@@ -3,11 +3,43 @@
 ## What it does
 
 Staff build forms on the admin **Forms** page: a title, a description, where the form is used
-(a **public form** answered by guests, or a **recruitment form** answered inside an application)
+(a **public form** answered by guests, anonymously or with an account, or a **recruitment form** answered inside an application)
 and a list of questions. Questions live in numbered versions. A version is **frozen** once
 anyone answered it: changing the questions then saves version n+1, and earlier answers keep
 pointing at the version they answered. Answers are always validated on the server by a strict
 Zod schema built from the version.
+
+## Who may answer (respondents)
+
+`form.respondents` sets who answers a public form at `/f/{token}` (default `guest`):
+
+| Mode        | Page asks for                 | Stored on the response                       |
+| ----------- | ----------------------------- | -------------------------------------------- |
+| `guest`     | name + e-mail first           | name, e-mail                                 |
+| `anonymous` | nothing                       | answers only: no uid, no IP hash, no profile |
+| `account`   | sign-in first                 | uid, name, e-mail, profile copy              |
+| `officers`  | sign-in first, an active seat | same as `account`                            |
+
+`form.profileFields` (only for `account` / `officers`) is a subset of seat, whatsapp, chapter,
+campus, birthPlace, birthDate. The page lists the values before submit and the response stores a
+COPY in `response.profile` (blank when unknown); later profile changes never alter it. Seat is the
+title of the account's active appointments; the member profile has no birth place yet, so
+`birthPlace` is copied blank.
+
+Account / officers forms keep ONE response per account (id `{formId}_{uid}`): a later submit
+replaces the answers and the profile copy until the form closes, and does not raise the count.
+"Has an active seat" is an active appointment in the active period (`activeForUser`); step 10.2
+replaces it with `activeSeats(uid)`. Rules: `checkRespondent`, `copyProfile` in the domain.
+
+File questions stay for signed-in forms: `assertPublishable` refuses them on guest and anonymous
+forms only. (The `/f/{token}` page has no file upload yet.)
+
+**Own forms:** a global `forms.edit` covers every form; a unit-scoped `forms.edit` can create
+forms and change or delete only the forms the person created (`form.createdBy`). Forms without
+`createdBy` (older ones) need the global permission.
+
+The export gains Name / E-mail / `Profile: <field>` columns when responses carry them
+(still `forms.export`, still logged).
 
 ## Where it lives
 

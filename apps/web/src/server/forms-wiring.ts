@@ -10,7 +10,7 @@ import { createFormSubmission, createPublicFormReader } from "./forms";
 const store = lazyEnv(() => createSqlFormWebStore(webDb()));
 
 export const publicFormByToken = lazyEnv(() =>
-  createPublicFormReader({ find: (token) => store().findPublic(token, new Date()) }),
+  createPublicFormReader({ find: (token, user) => store().findPublic(token, new Date(), user) }),
 );
 
 export async function publishedPublicForms() {
@@ -26,7 +26,8 @@ export const submitPublicForm = lazyEnv(() => {
     ? createRecaptchaVerifier({ secret: env.RECAPTCHA_SECRET_KEY, fetchImpl: fetch })
     : null;
   return createFormSubmission({
-    submit: (token, version, answers, now) => store().submit(token, version, answers, now),
+    submit: (token, version, answers, now, who) =>
+      store().submit(token, version, answers, now, who),
     captcha: (token) =>
       passesCaptcha(
         verifier,

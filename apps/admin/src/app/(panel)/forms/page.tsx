@@ -1,4 +1,4 @@
-import { can } from "@website/permissions";
+import { can, canInSomeScope } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { authorsById, lastEditors } from "@/components/authors";
 import { toFormItem } from "@/components/forms-model";
@@ -26,8 +26,15 @@ export default async function AdminFormsPage() {
   const authors = authorsById(editors, users);
   return (
     <FormsPage
-      initial={forms.map((f) => toFormItem(f, versions.get(f.id), authors.get(f.id) ?? null))}
-      canEdit={can(viewer.principal, "forms.edit")}
+      initial={forms.map((f) =>
+        toFormItem(
+          f,
+          versions.get(f.id),
+          authors.get(f.id) ?? null,
+          can(viewer.principal, "forms.edit") || f.createdBy === viewer.principal.userId,
+        ),
+      )}
+      canEdit={canInSomeScope(viewer.principal, "forms.edit")}
       canPublish={can(viewer.principal, "forms.publish")}
       canSeeResponses={can(viewer.principal, "forms.responses")}
       publicBase={getAppUrls().WEB_URL ?? ""}

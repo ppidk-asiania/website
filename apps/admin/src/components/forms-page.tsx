@@ -4,9 +4,14 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   FORM_USAGES,
+  isSignedInMode,
+  PROFILE_FIELDS,
   QUESTION_TYPES,
+  RESPONDENT_MODES,
+  type FormProfileField,
   type FormUsage,
   type QuestionType,
+  type RespondentMode,
 } from "@website/domain/forms";
 import { utcToWallTime, wallTimeToUtc } from "@website/domain/shared";
 import {
@@ -38,7 +43,13 @@ import {
 } from "@/components/ui/list-controls";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
-import { FORM_USAGE_LABELS, label, QUESTION_TYPE_LABELS } from "@/labels";
+import {
+  FORM_USAGE_LABELS,
+  label,
+  PROFILE_FIELD_LABELS,
+  QUESTION_TYPE_LABELS,
+  RESPONDENT_MODE_LABELS,
+} from "@/labels";
 import {
   blankQuestion,
   fromDraft,
@@ -74,6 +85,8 @@ interface FormDraft {
   title: string;
   description: string;
   usage: FormUsage;
+  respondents: RespondentMode;
+  profileFields: FormProfileField[];
   opensAt: string;
   closesAt: string;
   questions: QuestionDraft[];
@@ -83,6 +96,8 @@ const EMPTY_FORM: FormDraft = {
   title: "",
   description: "",
   usage: "public",
+  respondents: "guest",
+  profileFields: [],
   opensAt: "",
   closesAt: "",
   questions: [blankQuestion()],
@@ -94,6 +109,8 @@ function draftFrom(f: FormItem, zone: string): FormDraft {
     title: f.title,
     description: f.description,
     usage: f.usage,
+    respondents: f.respondents,
+    profileFields: f.profileFields,
     opensAt: wall(f.opensAt),
     closesAt: wall(f.closesAt),
     questions: f.questions.map(toDraft),
@@ -205,6 +222,8 @@ function FormsList({
       title: draft.title,
       description: draft.description,
       usage: draft.usage,
+      respondents: draft.respondents,
+      profileFields: isSignedInMode(draft.respondents) ? draft.profileFields : [],
       opensAt: wallTimeToUtc(draft.opensAt, zone)?.toISOString() ?? null,
       closesAt: wallTimeToUtc(draft.closesAt, zone)?.toISOString() ?? null,
       questions: draft.questions.map(fromDraft),
@@ -313,7 +332,7 @@ function FormsList({
       width: "10%",
       render: (r) => (
         <div className="admin-table__actions">
-          {canEdit ? (
+          {r.canEdit ? (
             <Button
               variant="ghost"
               size="icon"
@@ -352,7 +371,7 @@ function FormsList({
                 Responses ({r.responseCount})
               </MenuItem>
             ) : null}
-            {canEdit ? (
+            {r.canEdit ? (
               <>
                 <MenuDivider />
                 <MenuItem
@@ -439,6 +458,64 @@ function FormsList({
                 hint="Public forms are answered by guests at their own link; recruitment forms only inside an application."
               />
             </div>
+
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="form-respondents">
+                Who answers *
+              </label>
+              <Select
+                id="form-respondents"
+                required
+                className="admin-select"
+                value={draft.respondents}
+                onChange={(e) =>
+                  setDraft({ ...draft, respondents: e.target.value as RespondentMode })
+                }
+              >
+                {RESPONDENT_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {label(RESPONDENT_MODE_LABELS, m)}
+                  </option>
+                ))}
+              </Select>
+              <FieldError
+                id="form-respondents-error"
+                message={fieldErrors["respondents"]}
+                hint="Signed-in forms ask for sign-in first and keep one editable response per account."
+              />
+            </div>
+
+            {isSignedInMode(draft.respondents) ? (
+              <fieldset className="admin-field admin-form-grid__full">
+                <legend className="admin-field__label">
+                  Profile data copied into each response
+                </legend>
+                <div className="admin-question__flags">
+                  {PROFILE_FIELDS.map((f) => (
+                    <label key={f} className="admin-check-label">
+                      <input
+                        type="checkbox"
+                        checked={draft.profileFields.includes(f)}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            profileFields: e.target.checked
+                              ? [...draft.profileFields, f]
+                              : draft.profileFields.filter((x) => x !== f),
+                          })
+                        }
+                      />
+                      {label(PROFILE_FIELD_LABELS, f)}
+                    </label>
+                  ))}
+                </div>
+                <FieldError
+                  id="form-profileFields-error"
+                  message={fieldErrors["profileFields"]}
+                  hint="The respondent sees these values before sending; later profile changes do not alter the copy."
+                />
+              </fieldset>
+            ) : null}
 
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="form-opens">

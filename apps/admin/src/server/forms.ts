@@ -9,6 +9,7 @@ import {
   type Form,
 } from "@website/domain/forms";
 import { RuleViolationError } from "@website/domain/shared";
+import { can, type Principal } from "@website/permissions";
 import { safeId } from "@website/security/validation";
 import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 
@@ -29,6 +30,13 @@ const SaveInput = FormInputSchema.and(
   z.object({ id: safeId.optional(), version: z.number().int().min(1).nullable() }).strict(),
 );
 const RefInput = z.object({ id: safeId, version: z.number().int().min(1) }).strict();
+
+/** A global `forms.edit` covers every form; a unit-scoped one only the forms the person created. */
+function assertMayEdit(principal: Principal, form: Form | null) {
+  if (form && form.createdBy !== principal.userId && !can(principal, "forms.edit")) {
+    throw new RuleViolationError("You can change only the forms you created.");
+  }
+}
 
 type Action = "CREATE" | "UPDATE" | "DELETE" | "PUBLISH" | "UNPUBLISH";
 
@@ -56,14 +64,16 @@ const formAudit =
 export function createFormActions(deps: FormDeps) {
   const save = createGuardedAction({
     permission: "forms.edit",
+    inSomeScope: true,
     input: SaveInput,
-    handler: async ({ id, version, questions, ...settings }, _principal, audit) => {
+    handler: async ({ id, version, questions, ...settings }, principal, audit) => {
       const { form, plan } = await deps.forms.save(
         id ?? null,
         version,
-        settings,
+        { ...settings, createdBy: principal.userId },
         withQuestionIds(questions, deps.uuid),
         (current, next) => {
+          assertMayEdit(principal, current);
           if (current?.status === "published") assertPublishable(current, next);
         },
         (before, after, current, next) =>
@@ -81,13 +91,17 @@ export function createFormActions(deps: FormDeps) {
 
   const remove = createGuardedAction({
     permission: "forms.edit",
+    inSomeScope: true,
     input: RefInput,
-    handler: async ({ id, version }, _principal, audit) => {
+    handler: async ({ id, version }, principal, audit) => {
       const now = deps.now();
       await deps.forms.write(
         id,
         version,
-        (current) => ({ ...(current as Form), deletedAt: now }),
+        (current) => {
+          assertMayEdit(principal, current);
+          return { ...(current as Form), deletedAt: now };
+        },
         formAudit(audit, "DELETE"),
         now,
       );

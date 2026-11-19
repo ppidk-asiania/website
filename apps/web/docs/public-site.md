@@ -69,7 +69,9 @@ once). Campaign e-mails load `/newsletter/o?t=` (open pixel) and link through `/
 `packages/domain/docs/newsletter.md`.
 
 **Public forms**: `/f/[token]` shows a published public form (surveys, sign-ups, suggestion box;
-no account needed). The token is random (never the form id); unknown, draft, deleted and
+who answers is set per form: guests with name + e-mail, anonymous, any signed-in account, or
+officers with an active seat; signed-in forms show the asked profile data, keep one editable
+response per account and send the visitor to `/login` first). The token is random (never the form id); unknown, draft, deleted and
 recruitment forms are a 404, and the page is `noindex`. Answers go through reCAPTCHA v3 (action
 `form_submit`) and are validated on the server against the form's current version in one
 transaction (`src/server/forms.ts`, wiring `src/server/forms-wiring.ts`, renderer
