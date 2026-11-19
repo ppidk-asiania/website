@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Recruitment } from "@website/domain/recruitment";
 import {
+  choicesLine,
   matchesQueueTab,
+  STATUS_HINTS,
   toApplicationItem,
 } from "../../apps/admin/src/components/applications-model";
 import {
@@ -144,6 +146,17 @@ describe("selection queue model", () => {
     maxSelections: null,
     min: null,
     max: null,
+  });
+
+  it("builds the applicants table cells: origin, choices line, status hint", () => {
+    const item = toApplicationItem(application, r, [], null, [], at, null, null, new Map(), null, {
+      chapter: "Japan",
+      campus: "Todai",
+    });
+    expect(item.origin).toBe("Japan · Todai");
+    expect(choicesLine(item)).toBe("1. Sekretaris Staf Media - 2. gone");
+    expect(item.statusHint).toBe(STATUS_HINTS.offered);
+    expect(toApplicationItem(application, r, [], null, [], at).origin).toBe("");
   });
 
   it("maps an application with unit names, answers, files, expired offer and its rounds", () => {

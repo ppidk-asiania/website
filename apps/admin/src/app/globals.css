@@ -630,6 +630,50 @@
   gap: var(--space-4);
 }
 
+.admin-stat-grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.admin-bars {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-bars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) 1fr 2.5rem;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.admin-bars__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-bars__track {
+  height: 0.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-brand-50);
+}
+
+.admin-bars__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+
+.admin-bars__count {
+  text-align: right;
+  font-weight: var(--font-semibold);
+}
+
 .admin-stat-card {
   display: flex;
   flex-direction: column;

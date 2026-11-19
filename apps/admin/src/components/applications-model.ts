@@ -6,6 +6,7 @@ import {
   assessmentSummary,
   NO_RELATION,
   offerExpired,
+  QUEUE_STAGES,
   RECOMMENDATIONS,
   waitingFor,
   AXES,
@@ -32,19 +33,30 @@ export const QUEUE_TABS = [
 ] as const;
 export type QueueTab = (typeof QUEUE_TABS)[number]["key"];
 
-const TAB_STATUSES: Record<Exclude<QueueTab, "all">, readonly ApplicationStatus[]> = {
-  review: ["submitted"],
-  revision: ["revision"],
-  interview: ["interview"],
-  offered: ["offered"],
-  accepted: ["accepted"],
-  placement: ["approved", "pakta_review", "confirmed"],
-  closed: ["admin_rejected", "declined", "rejected", "withdrawn"],
+export function matchesQueueTab(item: Pick<ApplicationItem, "status">, tab: QueueTab): boolean {
+  return tab === "all" || (QUEUE_STAGES[tab] as readonly ApplicationStatus[]).includes(item.status);
+}
+
+/** The full sentence behind the short status label (tooltip in the applicants table). */
+export const STATUS_HINTS: Record<ApplicationStatus, string> = {
+  draft: "The applicant is still writing the application.",
+  submitted: "Sent; waiting for the document check.",
+  revision: "The committee asked the applicant to revise the application.",
+  admin_rejected: "Did not pass the document check.",
+  interview: "Passed the document check; interviews are open.",
+  offered: "A unit and seat were offered; waiting for the answer.",
+  accepted: "The applicant accepted the offer; waiting for placement approval.",
+  declined: "The applicant declined the offer.",
+  approved: "Placement approved; waiting for the signed pact.",
+  pakta_review: "The signed pact is being reviewed.",
+  confirmed: "Confirmed and appointed to the seat.",
+  rejected: "Not selected.",
+  withdrawn: "The applicant withdrew the application.",
 };
 
-export function matchesQueueTab(item: Pick<ApplicationItem, "status">, tab: QueueTab): boolean {
-  return tab === "all" || TAB_STATUSES[tab].includes(item.status);
-}
+/** "1. Media - 2. Finance": the choices in one line under the table column. */
+export const choicesLine = (item: Pick<ApplicationItem, "choices">) =>
+  item.choices.map((c, i) => `${i + 1}. ${c.seat ?? c.name}`).join(" - ");
 
 export const PROOF_MARKS = {
   ok: { label: "Proof OK", tone: "success" },
@@ -157,6 +169,9 @@ export interface ApplicationItem {
   email: string;
   status: ApplicationStatus;
   statusLabel: string;
+  statusHint: string;
+  /** "Japan · University of Tokyo" under the name; empty without a profile. */
+  origin: string;
   choices: { id: string; name: string; seat: string | null; wish: AppointmentSeat | null }[];
   submittedAt: string | null;
   revisionRound: number;
@@ -198,6 +213,7 @@ export function toApplicationItem(
   proof: Pick<MemberProfile, "studentProof" | "proofReview"> | null = null,
   unitTypes: ReadonlyMap<string, OrgUnitType> = new Map(),
   assessment: AssessmentPanel | null = null,
+  origin: { chapter: string | null; campus: string } | null = null,
 ): ApplicationItem {
   const unitName = (id: string) => r.units.find((u) => u.orgUnitId === id)?.name ?? id;
   const seatOf = (id: string, seat: AppointmentSeat) =>
@@ -211,6 +227,8 @@ export function toApplicationItem(
     email: user?.email ?? "",
     status: a.status,
     statusLabel: label(APPLICATION_STATUS_LABELS, a.status),
+    statusHint: STATUS_HINTS[a.status],
+    origin: [origin?.chapter, origin?.campus].filter(Boolean).join(" · "),
     choices: a.choices.map((id) => {
       const seat = a.choiceSeats[id];
       return { id, name: unitName(id), seat: seat ? seatOf(id, seat) : null, wish: seat ?? null };

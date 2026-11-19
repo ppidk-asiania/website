@@ -64,6 +64,7 @@ import { createFirebaseAccountCreator } from "@website/auth/firebase-admin";
 import {
   interviewScope,
   isRecruitmentOpen,
+  recruitmentRecap,
   type InterviewScope,
 } from "@website/domain/recruitment";
 import { can, scopedOrgUnitIds } from "@website/permissions";
@@ -377,6 +378,45 @@ export async function interviewScopeOf(uid: string): Promise<InterviewScope> {
     review: can(principal, "recruitment.review"),
     granted: scopedOrgUnitIds(principal, "recruitment.interview"),
   });
+}
+
+/** Where applicants come from, as the profile says today (chapter resolved to its name). */
+export async function applicantOrigins(uids: readonly string[]) {
+  const [found, chapters] = await Promise.all([
+    adminStores().memberProfiles.originsOf(uids),
+    adminStores().chapters.listForAdmin(),
+  ]);
+  const names = new Map(chapters.map((c) => [c.id, c.name]));
+  return new Map(
+    [...found].map(([uid, o]) => [
+      uid,
+      { ...o, chapter: o.chapterId ? (names.get(o.chapterId) ?? null) : null },
+    ]),
+  );
+}
+
+/** Step 11.7: the one loader of `recruitmentRecap()` for the recap page and the WhatsApp bot (11.8). */
+export async function loadRecap(
+  recruitmentIds: readonly string[],
+  scope: Pick<InterviewScope, "all" | "orgUnitIds">,
+) {
+  const { recruitments, applications } = adminStores();
+  const found = await Promise.all(recruitmentIds.map((id) => recruitments.get(id)));
+  const rows = await Promise.all(
+    found.flatMap((recruitment) =>
+      recruitment && recruitment.deletedAt === null
+        ? [
+            (async () => ({
+              recruitment,
+              applications: await applications.listForRecruitment(recruitment.id),
+              assessments: await applications.assessments(recruitment.id),
+            }))(),
+          ]
+        : [],
+    ),
+  );
+  const uids = [...new Set(rows.flatMap((r) => r.applications.map((a) => a.userId)))];
+  return recruitmentRecap({ recruitments: rows, origins: await applicantOrigins(uids), scope });
 }
 
 const interviewMessaging = () => ({

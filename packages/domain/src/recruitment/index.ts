@@ -493,3 +493,4 @@ export * from "./personality";
 export * from "./analysis";
 export * from "./interviews";
 export * from "./assessments";
+export * from "./recap";

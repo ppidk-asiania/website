@@ -39,6 +39,7 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import {
+  choicesLine,
   matchesQueueTab,
   PROOF_MARKS,
   QUEUE_TABS,
@@ -196,7 +197,7 @@ export function ApplicationsPage(props: {
       render: (a) => (
         <div>
           <div className="admin-table__title">{a.name}</div>
-          <div className="admin-table__sub">{a.email}</div>
+          <div className="admin-table__sub">{a.origin || a.email}</div>
         </div>
       ),
     },
@@ -204,11 +205,7 @@ export function ApplicationsPage(props: {
       key: "choices",
       header: "Choices",
       width: "24%",
-      render: (a) => (
-        <span className="admin-table__sub">
-          {a.choices.map((c, i) => `${i + 1}. ${c.seat ?? c.name}`).join("  ")}
-        </span>
-      ),
+      render: (a) => <span className="admin-table__sub">{choicesLine(a)}</span>,
     },
     {
       key: "proof",
@@ -226,10 +223,11 @@ export function ApplicationsPage(props: {
       width: "16%",
       render: (a) => (
         <div>
-          <span className="admin-status-badge">
+          <span className="admin-status-badge" title={a.statusHint}>
             {a.statusLabel}
             {a.offer?.expired && a.status === "offered" ? " (expired)" : ""}
           </span>
+          {a.offer ? <div className="admin-table__sub">{a.offer.seatLabel}</div> : null}
           {a.assessment?.score ? (
             <div className="admin-table__sub">{a.assessment.listLabel}</div>
           ) : null}

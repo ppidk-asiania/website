@@ -5,7 +5,13 @@ import { hasInterviewScope, passedReview, rubricOf } from "@website/domain/recru
 import { toApplicationItem, toAssessmentPanel } from "@/components/applications-model";
 import { ApplicationsPage } from "@/components/applications-page";
 import { requireAdminViewer } from "@/server/context";
-import { adminReads, analysisActions, interviewReads, interviewScopeOf } from "@/server/wiring";
+import {
+  adminReads,
+  analysisActions,
+  applicantOrigins,
+  interviewReads,
+  interviewScopeOf,
+} from "@/server/wiring";
 
 export const instant = false;
 
@@ -33,10 +39,11 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
     adminReads.getFormVersion(recruitment.formId, recruitment.formVersion),
   ]);
   const uids = [...new Set(applications.map((a) => a.userId))];
-  const [users, personality, proofs] = await Promise.all([
+  const [users, personality, proofs, origins] = await Promise.all([
     adminReads.getUsers(uids),
     adminReads.personalityResults(uids),
     adminReads.studentProofs(uids),
+    applicantOrigins(uids),
   ]);
   const ai = committee
     ? await analysisActions().read(
@@ -86,6 +93,7 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
             viewerUid: uid,
             canAssess: hasInterviewScope(scope) && passedReview(a.status),
           }),
+          origins.get(a.userId) ?? null,
         ),
       )}
       canReview={review}

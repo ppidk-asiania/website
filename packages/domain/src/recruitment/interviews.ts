@@ -30,7 +30,8 @@ export interface InterviewScope {
   readonly slotUnitIds: ReadonlySet<string>;
 }
 
-export const hasInterviewScope = (s: InterviewScope) => s.all || s.orgUnitIds.size > 0;
+export const hasInterviewScope = (s: Pick<InterviewScope, "all" | "orgUnitIds">) =>
+  s.all || s.orgUnitIds.size > 0;
 
 /**
  * Block N: who interviews. Seat head / deputy head / secretary (a directorate or bureau reaches the

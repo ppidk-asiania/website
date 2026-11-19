@@ -21,7 +21,8 @@ shows ONE next action.
   `/recruitment` (`src/components/recruitment-page.tsx`, `recruitment-model.ts`) and
   `/recruitment/{id}/applications` (`applications-page.tsx`, `applications-model.ts`),
   `/recruitment/{id}/interviews` (`interviews-page.tsx`; actions `src/server/interviews.ts`) and
-  `/interviews` ("My interview times", step 11.5; menu Organization, only with an interview scope).
+  `/interviews` ("My interview times", step 11.5; menu Organization, only with an interview scope),
+  `/recruitment/{id}/recap` (step 11.7; `recap-page.tsx`, rules `recruitment/recap.ts`).
 - Web: `/recruitment`, `/recruitment/[id]` (status + next action), `/recruitment/[id]/apply` (four steps, below),
   `/recruitment` goes straight to the recruitment when exactly one is open (`soleOpen`);
   upload route `POST /api/recruitment/[id]/portfolio[?question=q_…]`; logic
@@ -31,7 +32,7 @@ shows ONE next action.
   `tests/integration/interviews.test.ts`, `tests/integration/ratification.test.ts`,
   `tests/unit/personality.test.ts`, `tests/integration/personality.test.ts`,
   `tests/integration/student-proof.test.ts`, `tests/security/student-proof.test.ts`,
-  `tests/integration/ai-analysis.test.ts`.
+  `tests/integration/ai-analysis.test.ts`, `tests/unit/recruitment-recap.test.ts`.
 
 ## How to use it
 
@@ -234,6 +235,26 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
     named fields, never from the whole profile). No score, no recommendation; the status of an
     application is never changed from here. Every queue, run and check writes an audit entry (the
     cron job as actor `system`/`ai-jobs`), with the status only, never the answer.
+
+  - _Recap and applicants table_ (step 11.7): `/recruitment/{id}/recap` is read-only numbers, in CSS
+    bars (no chart library); the switch "Every recruitment of the period" adds the other
+    recruitments of the period. `recruitmentRecap({ recruitments, origins, scope })`
+    (`recruitment/recap.ts`) is ONE pure function: the page calls it through `loadRecap(ids, scope)`
+    (`apps/admin/src/server/wiring.ts`) and the WhatsApp keywords (11.8) reuse the same loader with
+    the sender's scope. It returns: stage counts (`QUEUE_STAGES`, the same groups as the tabs of the
+    applicants list, so the numbers equal the tab counts), interest per unit (choice 1, choice 2,
+    accepted, quota), spreads by chapter, level, ten largest campuses, entry year and gender, and the
+    interview block (scheduled, attended, absent, assessed, relation declared, average per aspect,
+    recommendations; built from the 11.5 bookings and the 11.6 assessments with `weightedAverage`).
+    Stages count applications, spreads count people (from the profile as it is today, `originsOf`);
+    drafts count nowhere. Scope: global `recruitment.read` = all; otherwise the unit tree of the
+    viewer's head / deputy / secretary seats and `recruitment.interview` grants
+    (`interviewScopeOf`): applications with a chosen unit in scope, only those units, only
+    interviews of those units. Anyone else gets "no access".
+  - _Applicants table_: chapter and campus under the name, choices as "1. ... - 2. ...", offered
+    seat under the status, short status label with the full sentence (`STATUS_HINTS`) as tooltip;
+    the 11.1 seat label and the 11.3 proof mark stay. Each recruitment row menu links to
+    Applications, Recap and Interviews.
 
 ## Import from PPIDK (block J, step 5.8)
 

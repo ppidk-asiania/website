@@ -295,6 +295,29 @@ export function createSqlMemberProfileStore(db: Database) {
       );
     },
 
+    /** Where applicants come from, as the profile says today (recruitment recap, step 11.7). */
+    async originsOf(uids: readonly string[]) {
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids);
+      return new Map(
+        [...found.entries()].flatMap(([uid, data]) =>
+          data
+            ? [
+                [
+                  uid,
+                  {
+                    chapterId: (data["chapterId"] as string | null | undefined) ?? null,
+                    campus: (data["university"] as string | undefined) ?? "",
+                    level: (data["educationLevel"] as string | undefined) ?? "",
+                    entryYear: (data["yearOfEntry"] as number | undefined) ?? 0,
+                    gender: (data["gender"] as string | undefined) ?? "",
+                  },
+                ] as const,
+              ]
+            : [],
+        ),
+      );
+    },
+
     setGraduation(
       uid: string,
       expectedVersion: number,
