@@ -74,6 +74,14 @@ const tables: PpidkMeetingTables = {
       ...times,
     },
     {
+      id: "6",
+      chapter_id: "3",
+      requested_by_user_id: "7",
+      topic: "Chapter",
+      status: "diajukan",
+      ...times,
+    },
+    {
       id: "5",
       org_unit_id: "41",
       requested_by_user_id: "7",
@@ -303,7 +311,7 @@ describe("PPIDK import of meetings, Zoom, short links and messages (step 7.12)",
 
   it("reports counts and every skipped row", () => {
     expect(plan.counts).toMatchObject({
-      zoomRequests: 3,
+      zoomRequests: 4,
       zoomCapacity: 1,
       recordingSessions: 2,
       meetings: 4,
@@ -399,6 +407,12 @@ describe("PPIDK import of meetings, Zoom, short links and messages (step 7.12)",
     });
     expect((await zoom.get("ppidk-zoom-1"))?.closedAt).toEqual(new Date("2026-10-10T11:31:00Z"));
     expect(await zoom.get("ppidk-zoom-2")).toMatchObject({ status: "pending", passcode: "ppidk" });
+    expect(await zoom.get("ppidk-zoom-6")).toMatchObject({
+      chapterId: "ppidk-chapter-3",
+      orgUnitId: null,
+      orgUnitPath: [],
+    });
+    expect(await zoom.get("ppidk-zoom-2")).toMatchObject({ chapterId: null });
     expect(await zoom.get("ppidk-zoom-5")).toMatchObject({
       status: "cancelled",
       passcode: "abcdefghij",

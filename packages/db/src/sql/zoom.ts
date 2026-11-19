@@ -39,6 +39,7 @@ const toRequest = (id: string, data: Record<string, unknown>): ZoomRequest => ({
   requestedBy: data["requestedBy"] as string,
   orgUnitId: (data["orgUnitId"] as string | null) ?? null,
   orgUnitPath: data["orgUnitPath"] as string[],
+  chapterId: (data["chapterId"] as string | null) ?? null,
   status: data["status"] as ZoomStatus,
   decidedBy: (data["decidedBy"] as string | null) ?? null,
   decisionNote: (data["decisionNote"] as string | null) ?? null,
@@ -290,6 +291,18 @@ export function createSqlZoomStore(db: Database) {
       const snapshot = await requests.where("zoomMeetingId", "==", zoomMeetingId).limit(1).get();
       const doc = snapshot.docs[0];
       return doc ? read(doc.id, doc.data()) : null;
+    },
+
+    /** Approved bookings whose end has passed and whose room is not closed yet (oldest first). */
+    async endedOpen(now: Date, limit: number): Promise<ZoomRequest[]> {
+      const snapshot = await requests
+        .where("status", "==", "approved")
+        .where("closedAt", "==", null)
+        .where("endsAt", "<=", now)
+        .orderBy("endsAt")
+        .limit(limit)
+        .get();
+      return snapshot.docs.map((doc) => read(doc.id, doc.data()));
     },
 
     async withoutRoom(limit: number): Promise<ZoomRequest[]> {

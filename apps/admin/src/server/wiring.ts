@@ -833,6 +833,7 @@ export const zoomActions = lazyEnv(() => {
       const unit = first ? await adminStores().orgUnits.get(first.orgUnitId) : null;
       return unit ? { orgUnitId: unit.id, orgUnitPath: orgUnitPath(unit) } : null;
     },
+    seats: (uid) => adminStores().appointments.activeSeats(uid),
     encrypt: key ? (plain) => encryptField(new TextEncoder().encode(plain), key) : null,
     logError: (message, fields) => adminStores().logger.error(message, fields),
     now: () => new Date(),
@@ -927,6 +928,8 @@ export const calendar = lazyEnv(() =>
   createCalendar({
     meetings: (from, to) => adminStores().meetings.listBetween(from, to),
     zoom: (from, to) => adminStores().zoom.listBetween(from, to),
+    chapterNames: async () =>
+      new Map((await adminStores().chapters.listForAdmin()).map((c) => [c.id, c.name])),
     zoomSettings: async () => (await adminStores().zoom.readSettings()).settings,
     programs: async () => {
       const period = await activePeriod();

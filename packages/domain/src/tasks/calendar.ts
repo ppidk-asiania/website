@@ -45,6 +45,8 @@ export function calendarItems(input: {
   readonly lpj: readonly LpjReport[];
   readonly holidays: readonly Holiday[];
   readonly zoomCapacity: number;
+  /** Chapter names, so a chapter's booking shows who it is for. */
+  readonly chapterNames?: ReadonlyMap<string, string>;
 }): CalendarItem[] {
   const holidayOn = new Map(input.holidays.map((h) => [h.date, h.name]));
   const holidayWarning = (start: Date, zone: string) => {
@@ -76,7 +78,11 @@ export function calendarItems(input: {
       .map((z) => ({
         id: `zoom:${z.id}`,
         kind: "zoom" as const,
-        title: z.status === "pending" ? `${z.topic} (waiting for approval)` : z.topic,
+        title:
+          (z.status === "pending" ? `${z.topic} (waiting for approval)` : z.topic) +
+          (z.chapterId && input.chapterNames?.get(z.chapterId)
+            ? ` · ${input.chapterNames.get(z.chapterId)}`
+            : ""),
         start: z.startsAt,
         end: z.endsAt,
         day: null,

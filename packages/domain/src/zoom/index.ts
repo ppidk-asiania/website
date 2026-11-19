@@ -75,6 +75,8 @@ export const ZoomRequestInputSchema = z
     passcode: z.string().regex(/^[A-Za-z0-9@*_-]{1,10}$/, "1-10 letters, digits or @ * _ -."),
     joinBeforeHostMinutes: z.union(JOIN_BEFORE_HOST_MINUTES.map((m) => z.literal(m))),
     meetingId: safeId.nullable().default(null),
+    /** A chapter booking: the organiser is the chapter, not a unit. */
+    chapterId: safeId.nullable().default(null),
   })
   .strict();
 export type ZoomRequestInput = z.infer<typeof ZoomRequestInputSchema>;
@@ -90,6 +92,8 @@ export interface ZoomRequest extends EntityMeta {
   readonly requestedBy: string;
   readonly orgUnitId: string | null;
   readonly orgUnitPath: readonly string[];
+  /** Exactly one organiser: a unit (`orgUnitId`) or a chapter. */
+  readonly chapterId: string | null;
   readonly status: ZoomStatus;
   readonly decidedBy: string | null;
   readonly decisionNote: string | null;

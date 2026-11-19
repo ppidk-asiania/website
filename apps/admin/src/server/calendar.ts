@@ -16,12 +16,14 @@ import { can, canAccessAdmin, canInSomeScope, type Principal } from "@website/pe
 import { safeId } from "@website/security/validation";
 import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 import { canSeeMeeting } from "./meetings";
+import { scopeOfBooking } from "./zoom";
 
 const DAY = 86_400_000;
 
 export interface CalendarDeps {
   readonly meetings: (from: Date, to: Date) => Promise<Meeting[]>;
   readonly zoom: (from: Date, to: Date) => Promise<ZoomRequest[]>;
+  readonly chapterNames?: () => Promise<Map<string, string>>;
   readonly zoomSettings: () => Promise<Pick<ZoomSettings, "licences" | "concurrentPerLicence">>;
   readonly programs: () => Promise<Program[]>;
   readonly lpj: () => Promise<LpjReport[]>;
@@ -48,7 +50,7 @@ function visibleTo(
   return {
     meetings: input.meetings.filter((m) => canSeeMeeting(principal, m)),
     zoom: input.zoom.filter(
-      (z) => z.requestedBy === uid || can(principal, "zoom.read", { orgUnitPath: z.orgUnitPath }),
+      (z) => z.requestedBy === uid || can(principal, "zoom.read", scopeOfBooking(z)),
     ),
     programs: input.programs.filter(
       (p) =>
@@ -70,18 +72,20 @@ const inRange = (item: CalendarItem, from: Date, to: Date) => {
 
 export function createCalendar(deps: CalendarDeps) {
   async function items(principal: Principal, from: Date, to: Date): Promise<CalendarItem[]> {
-    const [meetings, zoom, settings, programs, lpj, holidays] = await Promise.all([
+    const [meetings, zoom, settings, programs, lpj, holidays, chapterNames] = await Promise.all([
       deps.meetings(from, to),
       deps.zoom(new Date(from.getTime() - DAY), to),
       deps.zoomSettings(),
       deps.programs(),
       deps.lpj(),
       deps.store.listHolidays(),
+      deps.chapterNames?.(),
     ]);
     const mine = visibleTo(principal, { meetings, zoom, programs, lpj });
     return calendarItems({
       ...mine,
       holidays,
+      ...(chapterNames && { chapterNames }),
       zoomCapacity: settings.licences * settings.concurrentPerLicence,
     })
       .filter((item) => inRange(item, from, to))

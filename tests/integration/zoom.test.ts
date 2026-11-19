@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createSqlZoomStore } from "@website/db/sql";
+import type { ActiveSeat } from "@website/domain/organizations";
 import { invitationText, utcDays, type ZoomRequest } from "@website/domain/zoom";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { createZoomActions } from "../../apps/admin/src/server/zoom";
@@ -40,6 +41,9 @@ let created: string[];
 let failCreate: boolean;
 let deleted: string[];
 let errors: string[];
+let closed: string[];
+let failClose: boolean;
+let seatsOf: Record<string, ActiveSeat[]>;
 const store = () => createSqlZoomStore(fake.db as unknown as Db);
 const actions = (withClient = true) =>
   createZoomActions({
@@ -54,6 +58,12 @@ const actions = (withClient = true) =>
               joinUrl: `https://zoom.us/j/${created.length}`,
             });
           },
+          updateMeeting: (id, patch) => {
+            if (failClose) return Promise.reject(new ZoomApiError(500, "down"));
+            closed.push(id);
+            expect(patch).toEqual({ settings: { waiting_room: true, join_before_host: false } });
+            return Promise.resolve();
+          },
           deleteMeeting: (id) => {
             deleted.push(id);
             return id === "bad" ? Promise.reject(new Error("down")) : Promise.resolve();
@@ -65,6 +75,7 @@ const actions = (withClient = true) =>
       Promise.resolve(
         uid === "req" ? { orgUnitId: "media", orgUnitPath: ["dirs", "media"] } : null,
       ),
+    seats: (uid) => Promise.resolve(seatsOf[uid] ?? []),
     encrypt: (plain) => `enc(${plain})`,
     logError: (message) => errors.push(message),
     now: () => clock,
@@ -95,6 +106,9 @@ beforeEach(() => {
   created = [];
   deleted = [];
   errors = [];
+  closed = [];
+  failClose = false;
+  seatsOf = {};
   failCreate = false;
   clock = new Date("2026-11-05T00:00:00Z");
 });
@@ -223,7 +237,7 @@ describe("zoom bookings (F1)", () => {
       data: { status: "rejected" },
     });
     clock = new Date("2026-11-11T00:00:00Z");
-    const late = await actions().request(...as(approver))({
+    const late = await actions().request(...as(requester))({
       ...input,
       startsAtLocal: "2026-11-20T19:00",
     });
@@ -245,12 +259,12 @@ describe("zoom bookings (F1)", () => {
     expect(errors).toEqual(["zoom room failed"]);
     const held = (await store().get(booked.data.id)) as ZoomRequest;
     expect(held.roomError).toContain("zoom_429");
-    expect(await actions().retryRooms()).toEqual({ tried: 1, created: 0 });
+    expect(await actions().retryRooms()).toEqual({ tried: 1, created: 0, closed: 0 });
     expect(((await store().get(booked.data.id)) as ZoomRequest).version).toBe(held.version);
-    expect(await actions(false).retryRooms()).toEqual({ tried: 1, created: 0 });
+    expect(await actions(false).retryRooms()).toEqual({ tried: 1, created: 0, closed: 0 });
     failCreate = false;
-    expect(await actions().retryRooms()).toEqual({ tried: 1, created: 1 });
-    expect(await actions().retryRooms()).toEqual({ tried: 0, created: 0 });
+    expect(await actions().retryRooms()).toEqual({ tried: 1, created: 1, closed: 0 });
+    expect(await actions().retryRooms()).toEqual({ tried: 0, created: 0, closed: 0 });
 
     const room = (await store().get(booked.data.id)) as ZoomRequest;
     expect(
@@ -304,10 +318,12 @@ describe("zoom bookings (F1)", () => {
       },
       client: {
         createMeeting: () => Promise.resolve({ id: "1", joinUrl: "https://zoom.us/j/9" }),
+        updateMeeting: () => Promise.resolve(),
         deleteMeeting: () => Promise.resolve(),
       },
       shorten: (url) => Promise.resolve(url),
       unitOf: () => Promise.resolve({ orgUnitId: "media", orgUnitPath: ["dirs", "media"] }),
+      seats: () => Promise.resolve([]),
       encrypt: null,
       logError: () => undefined,
       now: () => clock,
@@ -355,6 +371,97 @@ describe("zoom bookings (F1)", () => {
     expect(await actions().saveSettings(...as(requester))(settings({ version: 3 }))).toMatchObject({
       error: "forbidden",
     });
+  });
+});
+
+describe("zoom seats, chapters and the closing sweep (12.4)", () => {
+  const seat = (
+    seat: ActiveSeat["seat"],
+    unitType: ActiveSeat["unitType"] = "biro",
+  ): ActiveSeat => ({
+    orgUnitId: "media",
+    orgUnitPath: ["dirs", "media"],
+    unitType,
+    seat,
+  });
+  const book = (who: Principal, extra: Record<string, unknown> = {}, at = "2026-11-10T19:00") =>
+    actions().request(...as(who))({ ...input, startsAtLocal: at, ...extra });
+
+  it("approval on: a seat holder, a core seat or zoom.approve is approved at once; a plain member waits", async () => {
+    await actions().saveSettings(...as(approver))(
+      settings({ approvalRequired: true, licences: 5 }),
+    );
+    seatsOf["req"] = [seat("member")];
+    expect(await book(requester)).toMatchObject({ data: { status: "pending", joinUrl: null } });
+    seatsOf["req"] = [seat("member"), seat("secretary")];
+    expect(await book(requester, {}, "2026-11-11T19:00")).toMatchObject({
+      data: { status: "approved" },
+    });
+    seatsOf["req"] = [seat("member", "bendahara")];
+    expect(await book(requester, {}, "2026-11-12T19:00")).toMatchObject({
+      data: { status: "approved" },
+    });
+    expect(await book(approver, {}, "2026-11-13T19:00")).toMatchObject({
+      data: { status: "approved" },
+    });
+  });
+
+  it("the capacity check is unchanged for a seat holder", async () => {
+    await actions().saveSettings(...as(approver))(settings({ approvalRequired: true }));
+    seatsOf["req"] = [seat("head")];
+    expect((await book(requester)).ok).toBe(true);
+    expect(await book(requester, {}, "2026-11-10T19:30")).toMatchObject({
+      issues: ["Every Zoom licence is booked at that time. Choose another time."],
+    });
+  });
+
+  it("a booking belongs to a unit or a chapter, never both; a chapter holder books only that chapter", async () => {
+    await actions().saveSettings(...as(approver))(settings({ licences: 5 }));
+    const chapterStaff = staff("cha", ["zoom.edit"], { type: "chapter", chapterId: "jp" });
+    const made = await book(chapterStaff, { chapterId: "jp" });
+    if (!made.ok) throw new Error(JSON.stringify(made));
+    expect(await store().get(made.data.id)).toMatchObject({
+      chapterId: "jp",
+      orgUnitId: null,
+      orgUnitPath: [],
+    });
+    expect(await book(chapterStaff, { chapterId: "id" }, "2026-11-11T19:00")).toMatchObject({
+      issues: ["You can only book Zoom for your own chapter."],
+    });
+    expect(await book(chapterStaff, {}, "2026-11-12T19:00")).toMatchObject({
+      issues: ["You can only book Zoom for the unit of your appointment."],
+    });
+    expect(await book(requester, { chapterId: "jp" }, "2026-11-13T19:00")).toMatchObject({
+      issues: ["You can only book Zoom for your own chapter."],
+    });
+    const unit = await book(requester, {}, "2026-11-14T19:00");
+    if (!unit.ok) throw new Error("unit");
+    expect(await store().get(unit.data.id)).toMatchObject({ chapterId: null, orgUnitId: "media" });
+    const other = staff("oth", ["zoom.read"], { type: "chapter", chapterId: "id" });
+    expect(await actions().cancel(...as(other))({ id: made.data.id, version: 2 })).toMatchObject({
+      issues: ["Only the requester or an approver can cancel this booking."],
+    });
+  });
+
+  it("the sweep closes an ended room once; a failure stays open for the next call", async () => {
+    await actions().saveSettings(...as(approver))(settings({ licences: 5 }));
+    const first = await book(requester);
+    const later = await book(requester, {}, "2026-11-20T19:00");
+    if (!first.ok || !later.ok) throw new Error("booked");
+    expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
+    clock = new Date("2026-11-11T00:00:00Z");
+    failClose = true;
+    expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
+    expect(errors).toContain("zoom close failed");
+    const open = (await store().get(first.data.id)) as ZoomRequest;
+    expect(open.closedAt).toBeNull();
+    failClose = false;
+    expect(await actions().retryRooms()).toMatchObject({ closed: 1 });
+    expect(closed).toEqual([open.zoomMeetingId]);
+    expect(((await store().get(first.data.id)) as ZoomRequest).closedAt).toEqual(clock);
+    expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
+    expect(closed).toHaveLength(1);
+    expect(((await store().get(later.data.id)) as ZoomRequest).closedAt).toBeNull();
   });
 });
 

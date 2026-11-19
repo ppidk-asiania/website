@@ -86,7 +86,8 @@ export function mapPpidkMeetings(
   const approvedSlots: Array<{ id: string; startsAt: Date; endsAt: Date }> = [];
   for (const z of tables.zoom_meetings) {
     const status = ZOOM_STATUS[z["status"] as string];
-    const path = unitPath(z["org_unit_id"]);
+    const chapter = z["chapter_id"] ? id("chapter", z["chapter_id"]) : null;
+    const path = chapter ? [] : unitPath(z["org_unit_id"]);
     const startsAt = at(z["starts_at"]);
     const endsAt = at(z["ends_at"]);
     if (!status || !path || !startsAt || !endsAt) {
@@ -106,8 +107,9 @@ export function mapPpidkMeetings(
       joinBeforeHostMinutes: Number(z["jbh_time"] ?? 0),
       meetingId: null,
       requestedBy: person(z["requested_by_user_id"]),
-      orgUnitId: id("unit", z["org_unit_id"]),
+      orgUnitId: chapter ? null : id("unit", z["org_unit_id"]),
       orgUnitPath: path,
+      chapterId: chapter,
       status,
       decidedBy: person(z["approved_by_user_id"] ?? z["cancelled_by_user_id"]),
       decisionNote: z["review_note"] ?? z["cancel_reason"] ?? null,

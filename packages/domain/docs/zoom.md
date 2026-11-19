@@ -29,16 +29,31 @@ request ─(approval off, capacity free)─→ approved ─(room created)─→ 
   `minNoticeHours` ahead (the message says the latest time in the chosen zone); longer than
   `maxDurationMinutes` unless `zoom.long_duration`. Passcode 1-10 of `A-Z a-z 0-9 @ * _ -`;
   join before host 0 / 5 / 10 / 15 minutes.
-- **Unit**: from the requester's active appointment (`activeForUser`); none = region. The
-  requester needs `zoom.edit` there.
+- **Unit or chapter (12.4)**: exactly one organiser. Default: the unit of the requester's active
+  appointment (`activeForUser`); none = region; the requester needs `zoom.edit` there. With
+  `chapterId` the booking belongs to that chapter instead (`orgUnitId` null, `orgUnitPath` empty):
+  `zoom.edit` must cover the chapter (a global holder, or a chapter-scoped one for that chapter
+  only); the unit is not used. Cancel, approve and the calendar read the booking's scope the same
+  way (`scopeOfBooking`). The calendar title of a chapter booking ends with the chapter name.
+  PPIDK import: `zoom_meetings.chapter_id` becomes `chapterId` (`ppidk-chapter-{id}`).
 - **Capacity** (one transaction): entering "approved" reads `zoomCapacity/{yyyy-mm-dd}` for
   every UTC day the booking touches (end exclusive), refuses when the approved bookings
   overlapping it already reach licences × concurrent, then adds the slot to each day; leaving
   "approved" (cancel) removes it. Concurrent requests cannot both take the last slot (row locks).
 - **Approval** (`settings/zoom.approvalRequired`): pending holds no capacity; approve checks it.
+  With approval on, a requester who holds any active seat other than plain `member` (`head`,
+  `deputy_head`, `secretary`, `treasurer`; `activeSeats`), any seat in a core unit, or
+  `zoom.approve` for the booking's scope is approved at once; a plain member waits. The capacity
+  check is the same for everyone: a full time slot refuses the booking, whoever asks.
 - **Room**: created after the commit (`createMeeting`: type 2, start in UTC, zone, password,
   join before host). A failure keeps the slot and records `roomError` (the same failure is not
-  written again); cron `zoom-rooms` (every 10 minutes, 10 bookings per call) retries.
+  written again); cron `zoom-rooms` (every 10 minutes, 10 bookings per call) retries, then runs
+  the closing sweep below.
+- **Closing** (once, `closedAt`): the `meeting.ended` webhook after the booked end, or cron
+  `zoom-rooms`, whichever comes first (`closeRoom`: one Zoom update, waiting room on and join
+  before host off, then `closedAt`). The cron also closes up to 10 approved bookings whose end has
+  passed and that have no `closedAt` (a lost webhook no longer leaves a room open); a Zoom 404
+  counts as closed, any other failure is logged (`zoom close failed`) and retried on the next call.
 - **Cancel** (requester or `zoom.approve` for the unit): frees the slot, then deletes the Zoom
   meeting (a 404 counts as deleted; other failures are logged).
 - **Invitation**: topic, time in the booking's zone, short link, meeting id, passcode. Never the

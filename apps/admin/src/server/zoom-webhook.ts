@@ -9,7 +9,7 @@ import {
   type ZoomRequest,
 } from "@website/domain/zoom";
 import { readBodyLimited, verifyHmacSignature } from "@website/security";
-import { systemZoomAudit } from "./zoom";
+import { closeRoom, systemZoomAudit } from "./zoom";
 import type { ZoomClient } from "./zoom-client";
 
 const MAX_BODY = 256 * 1024;
@@ -45,18 +45,7 @@ const NOTICES: Record<string, readonly [string, string, string]> = {
 export function createZoomWebhookRoute(deps: ZoomWebhookDeps) {
   async function onEnded(booking: ZoomRequest, now: Date) {
     if (booking.closedAt || now.getTime() < booking.endsAt.getTime()) return;
-    if (deps.client) {
-      await deps.client.updateMeeting(booking.zoomMeetingId as string, {
-        settings: { waiting_room: true, join_before_host: false },
-      });
-    }
-    await deps.zoom.write(
-      booking.id,
-      booking.version,
-      (current) => ({ ...(current as ZoomRequest), closedAt: now }),
-      systemZoomAudit("zoom-webhook"),
-      now,
-    );
+    await closeRoom(deps, booking, now, "zoom-webhook");
   }
 
   async function onRecording(

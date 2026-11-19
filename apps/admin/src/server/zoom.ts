@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AuditEvent } from "@website/audit";
 import type { SqlZoomStore, ZoomAudit } from "@website/db/sql";
+import { CORE_UNIT_TYPES, type ActiveSeat } from "@website/domain/organizations";
 import { RuleViolationError } from "@website/domain/shared";
 import {
   assertStatus,
@@ -20,13 +21,14 @@ import { ZoomApiError, type ZoomClient } from "./zoom-client";
 export interface ZoomDeps {
   readonly zoom: Pick<
     SqlZoomStore,
-    "get" | "write" | "withoutRoom" | "readSettings" | "saveSettings"
+    "get" | "write" | "withoutRoom" | "endedOpen" | "readSettings" | "saveSettings"
   >;
-  readonly client: Pick<ZoomClient, "createMeeting" | "deleteMeeting"> | null;
+  readonly client: Pick<ZoomClient, "createMeeting" | "deleteMeeting" | "updateMeeting"> | null;
   readonly shorten: (longUrl: string, title: string) => Promise<string>;
   readonly unitOf: (
     uid: string,
   ) => Promise<{ orgUnitId: string; orgUnitPath: readonly string[] } | null>;
+  readonly seats: (uid: string) => Promise<ActiveSeat[]>;
   readonly encrypt: ((plain: string) => string) | null;
   readonly logError: (message: string, fields: Record<string, unknown>) => void;
   readonly now: () => Date;
@@ -84,14 +86,48 @@ export const systemZoomAudit =
 
 export const canCancelZoom = (
   principal: Principal,
-  request: Pick<ZoomRequest, "requestedBy" | "orgUnitPath">,
+  request: Pick<ZoomRequest, "requestedBy" | "orgUnitPath" | "chapterId">,
 ) =>
   request.requestedBy === principal.userId ||
-  can(principal, "zoom.approve", { orgUnitPath: request.orgUnitPath });
+  can(principal, "zoom.approve", scopeOfBooking(request));
+
+export const scopeOfBooking = (
+  r: Pick<ZoomRequest, "orgUnitPath" | "chapterId">,
+): ResourceContext => (r.chapterId ? { chapterId: r.chapterId } : { orgUnitPath: r.orgUnitPath });
+
+/** Closes a finished room (waiting room on, join before host off), once: `closedAt` is the mark. */
+export async function closeRoom(
+  deps: {
+    readonly zoom: Pick<SqlZoomStore, "write">;
+    readonly client: Pick<ZoomClient, "updateMeeting"> | null;
+  },
+  booking: ZoomRequest,
+  now: Date,
+  actor: string,
+): Promise<void> {
+  if (booking.closedAt) return;
+  if (deps.client && booking.zoomMeetingId) {
+    await deps.client
+      .updateMeeting(booking.zoomMeetingId, {
+        settings: { waiting_room: true, join_before_host: false },
+      })
+      .catch((error: unknown) => {
+        // A meeting Zoom no longer has needs no closing.
+        if (!(error instanceof ZoomApiError && error.status === 404)) throw error;
+      });
+  }
+  await deps.zoom.write(
+    booking.id,
+    booking.version,
+    (current) => ({ ...(current as ZoomRequest), closedAt: now }),
+    systemZoomAudit(actor),
+    now,
+  );
+}
 
 export function createZoomActions(deps: ZoomDeps) {
   const scopeOf = async ({ id }: { id: string }): Promise<ResourceContext> => ({
-    orgUnitPath: (await deps.zoom.get(id))?.orgUnitPath ?? [],
+    ...scopeOfBooking((await deps.zoom.get(id)) ?? { orgUnitPath: [], chapterId: null }),
   });
 
   async function ensureRoom(request: ZoomRequest, audit: ZoomAudit): Promise<ZoomRequest> {
@@ -141,11 +177,23 @@ export function createZoomActions(deps: ZoomDeps) {
     input: ZoomRequestInputSchema,
     handler: async (input, principal, audit) => {
       const now = deps.now();
-      const unit = await deps.unitOf(principal.userId);
+      // Exactly one organiser: the chapter, or the unit of the requester's appointment.
+      const chapterId = input.chapterId;
+      const unit = chapterId ? null : await deps.unitOf(principal.userId);
       const orgUnitPath = unit?.orgUnitPath ?? [];
-      if (!can(principal, "zoom.edit", { orgUnitPath })) {
-        throw new RuleViolationError("You can only book Zoom for the unit of your appointment.");
+      const scope = scopeOfBooking({ orgUnitPath, chapterId });
+      if (!can(principal, "zoom.edit", scope)) {
+        throw new RuleViolationError(
+          chapterId
+            ? "You can only book Zoom for your own chapter."
+            : "You can only book Zoom for the unit of your appointment.",
+        );
       }
+      const privileged =
+        can(principal, "zoom.approve", scope) ||
+        (await deps.seats(principal.userId)).some(
+          (s) => s.seat !== "member" || CORE_UNIT_TYPES.some((t) => t === s.unitType),
+        );
       const saved = await deps.zoom.write(
         null,
         null,
@@ -154,7 +202,7 @@ export function createZoomActions(deps: ZoomDeps) {
             now,
             longDuration: can(principal, "zoom.long_duration", { orgUnitPath }),
           });
-          const status = settings.approvalRequired ? "pending" : "approved";
+          const status = settings.approvalRequired && !privileged ? "pending" : "approved";
           return {
             topic: input.topic,
             ...times,
@@ -165,6 +213,7 @@ export function createZoomActions(deps: ZoomDeps) {
             requestedBy: principal.userId,
             orgUnitId: unit?.orgUnitId ?? null,
             orgUnitPath: [...orgUnitPath],
+            chapterId,
             status,
             decidedBy: status === "approved" ? principal.userId : null,
             decisionNote: null,
@@ -283,13 +332,24 @@ export function createZoomActions(deps: ZoomDeps) {
     },
   });
 
-  async function retryRooms(): Promise<{ tried: number; created: number }> {
+  /** Cron `zoom-rooms`: creates missing rooms, then closes finished ones the webhook never closed. */
+  async function retryRooms(): Promise<{ tried: number; created: number; closed: number }> {
     const waiting = await deps.zoom.withoutRoom(10);
     let created = 0;
     for (const booking of waiting) {
       if ((await ensureRoom(booking, systemZoomAudit("zoom-rooms"))).joinUrl) created += 1;
     }
-    return { tried: waiting.length, created };
+    const now = deps.now();
+    let closed = 0;
+    for (const booking of await deps.zoom.endedOpen(now, 10)) {
+      try {
+        await closeRoom(deps, booking, now, "zoom-rooms");
+        closed += 1;
+      } catch (error) {
+        deps.logError("zoom close failed", { requestId: booking.id, error: String(error) });
+      }
+    }
+    return { tried: waiting.length, created, closed };
   }
 
   return {
