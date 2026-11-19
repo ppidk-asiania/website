@@ -18,7 +18,11 @@ export const fileContentType = (path: string): string =>
     ? "image/webp"
     : path.endsWith(".pdf")
       ? "application/pdf"
-      : "application/octet-stream";
+      : path.endsWith(".png")
+        ? "image/png"
+        : path.endsWith(".jpg")
+          ? "image/jpeg"
+          : "application/octet-stream";
 
 export const FILE_LINK_PURPOSE = "file";
 

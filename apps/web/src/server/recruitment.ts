@@ -30,6 +30,8 @@ export interface ApplyingDeps {
     | "ownApplication"
   >;
   readonly profileComplete: (uid: string) => Promise<boolean>;
+  /** True when the applicant has a proof of student status, or is exempt (alumni). */
+  readonly hasProof: (uid: string) => Promise<boolean>;
   readonly storage: ImageStorage & { readonly remove?: (path: string) => Promise<void> };
   readonly now: () => Date;
   readonly uuid: () => string;
@@ -39,7 +41,7 @@ export type ApplyResult =
   | { readonly ok: true; readonly status: ApplicationStatus; readonly version: number }
   | {
       readonly ok: false;
-      readonly error: "signin" | "profile" | "invalid" | "closed" | "locked" | "refused";
+      readonly error: "signin" | "profile" | "proof" | "invalid" | "closed" | "locked" | "refused";
       readonly message?: string;
     }
   | {
@@ -97,6 +99,7 @@ export function createApplying(deps: ApplyingDeps) {
     async submit(user: Applicant, input: unknown): Promise<ApplyResult> {
       const g = await gate(user, Ref, input);
       if (!g.ok) return g.result;
+      if (!(await deps.hasProof(g.uid))) return { ok: false, error: "proof" };
       return toResult(await deps.store.submit(g.data.recruitmentId, g.uid, deps.now()));
     },
 

@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { signInUrl } from "@website/auth";
 import { nextAction } from "@website/domain/recruitment";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
-import { hasCompleteProfile } from "@/server/profile-wiring";
+import { hasCompleteProfile, hasStudentProof } from "@/server/profile-wiring";
 import { recruitmentStore } from "@/server/recruitment-wiring";
 import { getSignedInUser } from "@/server/session";
 import { ApplyForm } from "./apply-form";
@@ -18,9 +18,10 @@ export default async function ApplyPage({ params }: PageProps<"/recruitment/[id]
   const path = `/recruitment/${id}`;
   const user = await getSignedInUser();
   if (!user) redirect(signInUrl("", `${path}/apply`));
-  const [r, complete, jar] = await Promise.all([
+  const [r, complete, hasProof, jar] = await Promise.all([
     recruitmentStore().getPublished(id),
     hasCompleteProfile(user.uid),
+    hasStudentProof(user.uid),
     cookies(),
   ]);
   if (!r) notFound();
@@ -41,6 +42,14 @@ export default async function ApplyPage({ params }: PageProps<"/recruitment/[id]
       <h1 className="ui-shell-title">
         {t.recruitment.apply}: {r.title}
       </h1>
+      {!hasProof && (
+        <p role="alert">
+          {t.recruitment.proofMissing}{" "}
+          <a href={`/account/profile?next=${encodeURIComponent(`${path}/apply`)}#student-proof`}>
+            {t.recruitment.proofLink}
+          </a>
+        </p>
+      )}
       <ApplyForm
         recruitmentId={r.id}
         maxChoices={r.maxChoices}

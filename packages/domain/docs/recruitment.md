@@ -26,7 +26,8 @@ shows ONE next action.
 - Tests: `tests/unit/recruitment.test.ts`, `tests/unit/admin-recruitment.test.ts`,
   `tests/integration/recruitment.test.ts`, `tests/integration/selection.test.ts`,
   `tests/integration/interviews.test.ts`, `tests/integration/ratification.test.ts`,
-  `tests/unit/personality.test.ts`, `tests/integration/personality.test.ts`.
+  `tests/unit/personality.test.ts`, `tests/integration/personality.test.ts`,
+  `tests/integration/student-proof.test.ts`, `tests/security/student-proof.test.ts`.
 
 ## How to use it
 
@@ -47,7 +48,9 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   `seatCounters/{recruitmentId}_{orgUnitId}` `{ quota, filled }`, written in the same
   transaction; a quota never goes below `filled`, and a unit with taken seats cannot be removed.
 - **Applying** (`applications.read_own` / `applications.write_own`): always the session's uid;
-  signed in and `isProfileComplete` required. Drafts check answers without requiring them; submit
+  signed in and `isProfileComplete` required; submitting also needs a proof of student status
+  (`proofSatisfied`, alumni exempt, see `members.md`): `submit` answers `error: "proof"` and the
+  apply page says so before the form (drafts can still be saved). Drafts check answers without requiring them; submit
   needs the window open, 1..maxChoices distinct units of the recruitment, every required answer
   and a portfolio when a chosen unit is flagged. Withdrawing is possible until a seat is taken.
 - **Files**: portfolios and file-question answers are PDFs only (`%PDF-` magic bytes), at most
@@ -104,6 +107,11 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   deadline and the AI-analysis input (11.9) are not built.
 - **Offers** expire at read time (`offerExpired`): no job releases them; an expired offer cannot
   be answered and the committee may offer again.
+- **Student proof review** (`recruitment.review`): on the application page the committee opens
+  the applicant's proof files (15-minute links with a version, built from the applicant's profile,
+  never from a request path) and marks "Proof OK" or "Ask for a fix" (note required). The
+  applicants list shows one mark (OK green, fix asked red, fixed blue, not checked grey; date and
+  note in the tooltip) and a filter. Rules and storage: `members.md`.
 - **Files** are opened by the committee through 15-minute signed links, only for paths that
   belong to that application (`fileUrl`, `recruitment.review`).
 - **Audit**: set-up changes (module `recruitment`, resource `recruitment`; CREATE and DELETE

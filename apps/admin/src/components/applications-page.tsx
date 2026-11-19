@@ -7,18 +7,21 @@ import {
   approvePlacementAction,
   failApplicationAction,
   logApplicantsExportAction,
+  proofFileUrlAction,
   offerApplicationAction,
   passApplicationAction,
   ratifyApplicationAction,
   rejectApplicationAction,
   requestRevisionAction,
   returnPactAction,
+  reviewProofAction,
 } from "@/app/(panel)/recruitment/actions";
 import { actionMessage } from "@/components/action-message";
 import { downloadCsv } from "@/components/csv";
 import { applicantsCsv } from "@/components/exports-model";
 import { formatInZone } from "@/components/format";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
 import { FieldError } from "@/components/ui/field-error";
@@ -35,6 +38,7 @@ import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 import {
   matchesQueueTab,
+  PROOF_MARKS,
   QUEUE_TABS,
   type ApplicationItem,
   type QueueTab,
@@ -46,10 +50,16 @@ const sortValue = (a: ApplicationItem, key: SortKey) =>
 const filterText = (a: ApplicationItem, key: SortKey): string =>
   key === "name" ? a.name : a.submittedAt ? formatInZone(a.submittedAt, "UTC", false) : "";
 
+const proofTooltip = (a: ApplicationItem) =>
+  [a.proof.at ? formatInZone(a.proof.at, "UTC") + " UTC" : "", a.proof.note]
+    .filter(Boolean)
+    .join(": ");
+
 type Pending =
   | { kind: "revision" }
   | { kind: "offer" }
   | { kind: "returnPact" }
+  | { kind: "proofFix" }
   | { kind: "ratify" }
   | { kind: "confirm"; action: "fail" | "pass" | "reject" | "approve" };
 
@@ -82,6 +92,7 @@ export function ApplicationsPage(props: {
   const [request, setRequest] = useState("");
   const [unit, setUnit] = useState("");
   const [seatTitle, setSeatTitle] = useState("");
+  const [proofFilter, setProofFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({});
 
@@ -90,9 +101,10 @@ export function ApplicationsPage(props: {
     return items.filter(
       (a) =>
         matchesQueueTab(a, tab) &&
+        (proofFilter === "all" || a.proof.mark === proofFilter) &&
         (!q || a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q)),
     );
-  }, [items, tab, query]);
+  }, [items, tab, query, proofFilter]);
   const counts = useMemo(
     () =>
       Object.fromEntries(
@@ -130,11 +142,39 @@ export function ApplicationsPage(props: {
     else toast.show(actionMessage(result));
   };
 
+  const openProof = async (file: "main" | "supporting") => {
+    if (!current) return;
+    const result = await proofFileUrlAction({ id: current.id, file });
+    if (result.ok) window.open(result.data.url, "_blank", "noopener");
+    else toast.show(actionMessage(result));
+  };
+
+  // not `run`: the proof is on the profile, so the application version is not sent
+  const reviewProof = async (state: "ok" | "fix") => {
+    if (!current) return;
+    setBusy(true);
+    const result = await reviewProofAction({
+      id: current.id,
+      state,
+      note: state === "fix" ? request : "",
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setFieldErrors(result.fields ?? {});
+      toast.show(actionMessage(result));
+      return;
+    }
+    setPending(null);
+    setFieldErrors({});
+    toast.show(state === "ok" ? "Proof marked OK" : "Fix requested");
+    router.refresh();
+  };
+
   const columns: Column<ApplicationItem>[] = [
     {
       key: "name",
       header: table.header("name", "Applicant"),
-      width: "30%",
+      width: "26%",
       render: (a) => (
         <div>
           <div className="admin-table__title">{a.name}</div>
@@ -145,7 +185,7 @@ export function ApplicationsPage(props: {
     {
       key: "choices",
       header: "Choices",
-      width: "30%",
+      width: "24%",
       render: (a) => (
         <span className="admin-table__sub">
           {a.choices.map((c, i) => `${i + 1}. ${c.name}`).join("  ")}
@@ -153,9 +193,19 @@ export function ApplicationsPage(props: {
       ),
     },
     {
+      key: "proof",
+      header: "Proof",
+      width: "14%",
+      render: (a) => (
+        <span title={proofTooltip(a)}>
+          <Badge tone={PROOF_MARKS[a.proof.mark].tone}>{PROOF_MARKS[a.proof.mark].label}</Badge>
+        </span>
+      ),
+    },
+    {
       key: "status",
       header: "Status",
-      width: "18%",
+      width: "16%",
       render: (a) => (
         <span className="admin-status-badge">
           {a.statusLabel}
@@ -166,7 +216,7 @@ export function ApplicationsPage(props: {
     {
       key: "submitted",
       header: table.header("submitted", "Submitted (UTC)"),
-      width: "16%",
+      width: "14%",
       render: (a) => (
         <span className="admin-table__sub">
           {a.submittedAt ? formatInZone(a.submittedAt, "UTC") : "—"}
@@ -268,6 +318,71 @@ export function ApplicationsPage(props: {
                 </dd>
               </>
             ) : null}
+            <dt>Student proof</dt>
+            <dd>
+              {current.proof.main ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon="download"
+                    onClick={() => openProof("main")}
+                  >
+                    Main document
+                  </Button>
+                  {current.proof.supporting ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon="download"
+                      onClick={() => openProof("supporting")}
+                    >
+                      Student card
+                    </Button>
+                  ) : null}{" "}
+                  <span title={proofTooltip(current)}>
+                    <Badge tone={PROOF_MARKS[current.proof.mark].tone}>
+                      {PROOF_MARKS[current.proof.mark].label}
+                    </Badge>
+                  </span>
+                  {current.proof.note ? ` ${current.proof.note}` : ""}
+                  {canReview ? (
+                    <>
+                      {" "}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon="check"
+                        disabled={busy}
+                        onClick={() => void reviewProof("ok")}
+                      >
+                        Proof OK
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon="undo"
+                        disabled={busy}
+                        onClick={() => {
+                          setRequest("");
+                          setPending({ kind: "proofFix" });
+                        }}
+                      >
+                        Ask for a fix
+                      </Button>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                "Not uploaded (alumni are not asked)"
+              )}
+            </dd>
+            <dt>Personality</dt>
+            <dd>
+              {current.personality
+                ? `${current.personality.full} (${current.personality.axes})`
+                : "Not taken yet"}
+            </dd>
             {current.pacts.length > 0 ? (
               <>
                 <dt>Integrity pact</dt>
@@ -491,6 +606,45 @@ export function ApplicationsPage(props: {
 
         <Modal
           asForm
+          open={pending?.kind === "proofFix"}
+          title="Ask for a fix"
+          subtitle="The applicant is told by WhatsApp or e-mail and uploads the document again."
+          onClose={() => setPending(null)}
+          footer={
+            <div className="admin-modal__footer-row">
+              <Button variant="outline" icon="chevronLeft" onClick={() => setPending(null)}>
+                Back
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                icon="send"
+                disabled={busy}
+                onClick={() => void reviewProof("fix")}
+              >
+                Send request
+              </Button>
+            </div>
+          }
+        >
+          <div className="admin-field">
+            <label className="admin-field__label" htmlFor="proof-note">
+              What should the applicant fix? *
+            </label>
+            <textarea
+              id="proof-note"
+              required
+              className="admin-input admin-textarea"
+              rows={3}
+              value={request}
+              onChange={(e) => setRequest(e.target.value)}
+            />
+            <FieldError id="proof-note-error" message={fieldErrors["note"]} />
+          </div>
+        </Modal>
+
+        <Modal
+          asForm
           open={pending?.kind === "returnPact"}
           title="Send the pact back"
           subtitle="The applicant sees this note and uploads the pact again; earlier files are kept."
@@ -625,6 +779,22 @@ export function ApplicationsPage(props: {
             Export CSV
           </Button>
           <SortMenu columns={columns} />
+          <Select
+            aria-label="Filter by proof"
+            className="admin-select"
+            value={proofFilter}
+            onChange={(e) => {
+              setProofFilter(e.target.value);
+              table.setPage(1);
+            }}
+          >
+            <option value="all">All proofs</option>
+            {Object.entries(PROOF_MARKS).map(([key, mark]) => (
+              <option key={key} value={key}>
+                {mark.label}
+              </option>
+            ))}
+          </Select>
           <SearchBox
             placeholder="Search by name or e-mail..."
             label="Search applications"

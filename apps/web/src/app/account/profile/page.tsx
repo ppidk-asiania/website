@@ -7,11 +7,12 @@ import { AppShell } from "@website/ui";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { activeChapters } from "@/server/chapters";
 import { getAppUrls } from "@/server/env";
-import { ownProfile } from "@/server/profile-wiring";
+import { ownProfile, ownStudentProof } from "@/server/profile-wiring";
 import { getSignedInUser } from "@/server/session";
 import { GraduationForm } from "./graduation-form";
 import { ProfileForm, type ProfileFormValues } from "./profile-form";
 import { WhatsappLink } from "./whatsapp-link";
+import { StudentProofForm } from "./student-proof-form";
 
 export const metadata: Metadata = { title: "Member profile", robots: { index: false } };
 
@@ -41,8 +42,9 @@ const toFormValues = (p: MemberProfile | null): ProfileFormValues | null =>
 export default async function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getSignedInUser();
   if (!user) redirect(signInUrl("", "/account/profile"));
-  const [profile, chapters, jar, params] = await Promise.all([
+  const [profile, proof, chapters, jar, params] = await Promise.all([
     ownProfile().load(user),
+    ownStudentProof().summary(user),
     activeChapters(),
     cookies(),
     searchParams,
@@ -68,6 +70,12 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
           chapters={chapters.map((c) => ({ countryCode: c.countryCode, name: c.name }))}
           next={next}
         />
+      )}
+      {profile && proof && (
+        <>
+          <h2>{t.proof.title}</h2>
+          <StudentProofForm t={t.proof} current={proof} />
+        </>
       )}
       {profile && (
         <>

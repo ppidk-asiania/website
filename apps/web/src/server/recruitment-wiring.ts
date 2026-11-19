@@ -6,7 +6,7 @@ import { createSqlPersonalityStore, createSqlRecruitmentWebStore } from "@websit
 import type { Recruitment } from "@website/domain/recruitment";
 import { webDb, webStorage } from "./db";
 import { getWebEnv } from "./env";
-import { hasCompleteProfile } from "./profile-wiring";
+import { hasCompleteProfile, hasStudentProof } from "./profile-wiring";
 import { createPersonalityTest } from "./personality";
 import { createApplying } from "./recruitment";
 
@@ -23,6 +23,7 @@ export const applying = lazyEnv(() =>
   createApplying({
     store: recruitmentStore(),
     profileComplete: hasCompleteProfile,
+    hasProof: hasStudentProof,
     storage: {
       save: (path, bytes, options) => webStorage().save(path, bytes, options),
       remove: (path) => webStorage().remove(path),

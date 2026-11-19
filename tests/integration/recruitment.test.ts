@@ -43,6 +43,7 @@ const applying = () =>
   createApplying({
     store: web(),
     profileComplete: (uid) => Promise.resolve(uid !== "incomplete"),
+    hasProof: (uid) => Promise.resolve(uid !== "noproof"),
     storage: {
       save: vi.fn((path: string, bytes: Uint8Array, options: unknown) => {
         saved.push({ path, bytes, options });
@@ -256,6 +257,19 @@ describe("applying (C3 steps 1-2)", () => {
     expect(await applying().saveDraft(ari, { ...input, recruitmentId: "a/b" })).toEqual({
       ok: false,
       error: "invalid",
+    });
+  });
+
+  it("refuses to submit without a student proof (drafts are still saved)", async () => {
+    const noproof = { uid: "noproof" };
+    const input = { recruitmentId, choices: ["finance"], answers: { [questionId]: "Yes." } };
+    expect(await applying().saveDraft(noproof, input)).toMatchObject({ ok: true, status: "draft" });
+    expect(await applying().submit(noproof, { recruitmentId })).toEqual({
+      ok: false,
+      error: "proof",
+    });
+    expect(fake.docs.get(`applications/${recruitmentId}_noproof`)).toMatchObject({
+      status: "draft",
     });
   });
 

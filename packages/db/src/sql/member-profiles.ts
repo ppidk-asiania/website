@@ -8,13 +8,27 @@ import {
   type GuardedChanges,
   type MemberProfile,
   type MemberProfileRepository,
+  type ProofReview,
+  type ProofState,
+  type StudentProof,
 } from "@website/domain/members";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { createSqlAuditWriter } from "./audit";
+import { getDocumentsByIds } from "./batch";
 import { toDate } from "./slugged";
 
 const REMOVED_FIELDS = new Set(["verificationStatus", "verifiedBy", "verifiedAt"]);
+
+function toProofState(proof: unknown, review: unknown): ProofState {
+  const p = proof as
+    (Omit<StudentProof, "uploadedAt"> & { uploadedAt: unknown }) | null | undefined;
+  const r = review as (Omit<ProofReview, "at"> & { at: unknown }) | null | undefined;
+  return {
+    studentProof: p ? { ...p, uploadedAt: toDate(p.uploadedAt) as Date } : null,
+    proofReview: r ? { ...r, at: toDate(r.at) as Date } : null,
+  };
+}
 
 function toProfile(data: Record<string, unknown>): MemberProfile {
   const {
@@ -24,6 +38,8 @@ function toProfile(data: Record<string, unknown>): MemberProfile {
     graduationMarkedBy,
     whatsappVerifiedAt,
     chapterId,
+    studentProof,
+    proofReview,
     createdAt,
     updatedAt,
     deletedAt,
@@ -53,6 +69,7 @@ function toProfile(data: Record<string, unknown>): MemberProfile {
       markedBy: (graduationMarkedBy as string | null | undefined) ?? null,
     },
     whatsappVerifiedAt: toDate(whatsappVerifiedAt),
+    ...toProofState(studentProof, proofReview),
     createdAt: toDate(createdAt) as Date,
     updatedAt: toDate(updatedAt) as Date,
     deletedAt: toDate(deletedAt),
@@ -139,7 +156,13 @@ export function createSqlMemberProfileStore(db: Database) {
         if ((before?.version ?? null) !== expectedVersion) {
           throw new ConcurrencyConflictError("memberProfiles version changed");
         }
-        const next = { ...profile, chapterId };
+        // the proof is changed only by updateProof, so a profile save never drops it
+        const next = {
+          ...profile,
+          chapterId,
+          studentProof: before?.studentProof ?? null,
+          proofReview: before?.proofReview ?? null,
+        };
         const direct = before ? guardedChanges(before, next) : {};
         const log = Object.keys(direct).length > 0 ? await auditLog.begin(tx) : null;
         tx.set(ref, toDoc(next));
@@ -238,6 +261,38 @@ export function createSqlMemberProfileStore(db: Database) {
         );
         return { ok: true, uid } as const;
       });
+    },
+
+    /** Changes only the proof fields, in one transaction, without touching the profile version. */
+    updateProof(
+      uid: string,
+      update: (current: ProofState) => ProofState,
+      audit?: (before: ProofState, after: ProofState, profile: MemberProfile) => AuditEvent,
+    ): Promise<{ before: ProofState; after: ProofState } | null> {
+      const ref = profiles.doc(safeId.parse(uid));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) return null;
+        const profile = toProfile(snapshot.data() as Record<string, unknown>);
+        const before = {
+          studentProof: profile.studentProof ?? null,
+          proofReview: profile.proofReview ?? null,
+        };
+        const after = update(before);
+        const log = audit ? await auditLog.begin(tx) : null;
+        tx.update(ref, { studentProof: after.studentProof, proofReview: after.proofReview });
+        if (log && audit) log.append(audit(before, after, profile));
+        return { before, after };
+      });
+    },
+
+    async proofsOf(uids: readonly string[]): Promise<Map<string, ProofState>> {
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids);
+      return new Map(
+        [...found.entries()].flatMap(([uid, data]) =>
+          data ? [[uid, toProofState(data["studentProof"], data["proofReview"])] as const] : [],
+        ),
+      );
     },
 
     setGraduation(

@@ -6,6 +6,7 @@ import {
   applicationActions,
   exportLog,
   interviewActions,
+  proofActions,
   recruitmentActions,
 } from "@/server/wiring";
 
@@ -78,4 +79,12 @@ export async function removeInterviewSlotAction(input: unknown) {
 
 export async function logApplicantsExportAction(input: unknown) {
   return exportLog().applicants(getPrincipal, getAuditContext)(input);
+}
+
+export async function proofFileUrlAction(input: unknown) {
+  return proofActions().fileUrl(getPrincipal, getAuditContext)(input);
+}
+
+export async function reviewProofAction(input: unknown) {
+  return queued(await proofActions().review(getPrincipal, getAuditContext)(input));
 }

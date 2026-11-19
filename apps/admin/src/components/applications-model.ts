@@ -1,4 +1,5 @@
 import { answerText, type FileAnswer, type Question } from "@website/domain/forms";
+import type { MemberProfile, ProofMark } from "@website/domain/members";
 import {
   offerExpired,
   waitingFor,
@@ -37,6 +38,13 @@ export function matchesQueueTab(item: Pick<ApplicationItem, "status">, tab: Queu
   return tab === "all" || TAB_STATUSES[tab].includes(item.status);
 }
 
+export const PROOF_MARKS = {
+  ok: { label: "Proof OK", tone: "success" },
+  fix: { label: "Fix asked", tone: "danger" },
+  fixed: { label: "Fixed", tone: "primary" },
+  none: { label: "Not checked", tone: "neutral" },
+} as const satisfies Record<ProofMark, { label: string; tone: string }>;
+
 export interface ApplicationItem {
   id: string;
   version: number;
@@ -55,6 +63,7 @@ export interface ApplicationItem {
   pactNote: string | null;
   appointmentId: string | null;
   waitingFor: string[];
+  proof: { mark: ProofMark; note: string; at: string | null; main: boolean; supporting: boolean };
   personality: { full: string; axes: string } | null;
   revisions: {
     round: number;
@@ -75,6 +84,7 @@ export function toApplicationItem(
   revisions: readonly RevisionRound[],
   now: Date,
   personality: Pick<PersonalityScore, "full" | "axes"> | null = null,
+  proof: Pick<MemberProfile, "studentProof" | "proofReview"> | null = null,
 ): ApplicationItem {
   const unitName = (id: string) => r.units.find((u) => u.orgUnitId === id)?.name ?? id;
   return {
@@ -108,6 +118,13 @@ export function toApplicationItem(
     pactNote: a.pactNote,
     appointmentId: a.appointmentId,
     waitingFor: waitingFor(questions, a.answers).map((q) => q.label),
+    proof: {
+      mark: proof?.proofReview?.state ?? "none",
+      note: proof?.proofReview?.note ?? "",
+      at: proof?.proofReview?.at.toISOString() ?? null,
+      main: Boolean(proof?.studentProof),
+      supporting: Boolean(proof?.studentProof?.supporting),
+    },
     personality: personality && {
       full: personality.full,
       axes: AXES.map(

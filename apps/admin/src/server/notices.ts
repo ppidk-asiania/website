@@ -3,6 +3,7 @@ import type { SqlContactReader } from "@website/db/sql";
 import { desksOf, type Letter, type LetterType } from "@website/domain/documents";
 import type { FinanceRequest } from "@website/domain/finance";
 import { messageTo, type Messenger, type SurveySource } from "@website/domain/messaging";
+import type { ProofReview } from "@website/domain/members";
 import type { LpjReport } from "@website/domain/programs";
 import type { Application, ApplicationStatus } from "@website/domain/recruitment";
 import type { PagePermission } from "@website/permissions";
@@ -92,6 +93,29 @@ export function createNotices(deps: NoticeDeps) {
         () => `recruitment:${next.id}:${next.status}:${next.version}`,
       );
       if (next.status === "confirmed") await deps.poll([next.userId], "recruitment", next.id);
+    });
+
+  // The key holds the decision time, so a second request to fix the proof is sent too.
+  const proof = (uid: string, review: ProofReview) =>
+    safely("proof", uid, async () => {
+      const fix = review.state === "fix";
+      const text = fix
+        ? both(
+            "Bukti status mahasiswamu perlu diperbaiki. Unggah ulang di profilmu.",
+            "Your proof of student status needs a fix. Upload it again on your profile.",
+          )
+        : both(
+            "Bukti status mahasiswamu sudah diterima.",
+            "Your proof of student status is accepted.",
+          );
+      await tell(
+        [uid],
+        {
+          subject: "Bukti status mahasiswa / Student proof",
+          text: `${text}${fix ? `\n\n${review.note}` : ""}\n\n${deps.webUrl}/account/profile`,
+        },
+        () => `proof:${uid}:${review.state}:${review.at.getTime()}`,
+      );
     });
 
   const letter = (saved: Letter) =>
@@ -222,7 +246,7 @@ export function createNotices(deps: NoticeDeps) {
       }
     });
 
-  return { application, letter, lpj, finance };
+  return { application, proof, letter, lpj, finance };
 }
 
 export type Notices = ReturnType<typeof createNotices>;

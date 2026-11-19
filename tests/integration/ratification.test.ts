@@ -68,6 +68,7 @@ const applying = () =>
   createApplying({
     store: createSqlRecruitmentWebStore(db()),
     profileComplete: () => Promise.resolve(true),
+    hasProof: () => Promise.resolve(true),
     storage: { save: () => Promise.resolve({ url: null }) },
     now: () => clock,
     uuid: () => "abcdef12-0000-4000-8000-000000000000",

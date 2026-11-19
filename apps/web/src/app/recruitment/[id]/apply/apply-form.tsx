@@ -57,6 +57,7 @@ export function ApplyForm(props: {
     if (result.error === "locked") return t.locked;
     if (result.error === "closed") return t.actions.closed;
     if (result.error === "profile") return t.profile;
+    if (result.error === "proof") return t.proofMissing;
     if (result.error === "signin") return t.signIn;
     return t.failed;
   };

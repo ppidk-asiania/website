@@ -63,8 +63,7 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
   set themselves (a mark imported from PPIDK and set by an officer stays). The date is refused
   before the year of entry or more than 10 years ahead. Graduation never ends an appointment:
   graduated officers of the active period appear on the admin dashboard for `appointments.edit`.
-- Not built yet: the student card (KTM) upload on the website (the private `ktm` image preset
-  exists; the web upload route comes with the documents phase).
+- The student card (KTM) is now the optional supporting file of the student proof (next section).
 - Tests: `tests/integration/profile-graduation.test.ts`.
 
 ## WhatsApp number linked by message (step 10.4)
@@ -81,6 +80,37 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 - Not built: staff typing someone else's number (`profile.update_any`; no staff profile editor
   exists). The PPIDK import of `phone_wa_verified_at` is finished in step 16.4.
 - Tests: `tests/security/whatsapp-webhook.test.ts`, `tests/integration/whatsapp-link.test.ts`.
+
+## Student status proof (DEC-21, step 11.3)
+
+- Needed only to apply to a recruitment (`proofSatisfied` in `packages/domain/src/members/student-proof.ts`):
+  a student (or one graduating soon) needs a **main** file; alumni are never asked. Institutional
+  accounts (step 15.1) will be exempt too; that account type does not exist yet.
+- Stored on `memberProfiles/{uid}` (no new collection): `studentProof` `{ main, supporting,
+confirmedActive, uploadedAt }` (each file `{ path, type }`) and `proofReview` `{ state: ok | fix |
+fixed, note, by, at }`. Only `updateProof` / `proofsOf` (`packages/db/src/sql/member-profiles.ts`)
+  change them: one transaction, the profile version is NOT bumped (an open profile form stays valid),
+  and a profile save keeps them.
+- Main = a document that STATES active status (certificate of enrolment, official transcript,
+  LoA/CoE); supporting = student card, optional. PDF, JPEG, PNG or WebP by magic bytes, at most
+  5 MB, stored privately (not re-encoded, not encrypted: the committee opens them through the
+  normal 15-minute signed link): `members/proofs/{uid}/{main|supporting}_{id}.{ext}`.
+- Web: upload on `/account/profile` (`apps/web/src/server/student-proof.ts`, route
+  `/api/account/student-proof?file=main|supporting[&confirmed=1]`). A new main file needs the
+  confirmation "this document states my active status" (`confirmed=1`, checked on the server); a
+  supporting file needs a main file first. `GET ?file=…&v=<version>` shows the owner's own file only
+  (the path comes from the stored profile, never from the request); responses are
+  `private, no-store`.
+- A new upload after "Ask for a fix" sets the review to `fixed`; a new main file after "Proof OK"
+  clears the review (a different document is not checked yet).
+- Review (`recruitment.review`, admin application page, `apps/admin/src/server/student-proofs.ts`):
+  open both files, "Proof OK" or "Ask for a fix" with a note. The applicant is told by WhatsApp /
+  e-mail; the notice key holds the decision time, so a second fix request is sent too (PPIDK bug,
+  s.118). The decision is audited (module `recruitment`, resource `proof`, not revertible).
+- Not built: verification status, change requests, a banner on every page for accounts without
+  proof, merging requests (PPIDK s.117).
+- Tests: `tests/integration/student-proof.test.ts`, `tests/security/student-proof.test.ts`,
+  `tests/integration/recruitment.test.ts` (submit refused without proof).
 
 ## Import from PPIDK (block J)
 

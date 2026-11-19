@@ -7,12 +7,13 @@ import {
   createSqlSignatureStore,
   createSqlUniversityStore,
 } from "@website/db/sql";
-import { isProfileComplete, WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
+import { isProfileComplete, proofSatisfied, WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
 import { keyedHash } from "@website/security";
 import { webDb, webStorage } from "./db";
 import { getWebEnv } from "./env";
 import { createOwnProfile, type ProfileOwner } from "./profile";
 import { createOwnSignature } from "./signature";
+import { createOwnStudentProof } from "./student-proof";
 import { createUniversityPicker, type UniversityChoice } from "./universities";
 import { createWhatsappLink } from "./whatsapp-link";
 
@@ -53,8 +54,21 @@ export const ownSignature = lazyEnv(() =>
   }),
 );
 
+export const ownStudentProof = lazyEnv(() =>
+  createOwnStudentProof({
+    profiles: memberProfiles(),
+    storage: webStorage(),
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);
+
 export const hasCompleteProfile = async (uid: string): Promise<boolean> =>
   isProfileComplete(await memberProfiles().findByUserId(uid));
+
+/** Applying needs a main proof of student status; alumni are exempt (DEC-21). */
+export const hasStudentProof = async (uid: string): Promise<boolean> =>
+  proofSatisfied(await memberProfiles().findByUserId(uid), new Date().toISOString().slice(0, 10));
 
 export const ownTimezone = async (uid: string): Promise<string> =>
   (await memberProfiles().findByUserId(uid))?.timezone ?? "Asia/Jakarta";

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
 import { RuleViolationError, type EntityMeta } from "../shared";
+import type { ProofReview, StudentProof } from "./student-proof";
 
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
@@ -149,6 +150,9 @@ export interface MemberProfile extends EntityMeta, Omit<MemberProfileInput, "con
   readonly graduation: Graduation;
   /** Set when the member linked this number by messaging the bot; typing a number clears it. */
   readonly whatsappVerifiedAt: Date | null;
+  /** Proof of student status and the committee's note on it (DEC-21); absent until uploaded. */
+  readonly studentProof?: StudentProof | null;
+  readonly proofReview?: ProofReview | null;
 }
 
 export interface Graduation {
@@ -159,7 +163,14 @@ export const NOT_GRADUATED: Graduation = { on: null, markedBy: null };
 
 export type ProfileField = Exclude<
   keyof MemberProfile,
-  keyof EntityMeta | "userId" | "consent" | "chapterId" | "graduation" | "whatsappVerifiedAt"
+  | keyof EntityMeta
+  | "userId"
+  | "consent"
+  | "chapterId"
+  | "graduation"
+  | "whatsappVerifiedAt"
+  | "studentProof"
+  | "proofReview"
 >;
 export const PROFILE_FIELD_CLASS = {
   fullName: "basic",

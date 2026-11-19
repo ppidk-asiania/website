@@ -20,6 +20,7 @@ import { logSecurityEvent } from "@website/observability";
 import { keyedHash, signLink } from "@website/security";
 import { createAccountActions } from "./accounts";
 import { createApplicationActions } from "./applications";
+import { createProofActions } from "./student-proofs";
 import { createDeadlineReminders } from "./deadline-reminders";
 import { createExportLog, createReportCardFileRoute } from "./exports";
 import { createAppointmentActions } from "./appointments";
@@ -334,6 +335,16 @@ export const applicationActions = lazyEnv(() =>
       });
     },
     notify: (application, title) => notices().application(application, title),
+    now: () => new Date(),
+  }),
+);
+
+export const proofActions = lazyEnv(() =>
+  createProofActions({
+    profiles: adminStores().memberProfiles,
+    applications: adminStores().applications,
+    signedUrl: (path) => imageStorage().signedReadUrl(path),
+    notify: (uid, review) => notices().proof(uid, review),
     now: () => new Date(),
   }),
 );
@@ -928,6 +939,7 @@ export const adminReads = {
     adminStores().applications.revisionsForRecruitment(recruitmentId),
   getFormVersion: (formId: string, n: number) => adminStores().forms.getVersion(formId, n),
   personalityResults: (uids: readonly string[]) => adminStores().personality.getMany(uids),
+  studentProofs: (uids: readonly string[]) => adminStores().memberProfiles.proofsOf(uids),
   listInterviewSlots: (recruitmentId: string) =>
     adminStores().interviews.listForRecruitment(recruitmentId),
   recruitmentSeats: (ids: readonly string[]) => adminStores().recruitments.seats(ids),
