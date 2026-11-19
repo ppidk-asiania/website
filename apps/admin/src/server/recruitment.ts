@@ -1,7 +1,12 @@
 import "server-only";
 import { z } from "zod";
 import type { SqlRecruitmentStore } from "@website/db/sql";
-import { RecruitmentInputSchema, type Recruitment } from "@website/domain/recruitment";
+import {
+  RecruitmentInputSchema,
+  RubricInputSchema,
+  storableRubric,
+  type Recruitment,
+} from "@website/domain/recruitment";
 import { safeId } from "@website/security/validation";
 import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 
@@ -70,6 +75,22 @@ export function createRecruitmentActions(deps: RecruitmentDeps) {
     },
   });
 
+  /** The committee edits the interview rubric (step 11.6); the default is stored as empty. */
+  const saveRubric = createGuardedAction({
+    permission: "recruitment.edit",
+    input: RefInput.extend({ rubric: RubricInputSchema }).strict(),
+    handler: async ({ id, version, rubric }, _principal, audit) => {
+      const saved = await deps.recruitments.write(
+        id,
+        version,
+        (current) => ({ ...(current as Recruitment), interviewRubric: storableRubric(rubric) }),
+        recruitmentAudit(audit, "UPDATE"),
+        deps.now(),
+      );
+      return { version: saved.version };
+    },
+  });
+
   const remove = createGuardedAction({
     permission: "recruitment.edit",
     input: RefInput,
@@ -86,5 +107,5 @@ export function createRecruitmentActions(deps: RecruitmentDeps) {
     },
   });
 
-  return { save, setPublished, remove };
+  return { save, setPublished, saveRubric, remove };
 }

@@ -2,10 +2,17 @@ import { answerText, type FileAnswer, type Question } from "@website/domain/form
 import type { MemberProfile, ProofMark } from "@website/domain/members";
 import { seatLabel, type AppointmentSeat, type OrgUnitType } from "@website/domain/organizations";
 import {
+  assessmentAverage,
+  assessmentSummary,
+  NO_RELATION,
   offerExpired,
+  RECOMMENDATIONS,
   waitingFor,
   AXES,
   type Application,
+  type Assessment,
+  type Recommendation,
+  type RubricAspect,
   type PersonalityScore,
   type ApplicationStatus,
   type Recruitment,
@@ -46,7 +53,103 @@ export const PROOF_MARKS = {
   none: { label: "Not checked", tone: "neutral" },
 } as const satisfies Record<ProofMark, { label: string; tone: string }>;
 
+export const RECOMMENDATION_LABELS: Record<Recommendation, string> = {
+  strongly_recommended: "Strongly recommended",
+  recommended: "Recommended",
+  unsure: "Unsure",
+  not_recommended: "Not recommended",
+};
+
+export interface AssessmentForm {
+  choiceId: string;
+  unitName: string;
+  rubric: {
+    key: string;
+    label: string;
+    description: string;
+    questions: string[];
+    weight: number;
+  }[];
+  mine: Pick<Assessment, "scores" | "recommendation" | "note" | "relation"> | null;
+}
+
+/** "3.2 (2)": the average of each interviewer's weighted average, and how many assessed. */
+export interface AssessmentPanel {
+  score: string | null;
+  /** "Score 3.2 (2 assessors)", under the status in the applicants list. */
+  listLabel: string | null;
+  spread: string;
+  withRelation: number;
+  items: {
+    id: string;
+    interviewer: string;
+    unitName: string;
+    average: string;
+    recommendation: string;
+    note: string;
+    relation: string | null;
+  }[];
+  /** One form per booked interview, for someone who may assess. */
+  forms: AssessmentForm[];
+}
+
+export function toAssessmentPanel(input: {
+  booked: readonly string[];
+  assessments: readonly Assessment[];
+  rubric: readonly RubricAspect[];
+  names: ReadonlyMap<string, string>;
+  viewerUid: string;
+  canAssess: boolean;
+}): AssessmentPanel {
+  const { names } = input;
+  const summary = assessmentSummary(input.assessments);
+  return {
+    score: summary.average === null ? null : `${summary.average.toFixed(1)} (${summary.count})`,
+    listLabel:
+      summary.average === null
+        ? null
+        : `Score ${summary.average.toFixed(1)} (${summary.count} ${summary.count === 1 ? "assessor" : "assessors"})`,
+    spread: RECOMMENDATIONS.filter((r) => summary.spread[r] > 0)
+      .map((r) => `${summary.spread[r]} ${RECOMMENDATION_LABELS[r].toLowerCase()}`)
+      .join(" · "),
+    withRelation: summary.withRelation,
+    items: input.assessments.map((a) => ({
+      id: a.id,
+      interviewer: names.get(a.uid) ?? a.uid,
+      unitName: names.get(a.choiceId) ?? a.choiceId,
+      average: (assessmentAverage(a) ?? 0).toFixed(1),
+      recommendation: RECOMMENDATION_LABELS[a.recommendation],
+      note: a.note,
+      relation: a.relation === NO_RELATION ? null : a.relation,
+    })),
+    forms: input.canAssess
+      ? input.booked.map((choiceId) => {
+          const mine = input.assessments.find(
+            (a) => a.choiceId === choiceId && a.uid === input.viewerUid,
+          );
+          const described = new Map(input.rubric.map((r) => [r.key, r]));
+          // an assessment keeps the rubric it was scored with
+          const aspects = mine?.rubric ?? input.rubric;
+          return {
+            choiceId,
+            unitName: names.get(choiceId) ?? choiceId,
+            rubric: aspects.map((a) => ({
+              key: a.key,
+              label: a.label,
+              weight: a.weight,
+              description: described.get(a.key)?.description ?? "",
+              questions: [...(described.get(a.key)?.questions ?? [])],
+            })),
+            mine: mine ?? null,
+          };
+        })
+      : [],
+  };
+}
+
 export interface ApplicationItem {
+  /** Visible assessments of this applicant (step 11.6); null when none were loaded. */
+  assessment: AssessmentPanel | null;
   id: string;
   version: number;
   userId: string;
@@ -94,11 +197,13 @@ export function toApplicationItem(
   personality: Pick<PersonalityScore, "full" | "axes"> | null = null,
   proof: Pick<MemberProfile, "studentProof" | "proofReview"> | null = null,
   unitTypes: ReadonlyMap<string, OrgUnitType> = new Map(),
+  assessment: AssessmentPanel | null = null,
 ): ApplicationItem {
   const unitName = (id: string) => r.units.find((u) => u.orgUnitId === id)?.name ?? id;
   const seatOf = (id: string, seat: AppointmentSeat) =>
     seatLabel(seat, { name: unitName(id), type: unitTypes.get(id) ?? "staf" });
   return {
+    assessment,
     id: a.id,
     version: a.version,
     userId: a.userId,

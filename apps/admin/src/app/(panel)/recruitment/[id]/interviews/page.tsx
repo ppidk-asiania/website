@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import { rubricOf } from "@website/domain/recruitment";
 import { can } from "@website/permissions";
+import { RubricEditor } from "@/components/rubric-editor";
 import { AccessMessage } from "@/components/access-message";
 import { InterviewsPage } from "@/components/interviews-page";
 import { toSlotItems } from "@/components/interviews-model";
@@ -31,10 +33,20 @@ export default async function InterviewsRoute({ params }: { params: Promise<{ id
   ]);
   const review = can(viewer.principal, "recruitment.review");
   return (
-    <InterviewsPage
-      recruitment={{ id: recruitment.id, title: recruitment.title }}
-      slots={toSlotItems(slots, applications, names, () => review)}
-      canEdit={review}
-    />
+    <>
+      <InterviewsPage
+        recruitment={{ id: recruitment.id, title: recruitment.title }}
+        slots={toSlotItems(slots, applications, names, () => review)}
+        canEdit={review}
+      />
+      {can(viewer.principal, "recruitment.edit") ? (
+        <RubricEditor
+          key={recruitment.version}
+          recruitmentId={recruitment.id}
+          version={recruitment.version}
+          aspects={rubricOf(recruitment)}
+        />
+      ) : null}
+    </>
   );
 }

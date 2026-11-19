@@ -4,6 +4,7 @@ import type { Answers, FileAnswer, Question } from "../forms";
 import { TimezoneSchema } from "../members/profile";
 import { APPOINTMENT_SEATS, type AppointmentSeat } from "../organizations";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
+import type { RubricAspect } from "./assessments";
 import {
   bookingOpen,
   DEFAULT_CUTOFF_HOURS,
@@ -97,6 +98,8 @@ export interface Recruitment extends EntityMeta {
   readonly personalityTest: boolean;
   /** Until when "may follow" files can be uploaded; null = no limit of its own. */
   readonly documentDeadline: Date | null;
+  /** Edited by the committee (step 11.6); empty = the default rubric. */
+  readonly interviewRubric: readonly RubricAspect[];
   readonly published: boolean;
 }
 
@@ -489,3 +492,4 @@ export function assertBookable(slot: InterviewSlot | null, now: Date): Interview
 export * from "./personality";
 export * from "./analysis";
 export * from "./interviews";
+export * from "./assessments";

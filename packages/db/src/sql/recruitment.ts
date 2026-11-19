@@ -17,6 +17,12 @@ import {
   takeSeat,
   assertBookable,
   assertBookingChangeable,
+  assessmentId,
+  checkAssessment,
+  interviewKey,
+  rubricOf,
+  type Assessment,
+  type AssessmentInput,
   assertSlotEdit,
   DEFAULT_CUTOFF_HOURS,
   slotNoticeChanged,
@@ -70,6 +76,7 @@ function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
     pactTemplateUrl: (data["pactTemplateUrl"] as string | null | undefined) ?? null,
     personalityTest: (data["personalityTest"] as boolean | undefined) ?? true,
     documentDeadline: toDate(data["documentDeadline"]),
+    interviewRubric: (data["interviewRubric"] as Recruitment["interviewRubric"] | undefined) ?? [],
     published: data["published"] as boolean,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
@@ -93,6 +100,10 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
     pactTemplateUrl: r.pactTemplateUrl,
     personalityTest: r.personalityTest,
     documentDeadline: r.documentDeadline?.toISOString() ?? null,
+    // stored only when the committee changed it, so older audit entries keep their shape
+    ...(r.interviewRubric.length > 0
+      ? { interviewRubric: r.interviewRubric.map((a) => ({ ...a, questions: [...a.questions] })) }
+      : {}),
     published: r.published,
   };
 }
@@ -248,6 +259,26 @@ const bump = (a: Application, now: Date, patch: Partial<Application>): Applicati
   version: a.version + 1,
   updatedAt: now,
 });
+
+const assessmentDoc = ({ id: _id, ...fields }: Assessment) => fields;
+
+function toAssessment(id: string, data: Record<string, unknown>): Assessment {
+  return {
+    id,
+    interviewKey: data["interviewKey"] as string,
+    applicationId: data["applicationId"] as string,
+    recruitmentId: data["recruitmentId"] as string,
+    choiceId: data["choiceId"] as string,
+    uid: data["uid"] as string,
+    rubric: data["rubric"] as Assessment["rubric"],
+    scores: data["scores"] as Assessment["scores"],
+    recommendation: data["recommendation"] as Assessment["recommendation"],
+    note: data["note"] as string,
+    relation: data["relation"] as string,
+    createdAt: toDate(data["createdAt"]) as Date,
+    updatedAt: toDate(data["updatedAt"]) as Date,
+  };
+}
 
 /** One booked interview with the time it is booked on (reminders). */
 export interface InterviewBooking {
@@ -417,6 +448,7 @@ export function createSqlRecruitmentStore(db: Database) {
           pactTemplateUrl: input.pactTemplateUrl,
           personalityTest: input.personalityTest,
           documentDeadline: input.documentDeadline,
+          interviewRubric: current?.interviewRubric ?? [],
           published: current?.published ?? false,
           version: (current?.version ?? 0) + 1,
           createdAt: current?.createdAt ?? now,
@@ -457,9 +489,79 @@ export function createSqlApplicationStore(db: Database) {
   const revisions = db.collection("applicationRevisions");
   const counters = db.collection("seatCounters");
   const slots = db.collection("interviewSlots");
+  const assessments = db.collection("interviewAssessments");
   const auditLog = createSqlAuditWriter(db);
 
   return {
+    async assessments(recruitmentId: string): Promise<Assessment[]> {
+      const found = await assessments
+        .where("recruitmentId", "==", safeId.parse(recruitmentId))
+        .get();
+      return found.docs.map((doc) => toAssessment(doc.id, doc.data()));
+    },
+
+    /**
+     * One assessment per interviewer per interview; the owner updates it. The rubric is copied
+     * at the first save and kept. Saving marks the interview attended.
+     */
+    saveAssessment(
+      input: AssessmentInput,
+      uid: string,
+      audit: (after: Assessment, before: Assessment | null, title: string) => AuditEvent,
+      now: Date,
+    ): Promise<Assessment> {
+      const ref = applications.doc(safeId.parse(input.id));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) throw new RuleViolationError("This application does not exist.");
+        const current = toApplication(snapshot.id, snapshot.data() as Record<string, unknown>);
+        const booking = current.interviews[input.choiceId];
+        if (!booking) throw new RuleViolationError("No interview is booked for this choice.");
+        const key = interviewKey(current.id, input.choiceId);
+        const [recruitment, old] = await Promise.all([
+          tx.get(recruitments.doc(current.recruitmentId)),
+          tx.get(assessments.doc(assessmentId(key, uid))),
+        ]);
+        const before = old.exists
+          ? toAssessment(old.id, old.data() as Record<string, unknown>)
+          : null;
+        const rubric =
+          before?.rubric ??
+          rubricOf(
+            toRecruitment(recruitment.id, recruitment.data() as Record<string, unknown>),
+          ).map(({ key: k, label, weight }) => ({ key: k, label, weight }));
+        checkAssessment(rubric, input);
+        const after: Assessment = {
+          id: assessmentId(key, uid),
+          interviewKey: key,
+          applicationId: current.id,
+          recruitmentId: current.recruitmentId,
+          choiceId: input.choiceId,
+          uid,
+          rubric,
+          scores: input.scores,
+          recommendation: input.recommendation,
+          note: input.note,
+          relation: input.relation,
+          createdAt: before?.createdAt ?? now,
+          updatedAt: now,
+        };
+        const log = await auditLog.begin(tx);
+        tx.set(assessments.doc(after.id), assessmentDoc(after));
+        if (booking.attendance !== "attended") {
+          const next = bump(current, now, {
+            interviews: {
+              ...current.interviews,
+              [input.choiceId]: { ...booking, attendance: "attended" },
+            },
+          });
+          tx.set(ref, applicationDoc(next));
+        }
+        log.append(audit(after, before, (recruitment.get("title") as string | undefined) ?? ""));
+        return after;
+      });
+    },
+
     async listForRecruitment(recruitmentId: string): Promise<Application[]> {
       const snapshot = await applications
         .where("recruitmentId", "==", safeId.parse(recruitmentId))
@@ -512,12 +614,16 @@ export function createSqlApplicationStore(db: Database) {
         const current = toApplication(snapshot.id, snapshot.data() as Record<string, unknown>);
         const booking = current.interviews[choiceId];
         if (!booking) throw new RuleViolationError("No interview is booked for this choice.");
-        const [slot, recruitment] = await Promise.all([
+        const [slot, recruitment, assessed] = await Promise.all([
           tx.get(slots.doc(booking.slotId)),
           tx.get(recruitments.doc(current.recruitmentId)),
+          tx.get(assessments.where("interviewKey", "==", interviewKey(current.id, choiceId))),
         ]);
         if (!by.review && slot.get("interviewerUid") !== by.uid) {
           throw new RuleViolationError("Only the interviewer of this time records it.");
+        }
+        if (mark.attendance === "absent" && assessed.docs.length > 0) {
+          throw new RuleViolationError("This interview was assessed; it cannot be marked absent.");
         }
         if (current.version !== mark.version) {
           throw new ConcurrencyConflictError("applications version changed");

@@ -23,6 +23,12 @@ export async function setRecruitmentPublishedAction(input: unknown) {
   return result;
 }
 
+export async function saveInterviewRubricAction(input: unknown) {
+  const result = await recruitmentActions().saveRubric(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/recruitment", "layout");
+  return result;
+}
+
 export async function removeRecruitmentAction(input: unknown) {
   const result = await recruitmentActions().remove(getPrincipal, getAuditContext)(input);
   if (result.ok) revalidatePath("/recruitment");
@@ -88,6 +94,10 @@ export async function cancelInterviewSlotAction(input: unknown) {
 
 export async function recordAttendanceAction(input: unknown) {
   return queued(await interviewActions().markAttendance(getPrincipal, getAuditContext)(input));
+}
+
+export async function saveAssessmentAction(input: unknown) {
+  return queued(await interviewActions().saveAssessment(getPrincipal, getAuditContext)(input));
 }
 
 export async function removeInterviewSlotAction(input: unknown) {

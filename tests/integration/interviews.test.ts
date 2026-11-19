@@ -5,7 +5,12 @@ import {
   createSqlRecruitmentStore,
   createSqlRecruitmentWebStore,
 } from "@website/db/sql";
-import { interviewScope } from "@website/domain/recruitment";
+import {
+  assessmentSummary,
+  DEFAULT_RUBRIC,
+  interviewScope,
+  visibleAssessments,
+} from "@website/domain/recruitment";
 import type { ActiveSeat } from "@website/domain/organizations";
 import { utcToWallTime } from "@website/domain/shared";
 import { normalizePermissions, type Principal } from "@website/permissions";
@@ -714,5 +719,130 @@ describe("reminders 30 minutes before (cron meeting-reminders)", () => {
     );
     expect(sent.find((m) => m.to === "ari@x.org")!.text).toContain("07:00");
     expect(await remind()).toEqual({ interviewMessages: 0 });
+  });
+});
+
+describe("assessments (11.6): rubric, one per interviewer, visibility, locks", () => {
+  const scoresFor = (...v: number[]) =>
+    Object.fromEntries(DEFAULT_RUBRIC.map((a, i) => [a.key, v[i]!]));
+  const assess = (principal: Principal, patch: Record<string, unknown> = {}) =>
+    interviews().saveAssessment(...as(principal))({
+      id: `${recruitmentId}_ari`,
+      choiceId: "finance",
+      scores: scoresFor(3, 3, 3, 3, 3),
+      recommendation: "recommended",
+      note: "",
+      relation: "no close relation",
+      ...patch,
+    });
+  const mark = (principal: Principal, attendance: "attended" | "absent") =>
+    interviews().markAttendance(...as(principal))({
+      id: `${recruitmentId}_ari`,
+      choiceId: "finance",
+      attendance,
+      note: "",
+      version: applicationOf("ari")?.["version"] as number,
+    });
+  const reads = () =>
+    createInterviewReads({
+      applications: createSqlApplicationStore(db()),
+      interviews: createSqlInterviewStore(db()),
+      scope: scopeOf,
+    });
+  const stored = () =>
+    [...fake.docs.keys()].filter((k) => k.startsWith("interviewAssessments/")).length;
+  const listed = (uid: string, review: boolean) =>
+    createSqlApplicationStore(db())
+      .assessments(recruitmentId)
+      .then((all) => visibleAssessments(all, uid, review));
+
+  beforeEach(async () => {
+    await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
+    await inInterview("ari");
+    await book("ari", "finance", (await slots())[0]!.id);
+  });
+
+  it("two interviewers assess one applicant: 3.2 (2), and saving marks the interview attended", async () => {
+    expect(await assess(holder("head-fin"))).toMatchObject({ ok: true });
+    expect(
+      await assess(holder("head-dir"), { scores: scoresFor(4, 3, 3, 3, 4), note: "very strong" }),
+    ).toMatchObject({ ok: true });
+    const booking = (applicationOf("ari")?.["interviews"] as Record<string, unknown>)["finance"];
+    expect(booking).toMatchObject({ attendance: "attended" });
+    expect(assessmentSummary(await listed("head-fin", false))).toMatchObject({
+      average: 3.2,
+      count: 2,
+    });
+  });
+
+  it("is one per interviewer per interview; the owner updates it", async () => {
+    await assess(holder("head-fin"));
+    await assess(holder("head-fin"), { scores: scoresFor(2, 2, 2, 2, 2) });
+    expect(stored()).toBe(1);
+    expect(assessmentSummary(await listed("head-fin", false))).toMatchObject({
+      average: 2,
+      count: 1,
+    });
+  });
+
+  it("refuses a missing note, a stranger, a booking that does not exist, and a missing grant", async () => {
+    expect(await assess(holder("head-fin"), { recommendation: "not_recommended" })).toMatchObject({
+      error: "refused",
+    });
+    expect(await assess(holder("member-fin"))).toMatchObject({ error: "forbidden" });
+    expect(await assess(holder("head-fin"), { choiceId: "media" })).toMatchObject({
+      error: "refused",
+    });
+    expect(await assess(staff(["recruitment.offer"], "offer-1"))).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+    expect(stored()).toBe(0);
+  });
+
+  it("shows another interviewer's assessment only after you sent yours; the committee sees all", async () => {
+    await assess(holder("head-fin"));
+    expect(await listed("head-dir", false)).toEqual([]);
+    expect(await listed("committee-1", true)).toHaveLength(1);
+    await assess(holder("head-dir"));
+    expect(await listed("head-dir", false)).toHaveLength(2);
+  });
+
+  it("an assessed interview cannot be marked absent; a cancelled booking cannot be assessed", async () => {
+    await assess(holder("head-fin"));
+    expect(await mark(reviewer, "absent")).toMatchObject({ error: "refused" });
+    expect(await mark(reviewer, "attended")).toMatchObject({ ok: true });
+    const bookings = applicationOf("ari")?.["interviews"] as Record<string, { slotId: string }>;
+    await interviews().cancelSlot(...as(holder("head-fin")))({ id: bookings["finance"]!.slotId });
+    expect(await assess(holder("head-fin"))).toMatchObject({ error: "refused" });
+  });
+
+  it("keeps the rubric it was scored with when the committee changes the rubric", async () => {
+    await assess(holder("head-fin"));
+    const actions = createRecruitmentActions({
+      recruitments: createSqlRecruitmentStore(db()),
+      now: () => clock,
+    });
+    const [first] = DEFAULT_RUBRIC;
+    const versionOf = () => fake.docs.get(`recruitments/${recruitmentId}`)?.["version"] as number;
+    expect(
+      await actions.saveRubric(...as(staff(["recruitment.edit"])))({
+        id: recruitmentId,
+        version: versionOf(),
+        rubric: [{ ...first!, weight: 5 }],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(fake.docs.get(`recruitments/${recruitmentId}`)?.["interviewRubric"]).toHaveLength(1);
+    const [kept] = await listed("committee-1", true);
+    expect(kept!.rubric).toHaveLength(5);
+    await assess(holder("head-dir"), { scores: { [first!.key]: 4 }, note: "n" });
+    const all = await listed("committee-1", true);
+    expect(all.find((a) => a.uid === "head-dir")!.rubric).toHaveLength(1);
+    await actions.saveRubric(...as(staff(["recruitment.edit"])))({
+      id: recruitmentId,
+      version: versionOf(),
+      rubric: DEFAULT_RUBRIC,
+    });
+    expect(fake.docs.get(`recruitments/${recruitmentId}`)?.["interviewRubric"]).toBeUndefined();
   });
 });

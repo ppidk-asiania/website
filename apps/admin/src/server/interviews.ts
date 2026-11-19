@@ -4,7 +4,9 @@ import type { InterviewBooking, SqlApplicationStore, SqlInterviewStore } from "@
 import { messageTo, type Contact, type Messenger } from "@website/domain/messaging";
 import {
   applicantInScope,
+  AssessmentInputSchema,
   AttendanceSchema,
+  visibleAssessments,
   hasInterviewScope,
   passedReview,
   SlotChangeSchema,
@@ -184,9 +186,9 @@ export function createInterviewReminders(
 export interface InterviewDeps {
   readonly interviews: Pick<
     SqlInterviewStore,
-    "createPlan" | "remove" | "get" | "update" | "cancel"
+    "createPlan" | "remove" | "get" | "update" | "cancel" | "listForRecruitment"
   >;
-  readonly applications: Pick<SqlApplicationStore, "markAttendance">;
+  readonly applications: Pick<SqlApplicationStore, "markAttendance" | "get" | "saveAssessment">;
   readonly scope: (uid: string) => Promise<InterviewScope>;
   readonly notices: Pick<InterviewNotices, "slotChanged" | "slotCancelled">;
   readonly now: () => Date;
@@ -388,11 +390,63 @@ export function createInterviewActions(deps: InterviewDeps) {
     },
   });
 
-  return { createPlan, createMine, removeSlot, updateSlot, cancelSlot, markAttendance };
+  /** One assessment per interviewer per interview (step 11.6): the committee, or an interviewer with the applicant in scope. */
+  const saveAssessment = createGuardedAction({
+    permission: "recruitment.review",
+    orIf,
+    inSomeScope: true,
+    input: AssessmentInputSchema,
+    handler: async (input, principal, audit) => {
+      const [application, scope] = await Promise.all([
+        deps.applications.get(input.id),
+        deps.scope(principal.userId),
+      ]);
+      if (!application) throw new RuleViolationError("This application does not exist.");
+      const slots = new Map(
+        (await deps.interviews.listForRecruitment(application.recruitmentId)).map((s) => [s.id, s]),
+      );
+      if (
+        !passedReview(application.status) ||
+        !applicantInScope(scope, principal.userId, application, slots)
+      ) {
+        throw new RuleViolationError("This applicant is not in your scope.");
+      }
+      const saved = await deps.applications.saveAssessment(
+        input,
+        principal.userId,
+        (after, before, title) =>
+          audit({
+            module: "recruitment",
+            action: before ? "UPDATE" : "CREATE",
+            resourceType: "interviewAssessment",
+            resourceId: after.id,
+            title: `${title}: interview assessment`,
+            // scores and recommendation only: the note and relation can name people
+            before: before && { scores: before.scores, recommendation: before.recommendation },
+            after: { scores: after.scores, recommendation: after.recommendation },
+            versionBefore: null,
+            versionAfter: null,
+            revertible: false,
+          }),
+        deps.now(),
+      );
+      return { id: saved.id };
+    },
+  });
+
+  return {
+    createPlan,
+    createMine,
+    removeSlot,
+    updateSlot,
+    cancelSlot,
+    markAttendance,
+    saveAssessment,
+  };
 }
 
 export interface InterviewReadDeps {
-  readonly applications: Pick<SqlApplicationStore, "listForRecruitment" | "get">;
+  readonly applications: Pick<SqlApplicationStore, "listForRecruitment" | "get" | "assessments">;
   readonly interviews: Pick<SqlInterviewStore, "listForRecruitment">;
   readonly scope: (uid: string) => Promise<InterviewScope>;
 }
@@ -411,6 +465,11 @@ export function createInterviewReads(deps: InterviewReadDeps) {
   };
 
   return {
+    /** What the viewer may read: the committee all, an interviewer others only after their own. */
+    async assessments(uid: string, recruitmentId: string, review: boolean) {
+      return visibleAssessments(await deps.applications.assessments(recruitmentId), uid, review);
+    },
+
     async applicants(uid: string, recruitmentId: string): Promise<Application[]> {
       return inScope(uid, recruitmentId, await deps.applications.listForRecruitment(recruitmentId));
     },

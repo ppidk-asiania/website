@@ -18,6 +18,7 @@ import {
 } from "@/app/(panel)/recruitment/actions";
 import { actionMessage } from "@/components/action-message";
 import { ApplicationAiPanel } from "@/components/application-ai-panel";
+import { AssessmentSection } from "@/components/assessment-section";
 import { downloadCsv } from "@/components/csv";
 import { applicantsCsv } from "@/components/exports-model";
 import { formatInZone } from "@/components/format";
@@ -224,10 +225,15 @@ export function ApplicationsPage(props: {
       header: "Status",
       width: "16%",
       render: (a) => (
-        <span className="admin-status-badge">
-          {a.statusLabel}
-          {a.offer?.expired && a.status === "offered" ? " (expired)" : ""}
-        </span>
+        <div>
+          <span className="admin-status-badge">
+            {a.statusLabel}
+            {a.offer?.expired && a.status === "offered" ? " (expired)" : ""}
+          </span>
+          {a.assessment?.score ? (
+            <div className="admin-table__sub">{a.assessment.listLabel}</div>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -420,6 +426,13 @@ export function ApplicationsPage(props: {
               </>
             ) : null}
           </dl>
+          {current.assessment ? (
+            <AssessmentSection
+              key={current.id}
+              applicationId={current.id}
+              panel={current.assessment}
+            />
+          ) : null}
           {ai ? (
             <ApplicationAiPanel
               key={current.id}

@@ -121,6 +121,37 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   - _Attendance_ — the committee button "Record result" is now "Record attendance": attended or
     absent with a note (`markAttendance`, `recruitment.review` or the interviewer of that very
     time). Selection buttons (pass, offer, ratify) keep their own permissions.
+  - _Rubric and assessments_ (step 11.6, closes M9; domain `recruitment/assessments.ts`):
+    - Default rubric `DEFAULT_RUBRIC`: five aspects (motivation and values; time commitment;
+      skills for the unit; teamwork and communication; initiative and responsibility), each with a
+      description, two guide questions and weight 1. Scale 1-4, no middle (1 not seen, 2 weak / no
+      example, 3 clear with a real example, 4 outstanding). The committee (`recruitment.edit`)
+      edits aspects, descriptions, questions and weights 1-5 under `/recruitment/{id}/interviews`
+      (`saveRubric`); `recruitments.interviewRubric` is stored empty while it equals the default
+      (`storableRubric`, `rubricOf`).
+    - `interviewAssessments/{applicationId}_{unitId}_{uid}` — one per interviewer per interview
+      (the interview key is `{applicationId}_{unitId}`), the owner may update it. It holds the
+      scores, a frozen copy of the rubric (key, label, weight) taken at the FIRST save (a later
+      rubric change never alters it), the recommendation (strongly recommended / recommended /
+      unsure / not recommended — chosen, never computed), a note and a relation statement
+      ("no close relation" or a described one).
+    - Rules (`checkAssessment`, `saveAssessment`): every aspect scored; a note is required when any
+      score is 1 or 4 or the recommendation is "not recommended"; the interview must be booked (a
+      cancelled booking cannot be assessed); the applicant must be in the interviewer's scope
+      (`interviewScopeOf`, `recruitment.review` = all). Saving marks the interview attended, and an
+      assessed interview cannot be marked absent (the lock 11.5 left open).
+    - Visibility (`visibleAssessments`): another interviewer's assessment of an interview is
+      visible only after you sent yours; `recruitment.review` sees all. The application page
+      (`/recruitment/{id}/applications`) lists the visible assessments with a mark on those that
+      declared a relation and the spread of recommendations; the applicants list shows "Score 3.2
+      (2 assessors)" under the status.
+    - Weighted average: `weightedAverage(items)` is the pure helper (sum of score x weight / sum
+      of weights; step 9.3 reuses it); `assessmentSummary` averages each assessment's weighted
+      average (one decimal) and counts them, e.g. "3.2 (2)". All assessments of an application
+      count, across its interviews.
+    - Tests: `tests/unit/recruitment-assessments.test.ts`, `tests/integration/interviews.test.ts`.
+    - Not built: the PPIDK import of `interview_rubric` and `interview_assessments`, the recap
+      block (11.7) and the group keyword (11.8).
   - _Notices_ — see `apps/admin/docs/messaging.md` (booked, cancelled, changed) and
     `apps/admin/docs/cron.md` (30 minutes before, inside `meeting-reminders`). The day-before
     reminder of `deadline-reminders` stays.

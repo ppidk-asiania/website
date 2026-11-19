@@ -24,6 +24,7 @@ export const COLLECTIONS = [
   "gallerySlugs",
   "incomingCounters",
   "incomingLetters",
+  "interviewAssessments",
   "interviewSlots",
   "invites",
   "letterCounters",
