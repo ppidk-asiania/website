@@ -4,6 +4,7 @@ import {
   deskLabel,
   letterArchivePath,
   letterCanonical,
+  LetterInputSchema,
   letterUploadPath,
   normalizeVerificationCode,
   scanPath,
@@ -349,6 +350,12 @@ export function mapPpidkDocuments(
             }
           : null,
       activityCode: l["kode_kegiatan"] ? l["kode_kegiatan"].trim().toUpperCase() : null,
+      topDeskOnly: l["hanya_sekjen"] === "1",
+      initialsBox: l["kotak_paraf"] === "1",
+      draftUrl:
+        source === "upload"
+          ? (LetterInputSchema.shape.draftUrl.safeParse(l["tautan_draf"] || null).data ?? null)
+          : null,
       sheetNumberTemplate: null as string | null,
       ...meta(l),
     };

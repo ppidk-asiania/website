@@ -138,7 +138,9 @@ export function createSqlLetterSettingsStore(db: Database) {
   const audit = createSqlAuditWriter(db);
   const read = (data: Record<string, unknown> | undefined) => {
     if (!data) return { letterhead: DEFAULT_LETTERHEAD, version: null };
+    // `initialsBox` moved from the letterhead to the letter (14.1); old documents still carry it.
     const { version, ...letterhead } = data;
+    delete letterhead["initialsBox"];
     return { letterhead: letterhead as Letterhead, version: version as number };
   };
   return {
@@ -226,6 +228,9 @@ export function toLetter(id: string, data: Record<string, unknown>): Letter {
     upload: uploaded(data["upload"]),
     placement: (data["placement"] as UploadPlacement | null | undefined) ?? null,
     activityCode: (data["activityCode"] as string | null | undefined) ?? null,
+    topDeskOnly: (data["topDeskOnly"] as boolean | undefined) ?? false,
+    initialsBox: (data["initialsBox"] as boolean | undefined) ?? false,
+    draftUrl: (data["draftUrl"] as string | null | undefined) ?? null,
     sheetNumberTemplate: (data["sheetNumberTemplate"] as string | null | undefined) ?? null,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
@@ -245,6 +250,9 @@ export function letterSnapshot(l: LetterFields): Snapshot {
     attachmentNote: l.attachmentNote,
     letterDate: l.letterDate,
     activityCode: l.activityCode,
+    topDeskOnly: l.topDeskOnly,
+    initialsBox: l.initialsBox,
+    draftUrl: l.draftUrl,
     status: l.status,
     reviewNote: l.reviewNote,
     secretary: l.secretary?.uid ?? null,
@@ -288,6 +296,9 @@ const stored = (l: LetterFields) => ({
   upload: l.upload,
   placement: l.placement,
   activityCode: l.activityCode,
+  topDeskOnly: l.topDeskOnly,
+  initialsBox: l.initialsBox,
+  draftUrl: l.draftUrl,
   sheetNumberTemplate: l.sheetNumberTemplate,
 });
 
@@ -384,7 +395,7 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
           }
           const unit = await readUnit(tx, input.orgUnitId, periodId);
           return {
-            ...normalizeLetterInput(input, type),
+            ...normalizeLetterInput(input, type, source),
             periodId,
             orgUnitPath: orgUnitPath(unit),
             status: "draft",
@@ -434,7 +445,7 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
           const unit = await readUnit(tx, input.orgUnitId, letter.periodId);
           return {
             ...letter,
-            ...normalizeLetterInput(input, type),
+            ...normalizeLetterInput(input, type, letter.source),
             orgUnitPath: orgUnitPath(unit),
           };
         },

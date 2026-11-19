@@ -150,6 +150,7 @@ const tables: PpidkDocumentTables = {
       ...issued,
       id: "103",
       status: "terkoreksi",
+      tautan_draf: "https://docs.google.com/document/d/typed/edit",
       org_unit_id: "41",
       signed_by_user_id: "",
       approved_at: "",
@@ -183,6 +184,9 @@ const tables: PpidkDocumentTables = {
       pdf_path: "surat/3/105.pdf",
       berkas_sha256: "b".repeat(64),
       berkas_diunggah_pada: "2026-08-05 00:00:00",
+      hanya_sekjen: "1",
+      kotak_paraf: "1",
+      tautan_draf: "https://docs.google.com/document/d/abc/edit",
       meta: JSON.stringify({ unggahan: { nomor_diperiksa: true } }),
       penempatan_ttd: JSON.stringify({ halaman: 2, x_mm: 120, y_mm: 240, lebar_mm: 40 }),
     },
@@ -421,6 +425,14 @@ describe("PPIDK documents import (step 4.10)", () => {
         uploadedAt: new Date("2026-08-05T00:00:00Z"),
       },
       placement: { qr: null, secretary: { page: 2, xMm: 120, yMm: 240 }, coordinator: null },
+      topDeskOnly: true,
+      initialsBox: true,
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+    });
+    expect(doc("letters/ppidk-letter-103")).toMatchObject({
+      topDeskOnly: false,
+      initialsBox: false,
+      draftUrl: null,
     });
     expect(doc("letters/ppidk-letter-106")).toMatchObject({ archive: null, orgUnitPath: [] });
     expect(doc("letters/ppidk-letter-107")).toBeUndefined();

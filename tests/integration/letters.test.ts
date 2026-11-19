@@ -46,6 +46,8 @@ const secretariat = staff("sekre", [
 ]);
 const sekjen = staff("sekjen", ["letters.sign", "letters.read"]);
 const koordinator = staff("koor", ["letters.sign_coordinator", "letters.sign"]);
+const topDesk = staff("top", ["letters.edit", "letters.sign_coordinator"]);
+const stamper = staff("stamper", ["letter_types.edit", "letters.stamp"]);
 const director = staff("dir", ["letters.edit"], { type: "orgUnit", orgUnitId: "media" });
 
 let fake: ReturnType<typeof fakeDb>;
@@ -645,7 +647,7 @@ describe("letters workflow", () => {
   it("the letterhead is versioned, audited and frozen on letters issued after it", async () => {
     const settings = createSqlLetterSettingsStore(db());
     expect(await settings.get()).toEqual({ letterhead: DEFAULT_LETTERHEAD, version: null });
-    const letterhead = { ...DEFAULT_LETTERHEAD, address: "Tokyo, Japan", initialsBox: true };
+    const letterhead = { ...DEFAULT_LETTERHEAD, address: "Tokyo, Japan" };
     const saved = await actions().saveLetterhead(...as(secretariat))({ letterhead, version: null });
     expect(saved).toMatchObject({ ok: true, data: { version: 1 } });
     expect(await settings.get()).toEqual({ letterhead, version: 1 });
@@ -668,6 +670,182 @@ describe("letters workflow", () => {
     const archive = { path: `letters/p1/${id}_aaaa.pdf`, sha256: "a".repeat(64), size: 10 };
     expect(await letters().setArchive(id, archive)).toEqual(archive);
     expect(await letters().setArchive(id, { ...archive, path: "other" })).toEqual(archive);
+  });
+});
+
+describe("letter options (14.1)", () => {
+  const link = "https://docs.google.com/document/d/abc/edit";
+  const asTopDeskDraft = async (typeId?: string) => {
+    typeId ??= await createType();
+    const created = await actions().save(...as(topDesk))({
+      ...draft,
+      typeId,
+      topDeskOnly: true,
+      initialsBox: true,
+      version: null,
+    });
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    return { typeId, ...created.data };
+  };
+
+  it("only top-desk holders create, edit, submit or delete a top-desk letter", async () => {
+    const typeId = await createType();
+    const refused = {
+      ok: false,
+      error: "refused",
+      issues: ["Only the top desk handles this letter."],
+    };
+    expect(
+      await actions().save(...as(secretariat))({
+        ...draft,
+        typeId,
+        topDeskOnly: true,
+        version: null,
+      }),
+    ).toMatchObject(refused);
+    const { id, version } = await asTopDeskDraft(typeId);
+    expect(await letters().get(id)).toMatchObject({ topDeskOnly: true, initialsBox: true });
+    expect(
+      await actions().save(...as(secretariat))({
+        ...draft,
+        typeId,
+        topDeskOnly: false,
+        id,
+        version,
+      }),
+    ).toMatchObject(refused);
+    expect(await actions().submit(...as(secretariat))({ id, version })).toMatchObject(refused);
+    expect(await actions().remove(...as(secretariat))({ id, version })).toMatchObject(refused);
+    expect(await actions().remove(...as(secretariat))({ id: "missing", version: 1 })).toMatchObject(
+      {
+        ok: false,
+        error: "refused",
+      },
+    );
+    const ordinary = await actions().save(...as(secretariat))({ ...draft, typeId, version: null });
+    expect(
+      ordinary.ok &&
+        (await actions().save(...as(secretariat))({
+          ...draft,
+          typeId,
+          topDeskOnly: true,
+          id: ordinary.data.id,
+          version: ordinary.data.version,
+        })),
+    ).toMatchObject(refused);
+    expect(
+      await actions().save(...as(topDesk))({ ...draft, typeId, subject: "SK", id, version }),
+    ).toMatchObject({ ok: true, data: { version: version + 1 } });
+  });
+
+  it("submit goes straight to the top desk; it signs alone; issue numbers it like any letter", async () => {
+    const { id, version } = await asTopDeskDraft();
+    const submitted = await actions().submit(...as(topDesk))({ id, version });
+    expect(submitted).toMatchObject({ ok: true, data: { status: "corrected" } });
+    expect(steps.at(-1)).toBe("corrected");
+    const v = submitted.ok ? submitted.data.version : 0;
+    expect(await actions().signSecretary(...as(sekjen))({ id, version: v })).toMatchObject({
+      ok: false,
+      issues: ["This letter is signed by the top desk alone."],
+    });
+    const signed = await actions().signCoordinator(...as(koordinator))({ id, version: v });
+    expect(signed).toMatchObject({ ok: true, data: { status: "approved" } });
+    const issued = await actions().issue(...as(secretariat))({
+      id,
+      version: signed.ok ? signed.data.version : 0,
+    });
+    expect(issued).toMatchObject({ ok: true, data: { status: "issued" } });
+    const stored = (await letters().get(id)) as Letter;
+    expect(stored).toMatchObject({
+      number: 1,
+      signers: [{ desk: "Sekretaris Jenderal PPIDK Asia-Oseania" }],
+    });
+    expect(stored.verificationCode).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    expect(stored.contentDigest).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("the draft link is kept on own-PDF letters only and every option is audited", async () => {
+    const typeId = await createType();
+    const own = await actions().save(...as(secretariat))({
+      ...draft,
+      typeId,
+      body: "",
+      source: "upload",
+      draftUrl: link,
+      initialsBox: true,
+      version: null,
+    });
+    const typed = await actions().save(...as(secretariat))({
+      ...draft,
+      typeId,
+      draftUrl: link,
+      version: null,
+    });
+    expect(own.ok && (await letters().get(own.data.id))).toMatchObject({
+      draftUrl: link,
+      initialsBox: true,
+      topDeskOnly: false,
+    });
+    expect(typed.ok && (await letters().get(typed.data.id))).toMatchObject({ draftUrl: null });
+    expect(
+      await actions().save(...as(secretariat))({
+        ...draft,
+        typeId,
+        draftUrl: "http://x.test",
+        version: null,
+      }),
+    ).toMatchObject({ error: "invalid_input" });
+    const log = [...fake.docs.entries()].filter(([key]) => key.startsWith("auditLogs/"));
+    expect(JSON.stringify(log)).toContain("initialsBox");
+  });
+
+  it("only holders of the stamp extra upload, replace or remove the stamp; it is frozen at issue", async () => {
+    const stamp = {
+      path: "letters/letterhead/stamp.webp",
+      url: "https://x.test/stamp.webp",
+      width: 200,
+      height: 200,
+    };
+    const base = { ...DEFAULT_LETTERHEAD, address: "Tokyo" };
+    expect(
+      await actions().saveLetterhead(...as(secretariat))({
+        letterhead: { ...base, stamp },
+        version: null,
+      }),
+    ).toMatchObject({ ok: false, error: "refused" });
+    expect(
+      await actions().saveLetterhead(...as(secretariat))({ letterhead: base, version: null }),
+    ).toMatchObject({ ok: true, data: { version: 1 } });
+    expect(
+      await actions().saveLetterhead(...as(stamper))({
+        letterhead: { ...base, stamp },
+        version: 1,
+      }),
+    ).toMatchObject({ ok: true, data: { version: 2 } });
+    expect(
+      await actions().saveLetterhead(...as(secretariat))({
+        letterhead: { ...base, stamp, address: "Osaka" },
+        version: 2,
+      }),
+    ).toMatchObject({ ok: true, data: { version: 3 } });
+    expect(
+      await actions().saveLetterhead(...as(secretariat))({
+        letterhead: { ...base, address: "Osaka" },
+        version: 3,
+      }),
+    ).toMatchObject({ ok: false, error: "refused" });
+    const { id, version } = await approvedLetter();
+    await actions().issue(...as(secretariat))({ id, version });
+    expect((await letters().get(id))?.letterhead?.stamp).toEqual(stamp);
+  });
+
+  it("a letterhead saved before the initials box moved to the letter still loads and saves", async () => {
+    fake.docs.set("settings/letters", { ...DEFAULT_LETTERHEAD, initialsBox: true, version: 1 });
+    const { letterhead, version } = await createSqlLetterSettingsStore(db()).get();
+    expect(letterhead).not.toHaveProperty("initialsBox");
+    expect(
+      await actions().saveLetterhead(...as(secretariat))({ letterhead, version }),
+    ).toMatchObject({ ok: true, data: { version: 2 } });
   });
 });
 

@@ -77,6 +77,9 @@ interface Draft {
   place: string;
   attachmentNote: string;
   letterDate: string;
+  topDeskOnly: boolean;
+  initialsBox: boolean;
+  draftUrl: string;
   bodies: RichTextBlock[];
 }
 
@@ -190,6 +193,9 @@ function LettersList(props: Props) {
       place: letter?.place ?? "",
       attachmentNote: letter?.attachmentNote ?? "",
       letterDate: letter?.letterDate ?? today(),
+      topDeskOnly: letter?.topDeskOnly ?? false,
+      initialsBox: letter?.initialsBox ?? false,
+      draftUrl: letter?.draftUrl ?? "",
       bodies: splitBlocks(letter?.body ?? ""),
     });
     setView("form");
@@ -215,6 +221,9 @@ function LettersList(props: Props) {
       attachmentNote: draft.attachmentNote,
       letterDate: draft.letterDate || null,
       activityCode: draft.activityCode.trim() || null,
+      topDeskOnly: draft.topDeskOnly,
+      initialsBox: draft.initialsBox,
+      draftUrl: draft.draftUrl.trim() || null,
     });
     setBusy(false);
     if (!result.ok) {
@@ -497,6 +506,45 @@ function LettersList(props: Props) {
               />
               {errorFor("activityCode", "Goes into the number when the type uses {kode_kegiatan}.")}
             </div>
+            {draft.source === "upload" ? (
+              <div className="admin-field admin-form-grid__full">
+                <label className="admin-field__label" htmlFor="letter-draft-url">
+                  Draft link
+                </label>
+                <input
+                  id="letter-draft-url"
+                  className="admin-input"
+                  type="url"
+                  maxLength={1000}
+                  placeholder="https://docs.google.com/..."
+                  value={draft.draftUrl}
+                  onChange={(e) => setDraft({ ...draft, draftUrl: e.target.value })}
+                />
+                {errorFor("draftUrl", "Shown to the desks, never on the verification page.")}
+              </div>
+            ) : null}
+            <div className="admin-field admin-form-grid__full">
+              <label className="admin-check-label">
+                <input
+                  type="checkbox"
+                  checked={draft.initialsBox}
+                  onChange={(e) => setDraft({ ...draft, initialsBox: e.target.checked })}
+                />
+                &ldquo;Paraf&rdquo; box on every page (letters of several pages)
+              </label>
+              {desks.signCoordinator || draft.topDeskOnly ? (
+                <label className="admin-check-label">
+                  <input
+                    type="checkbox"
+                    checked={draft.topDeskOnly}
+                    disabled={!desks.signCoordinator}
+                    onChange={(e) => setDraft({ ...draft, topDeskOnly: e.target.checked })}
+                  />
+                  Handled by the {deskTitles.coordinator} alone (no correction, only that desk signs
+                  and edits)
+                </label>
+              ) : null}
+            </div>
             {draft.source === "upload" ? null : (
               <div className="admin-field admin-form-grid__full">
                 <span className="admin-field__label">
@@ -574,13 +622,27 @@ function LettersList(props: Props) {
             </dd>
             <dt>Written by</dt>
             <dd>{current.authorName}</dd>
-            <dt>{deskTitles.signer}</dt>
-            <dd>
-              {current.secretary
-                ? `${current.secretary.name}, ${formatInZone(current.secretary.at, zone)}`
-                : "Not signed"}
-            </dd>
-            {current.requiresCoordinator ? (
+            {current.topDeskOnly ? null : (
+              <>
+                <dt>{deskTitles.signer}</dt>
+                <dd>
+                  {current.secretary
+                    ? `${current.secretary.name}, ${formatInZone(current.secretary.at, zone)}`
+                    : "Not signed"}
+                </dd>
+              </>
+            )}
+            {current.draftUrl ? (
+              <>
+                <dt>Draft</dt>
+                <dd>
+                  <a href={current.draftUrl} target="_blank" rel="noopener noreferrer">
+                    {current.draftUrl}
+                  </a>
+                </dd>
+              </>
+            ) : null}
+            {current.requiresCoordinator || current.topDeskOnly ? (
               <>
                 <dt>{deskTitles.coordinator}</dt>
                 <dd>

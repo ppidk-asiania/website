@@ -73,7 +73,9 @@ async function outgoingSection(principal: Principal, sectionTabs: ReactNode) {
           typeById.get(l.typeId),
           unitName.get(l.orgUnitId) ?? "",
           names,
-          can(principal, "letters.edit", { orgUnitPath: l.orgUnitPath }),
+          can(principal, "letters.edit", { orgUnitPath: l.orgUnitPath }) &&
+            (!l.topDeskOnly ||
+              can(principal, "letters.sign_coordinator", { orgUnitPath: l.orgUnitPath })),
         ),
       )}
       types={types
@@ -174,6 +176,7 @@ async function typesSection(principal: Principal, sectionTabs: ReactNode) {
       letterhead={settings.letterhead}
       letterheadVersion={settings.version}
       canEdit={canInSomeScope(principal, "letter_types.edit")}
+      canStamp={canInSomeScope(principal, "letters.stamp")}
       sectionTabs={sectionTabs}
     />
   );

@@ -122,17 +122,25 @@ export function createNotices(deps: NoticeDeps) {
     safely("letter", saved.id, async () => {
       const link = `${deps.adminUrl}/letters`;
       const key = (uid: string) => `letter:${saved.id}:${saved.status}:${saved.version}:${uid}`;
-      const desk = async (permission: PagePermission, id: string, en: string) =>
+      const desk = async (permission: PagePermission, id: string, en: string, extra = "") =>
         tell(
           await deps.contacts.holders(permission, { orgUnitPath: saved.orgUnitPath }),
-          { subject: `Surat / Letter: ${saved.subject}`, text: `${both(id, en)}\n\n${link}` },
+          {
+            subject: `Surat / Letter: ${saved.subject}`,
+            text: `${both(id, en)}${extra}\n\n${link}`,
+          },
           key,
         );
       if (saved.status === "review") {
-        await desk("letters.review", "Surat menunggu koreksi.", "A letter waits for review.");
+        await desk(
+          "letters.review",
+          "Surat menunggu koreksi.",
+          "A letter waits for review.",
+          saved.draftUrl ? `\n\n${saved.draftUrl}` : "",
+        );
       } else if (saved.status === "corrected" && !saved.secretary && !saved.coordinator) {
         const type = await deps.letterType(saved.typeId);
-        for (const d of desksOf(type ?? { requiresCoordinator: false })) {
+        for (const d of desksOf(type ?? { requiresCoordinator: false }, saved)) {
           await desk(
             d === "secretary" ? "letters.sign" : "letters.sign_coordinator",
             "Surat menunggu tanda tangan.",

@@ -50,6 +50,16 @@ describe("names on the public page", () => {
 });
 
 describe("what the verification page shows", () => {
+  it("never carries the draft link", () => {
+    const draftUrl = "https://docs.google.com/document/d/abc/edit";
+    const view = letterVerification({
+      ...input,
+      contentPublic: true,
+      letter: { ...letter, draftUrl },
+    });
+    expect(JSON.stringify(view)).not.toContain(draftUrl);
+  });
+
   it("gated types open only with the exact recipient", () => {
     const closed = letterVerification(input);
     expect(closed).toMatchObject({

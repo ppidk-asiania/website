@@ -68,6 +68,7 @@ function example(draft: Draft): string {
 }
 
 interface Props {
+  canStamp: boolean;
   initial: LetterTypeItem[];
   letterhead: Letterhead;
   letterheadVersion: number | null;
@@ -80,21 +81,24 @@ export function LetterTypesPage(props: Props) {
   return <LetterTypesList key={pathname} {...props} />;
 }
 
-const ART: Array<{ key: "header" | "footer" | "watermark" | "emblem"; label: string }> = [
+const ART: Array<{ key: "header" | "footer" | "watermark" | "emblem" | "stamp"; label: string }> = [
   { key: "header", label: "Letterhead image (full width)" },
   { key: "footer", label: "Footer image (full width)" },
   { key: "watermark", label: "Watermark (full page)" },
   { key: "emblem", label: "Emblem (text letterhead)" },
+  { key: "stamp", label: "Organisation stamp (own-PDF letters)" },
 ];
 
 function LetterheadForm({
   initial,
   version,
+  canStamp,
   onDone,
   show,
 }: {
   initial: Letterhead;
   version: number | null;
+  canStamp: boolean;
   onDone: () => void;
   show: (text: string) => void;
 }) {
@@ -174,7 +178,7 @@ function LetterheadForm({
             hint="The text letterhead is used while there is no letterhead image."
           />
         </div>
-        {ART.map(({ key, label }) => (
+        {ART.filter(({ key }) => key !== "stamp" || canStamp).map(({ key, label }) => (
           <div key={key} className="admin-field">
             <span className="admin-field__label">{label}</span>
             <PhotoDrop
@@ -199,16 +203,6 @@ function LetterheadForm({
             value={draft.watermarkOpacity}
             onChange={(e) => setDraft({ ...draft, watermarkOpacity: Number(e.target.value) })}
           />
-        </div>
-        <div className="admin-field">
-          <label className="admin-check-label">
-            <input
-              type="checkbox"
-              checked={draft.initialsBox}
-              onChange={(e) => setDraft({ ...draft, initialsBox: e.target.checked })}
-            />
-            &ldquo;Paraf&rdquo; box above the footer
-          </label>
         </div>
       </div>
       <div className="admin-form-actions admin-form-grid__full">
@@ -237,6 +231,7 @@ function LetterTypesList({
   letterhead,
   letterheadVersion,
   canEdit,
+  canStamp,
   sectionTabs,
 }: Props) {
   const [editingLetterhead, setEditingLetterhead] = useState(false);
@@ -379,6 +374,7 @@ function LetterTypesList({
         <LetterheadForm
           initial={letterhead}
           version={letterheadVersion}
+          canStamp={canStamp}
           onDone={() => setEditingLetterhead(false)}
           show={toast.show}
         />

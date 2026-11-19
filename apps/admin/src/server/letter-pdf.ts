@@ -65,9 +65,8 @@ export function letterDesks(
   context: LetterContext,
   signatures: ReadonlyMap<string, PrintedSignature> = new Map(),
 ): LetterDesk[] {
-  const order = desksOf(context.type).includes("coordinator")
-    ? (["coordinator", "secretary"] as const)
-    : (["secretary"] as const);
+  const desks = desksOf(context.type, letter);
+  const order = (["coordinator", "secretary"] as const).filter((desk) => desks.includes(desk));
   return order.map((desk) => {
     const signature = letter[desk];
     const label = deskLabel(desk, context.type, context.unitName, context.period);
@@ -114,7 +113,11 @@ export function createLetterPdf(deps: LetterPdfDeps) {
     );
   }
 
-  async function art(letterhead: Letterhead, period: string | null): Promise<LetterheadArt> {
+  async function art(
+    letterhead: Letterhead,
+    period: string | null,
+    initialsBox: boolean,
+  ): Promise<LetterheadArt> {
     const [header, footer, watermark, emblem] = await Promise.all([
       image(letterhead.header),
       image(letterhead.footer),
@@ -131,7 +134,7 @@ export function createLetterPdf(deps: LetterPdfDeps) {
       watermark,
       emblem,
       watermarkOpacity: letterhead.watermarkOpacity / 100,
-      initialsBox: letterhead.initialsBox,
+      initialsBox,
     };
   }
 
@@ -147,7 +150,7 @@ export function createLetterPdf(deps: LetterPdfDeps) {
   async function render(letter: Letter, context: LetterContext, period: string | null) {
     const verification = verificationOf(letter.verificationCode);
     return renderLetterPdf({
-      letterhead: await art(letter.letterhead ?? context.letterhead, period),
+      letterhead: await art(letter.letterhead ?? context.letterhead, period, letter.initialsBox),
       place: letter.place,
       dateText: letter.letterDate ? formatLetterDate(letter.letterDate) : null,
       number: letter.numberFormatted,

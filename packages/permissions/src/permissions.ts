@@ -50,6 +50,7 @@ export const ADMIN_PAGES = {
       sign_coordinator: "Sign - top desk",
       issue: "Issue letters (give the number)",
       cancel: "Cancel issued letters",
+      stamp: "Upload or replace the organisation stamp",
     },
   },
   letter_types: { label: "Letter types (number patterns)" },

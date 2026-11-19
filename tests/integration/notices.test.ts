@@ -263,6 +263,19 @@ describe("notification sources (J2)", () => {
     expect(sent.map((s) => s.to)).toEqual(["rina@example.org"]);
   });
 
+  it("a top-desk letter tells only the top desk; the draft link goes with the review notice", async () => {
+    await notices().letter(letter({ status: "corrected", typeId: "missing", topDeskOnly: true }));
+    expect(sent.map((s) => s.to)).toEqual(["koor@example.org"]);
+    sent.length = 0;
+    await notices().letter(
+      letter({ status: "review", draftUrl: "https://docs.google.com/document/d/abc/edit" }),
+    );
+    expect(sent[0]?.text).toContain("https://docs.google.com/document/d/abc/edit");
+    sent.length = 0;
+    await notices().letter(letter({ status: "review" }));
+    expect(sent[0]?.text).not.toContain("https://docs");
+  });
+
   it("a returned letter goes back to its author with the note; other steps tell nobody", async () => {
     await notices().letter(letter({ status: "draft", reviewNote: "Fix the date." }));
     expect(sent).toMatchObject([{ to: "+6281234567890", key: "letter:l1:draft:3:ari" }]);

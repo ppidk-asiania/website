@@ -25,8 +25,9 @@ export const LetterheadSchema = z
     footer: LetterheadImageSchema.nullable().default(null),
     watermark: LetterheadImageSchema.nullable().default(null),
     emblem: LetterheadImageSchema.nullable().default(null),
+    /** Printed on own-PDF letters (14.2); only holders of `letters.stamp` change it. */
+    stamp: LetterheadImageSchema.nullable().default(null),
     watermarkOpacity: z.number().int().min(2).max(40).default(8),
-    initialsBox: z.boolean().default(false),
   })
   .strict();
 export type Letterhead = z.infer<typeof LetterheadSchema>;

@@ -11,6 +11,7 @@ import {
   desksOf,
   isEditable,
   letterCanonical,
+  LetterInputSchema,
   LetterTypeInputSchema,
   makeVerificationCode,
   missingFields,
@@ -69,6 +70,9 @@ const letter = (extra: Partial<Letter> = {}): Letter => ({
   upload: null,
   placement: null,
   activityCode: null,
+  topDeskOnly: false,
+  initialsBox: false,
+  draftUrl: null,
   sheetNumberTemplate: null,
   ...extra,
 });
@@ -103,8 +107,8 @@ describe("letter types", () => {
 describe("letter workflow (draft → review → corrected → desks → approved)", () => {
   it("submits only complete drafts; a type without recipient clears it", () => {
     const sk = type({ requiresRecipient: false });
-    expect(normalizeLetterInput(letter(), sk).recipient).toBe("");
-    expect(normalizeLetterInput(letter(), type()).recipient).toBe("Ketua PPI Jepang");
+    expect(normalizeLetterInput(letter(), sk, "editor").recipient).toBe("");
+    expect(normalizeLetterInput(letter(), type(), "editor").recipient).toBe("Ketua PPI Jepang");
     expect(missingFields(letter({ recipient: "" }), sk)).toEqual([]);
     expect(
       missingFields(letter({ subject: " ", body: "", letterDate: null, recipient: "" }), type()),
@@ -196,6 +200,63 @@ describe("letter workflow (draft → review → corrected → desks → approved
     expect(deskLabel("secretary", type({ requiresCoordinator: true }), "Media", period)).toBe(
       "Sekretaris Umum PPIDK Asia-Oseania",
     );
+  });
+});
+
+describe("letter options (14.1)", () => {
+  const url = "https://docs.google.com/document/d/abc/edit";
+  const base = {
+    typeId: "und",
+    orgUnitId: "sekjen",
+    subject: "SK",
+    letterDate: "2026-11-02",
+  };
+
+  it("options default to off and the draft link must be a short https address", () => {
+    expect(LetterInputSchema.parse(base)).toMatchObject({
+      topDeskOnly: false,
+      initialsBox: false,
+      draftUrl: null,
+    });
+    expect(LetterInputSchema.parse({ ...base, draftUrl: url }).draftUrl).toBe(url);
+    for (const bad of [
+      "http://x.test/a",
+      "javascript:alert(1)",
+      "not a url",
+      `https://x.test/${"a".repeat(1000)}`,
+    ]) {
+      expect(LetterInputSchema.safeParse({ ...base, draftUrl: bad }).success, bad).toBe(false);
+    }
+  });
+
+  it("the draft link is kept only on own-PDF letters", () => {
+    const linked = letter({ draftUrl: url });
+    expect(normalizeLetterInput(linked, type(), "upload").draftUrl).toBe(url);
+    expect(normalizeLetterInput(linked, type(), "editor").draftUrl).toBeNull();
+    expect(normalizeLetterInput(linked, type(), "certificate").draftUrl).toBeNull();
+  });
+
+  it("a top-desk letter has only the top desk, goes straight to corrected and is signed by it alone", () => {
+    const alone = letter({ topDeskOnly: true });
+    expect(desksOf(type(), alone)).toEqual(["coordinator"]);
+    expect(desksOf(type({ requiresCoordinator: true }), alone)).toEqual(["coordinator"]);
+    expect(desksOf(type({ requiresCoordinator: true }), letter())).toEqual([
+      "secretary",
+      "coordinator",
+    ]);
+    expect(submitForReview(alone, type()).status).toBe("corrected");
+    expect(() => submitForReview(letter({ topDeskOnly: true, body: "" }), type())).toThrow(
+      "Complete first: Body.",
+    );
+    const corrected = submitForReview(alone, type());
+    expect(() => signDesk(corrected, type(), "secretary", "sekjen", now)).toThrow(
+      "signed by the top desk alone",
+    );
+    expect(signDesk(corrected, type(), "coordinator", "koor", now)).toMatchObject({
+      status: "approved",
+      coordinator: { uid: "koor", at: now },
+      secretary: null,
+    });
   });
 });
 

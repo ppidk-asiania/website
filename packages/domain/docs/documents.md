@@ -75,6 +75,31 @@ draft ─→ review ─→ corrected ─→ desks ─→ approved ─→ issued 
   them. Issued letters keep their frozen `signers`; new ones use the titles in force at issue.
 - Not built yet: PPIDK's format checker (warnings) and notifications to the desks.
 
+## Letter options (14.1)
+
+Chosen when drafting (`LetterInput`), stored on the letter, in the audit snapshot, imported from
+PPIDK (`hanya_sekjen`, `kotak_paraf`, `tautan_draf`):
+
+- **`topDeskOnly`** ("handled by the top desk alone", e.g. the SK that appoints the signer desk's
+  holder: nobody signs their own appointment). `desksOf(type, letter)` is just the top desk;
+  Submit goes straight to `corrected` (the secretariat may not exist yet at the start of a
+  period); only `letters.sign_coordinator` signs; only its holders (superadmin has every extra)
+  create, edit, submit, delete, upload or place stamps on it (`assertMayHandle` in
+  `apps/admin/src/server/letters.ts`; they still need `letters.edit` to write). The top desk
+  holders are told directly ("waits for your signature"). Number, code, digest, audit: as any
+  letter. Give the top desk's role `letters.edit` as well.
+- **`initialsBox`**: the "Paraf" box on every page, per letter. It replaces the old global
+  letterhead setting; an old `settings/letters` document that still holds `initialsBox` is read
+  without it. (A cancelled letter rendered again no longer prints the box that its frozen
+  letterhead used to carry; archived PDFs of issued letters are never rendered again.)
+- **`draftUrl`** (https, at most 1000 characters, only for own-PDF letters; typed letters drop
+  it): shown on the letter's detail view and added to the "waiting for correction" notice; never
+  part of the verification page's view.
+- **Stamp**: the letterhead gains `stamp` (image, same upload preset). Only holders of the
+  extra `letters.stamp` upload, replace or remove it (other letterhead editors keep header,
+  footer, watermark and emblem; the action refuses a changed stamp from anyone else). It is
+  frozen with the letterhead at issue. The own-PDF path prints it (14.2); typed letters do not.
+
 ## Letter PDF, letterhead, archive (D1, D9)
 
 - **Rendering**: `@website/pdf` (`renderLetterPdf`, pdf-lib + qrcode, pure JavaScript) lays out
@@ -85,7 +110,8 @@ draft ─→ review ─→ corrected ─→ desks ─→ approved ─→ issued 
   code. Images and tables in the body are not printed. Dates are written in Indonesian in WIB.
 - **Letterhead** (`settings/letters`, Letter types page → Letterhead, `letter_types.edit`):
   parent name, name, address line, full-width letterhead / footer / watermark images, emblem,
-  watermark strength (2-40 %), "Paraf" box. Images are uploaded with the `letterhead` preset
+  watermark strength (2-40 %), the organisation stamp (extra `letters.stamp`, see "Letter options").
+  The "Paraf" box is not a letterhead setting any more: it is chosen per letter. Images are uploaded with the `letterhead` preset
   (public WebP, converted to PNG with sharp when rendering) and must come from that folder.
   Without a letterhead image the text letterhead (emblem + names) is printed. It is FROZEN on
   the letter at issue (`letters.letterhead`): a new design never changes issued letters; a lost

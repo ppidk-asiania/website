@@ -45,6 +45,9 @@ const letter: Letter = {
   upload: null,
   placement: null,
   activityCode: null,
+  topDeskOnly: false,
+  initialsBox: false,
+  draftUrl: null,
   sheetNumberTemplate: null,
 };
 const type = {
@@ -110,6 +113,22 @@ describe("Letters page model", () => {
     expect(matchesLetterTab({ status: "approved" }, "approved")).toBe(true);
     expect(matchesLetterTab({ status: "issued" }, "all")).toBe(true);
     expect(matchesLetterTab({ status: "issued" }, "draft")).toBe(false);
+  });
+
+  it("a top-desk letter offers only the top desk's signature and carries its options", () => {
+    const alone = item({ topDeskOnly: true, secretary: null, initialsBox: true });
+    expect(alone).toMatchObject({ topDeskOnly: true, initialsBox: true, draftUrl: null });
+    expect(letterActions(alone, { ...none, sign: true }, "sekjen")).toEqual([]);
+    expect(letterActions(alone, { ...none, signCoordinator: true }, "koor")).toEqual([
+      "signCoordinator",
+    ]);
+    expect(
+      letterActions(
+        item({ topDeskOnly: true, requiresCoordinator: false, secretary: null }),
+        { ...none, signCoordinator: true },
+        "koor",
+      ),
+    ).toEqual(["signCoordinator"]);
   });
 
   it("shows only the buttons the viewer's desks allow", () => {

@@ -102,6 +102,16 @@ export function createLetterActions(deps: LetterDeps) {
     orgUnitPath: (await deps.unitPath(orgUnitId)) ?? [],
   });
 
+  // A top-desk letter is written, edited and submitted by top-desk holders (and superadmins) only.
+  const assertMayHandle = (
+    letter: { readonly topDeskOnly: boolean } & ResourceContext,
+    principal: Principal,
+  ) => {
+    if (letter.topDeskOnly && !can(principal, "letters.sign_coordinator", letter)) {
+      throw new RuleViolationError("Only the top desk handles this letter.");
+    }
+  };
+
   const clean = <T extends z.infer<typeof LetterInputSchema>>(input: T): T => ({
     ...input,
     body: sanitizeRichText(input.body),
@@ -113,8 +123,12 @@ export function createLetterActions(deps: LetterDeps) {
     resource: (input) => (input.id ? scopeOf({ id: input.id }) : unitScope(input.orgUnitId)),
     handler: async ({ id, version, source, ...input }, principal, audit) => {
       const now = deps.now();
+      const scope = await unitScope(input.orgUnitId);
+      const current = id ? await deps.letters.get(id) : null;
+      if (current) assertMayHandle(current, principal);
+      if (input.topDeskOnly) assertMayHandle({ ...input, ...scope }, principal);
       if (id) {
-        if (!can(principal, "letters.edit", await unitScope(input.orgUnitId))) {
+        if (!can(principal, "letters.edit", scope)) {
           throw new RuleViolationError("You can only write letters for your own unit.");
         }
         const saved = await deps.letters.update(
@@ -158,7 +172,10 @@ export function createLetterActions(deps: LetterDeps) {
         const saved = await deps.letters.transition(
           id,
           version,
-          (letter, type) => decide(letter, type, rest, principal.userId, now),
+          (letter, type) => {
+            if (permission === "letters.edit") assertMayHandle(letter, principal);
+            return decide(letter, type, rest, principal.userId, now);
+          },
           letterAudit(audit, action),
           now,
         );
@@ -184,7 +201,9 @@ export function createLetterActions(deps: LetterDeps) {
     permission: "letters.edit",
     input: Ref,
     resource: scopeOf,
-    handler: async ({ id, version }, _principal, audit) => {
+    handler: async ({ id, version }, principal, audit) => {
+      const letter = await deps.letters.get(id);
+      if (letter) assertMayHandle(letter, principal);
       await deps.letters.remove(id, version, letterAudit(audit, "DELETE"), deps.now());
       return { id };
     },
@@ -245,22 +264,28 @@ export function createLetterActions(deps: LetterDeps) {
     input: z
       .object({ letterhead: LetterheadSchema, version: z.number().int().min(1).nullable() })
       .strict(),
-    handler: async ({ letterhead, version }, _principal, audit) => ({
-      version: await deps.settings.save(letterhead, version, (before, after, next) =>
-        audit({
-          module: "letter_types",
-          action: "UPDATE",
-          resourceType: "letterhead",
-          resourceId: "letters",
-          title: "Letterhead",
-          before,
-          after,
-          versionBefore: version,
-          versionAfter: next,
-          revertible: false,
-        }),
-      ),
-    }),
+    handler: async ({ letterhead, version }, principal, audit) => {
+      const current = (await deps.settings.get()).letterhead;
+      if (letterhead.stamp?.path !== current.stamp?.path && !can(principal, "letters.stamp")) {
+        throw new RuleViolationError("Only holders of the stamp permission change the stamp.");
+      }
+      return {
+        version: await deps.settings.save(letterhead, version, (before, after, next) =>
+          audit({
+            module: "letter_types",
+            action: "UPDATE",
+            resourceType: "letterhead",
+            resourceId: "letters",
+            title: "Letterhead",
+            before,
+            after,
+            versionBefore: version,
+            versionAfter: next,
+            revertible: false,
+          }),
+        ),
+      };
+    },
   });
 
   const upload = createGuardedAction({
@@ -275,6 +300,7 @@ export function createLetterActions(deps: LetterDeps) {
       if (letter?.status !== "awaiting_file") {
         throw new RuleViolationError("This letter is not waiting for its file.");
       }
+      assertMayHandle(letter, principal);
       await openPdf(bytes).catch((error: UnreadablePdfError) => {
         throw new RuleViolationError(error.message);
       });

@@ -10,7 +10,7 @@ import {
 } from "@website/domain/documents";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { encryptField } from "@website/security";
-import { qrPng } from "@website/pdf";
+import { pdfText, qrPng } from "@website/pdf";
 import {
   ArchiveDamagedError,
   createLetterFileRoute,
@@ -79,6 +79,9 @@ const letter: Letter = {
   upload: null,
   placement: null,
   activityCode: null,
+  topDeskOnly: false,
+  initialsBox: false,
+  draftUrl: null,
   sheetNumberTemplate: null,
 };
 const context: LetterContext = {
@@ -164,6 +167,16 @@ describe("letter desks as printed", () => {
       {
         label: "Sekretaris Eksekutif PPIDK Asia-Oseania",
         name: "Now Renamed",
+        signedOn: "2 November 2026",
+        signature: null,
+      },
+    ]);
+    expect(
+      letterDesks({ ...corrected, topDeskOnly: true, coordinator: { uid: "koor", at } }, context),
+    ).toEqual([
+      {
+        label: "Sekretaris Jenderal PPIDK Asia-Oseania",
+        name: null,
         signedOn: "2 November 2026",
         signature: null,
       },
@@ -293,6 +306,14 @@ describe("letter archive (byte for byte)", () => {
         null,
       ),
     ).rejects.toThrow("missing or changed");
+  });
+
+  it("the initials box is printed when the letter asks for it, not by the letterhead", async () => {
+    const pdf = createLetterPdf(deps());
+    const asked = await pdf.render({ ...letter, initialsBox: true }, context, null);
+    const plain = await pdf.render(letter, context, null);
+    expect(await pdfText(asked)).toContain("Paraf");
+    expect(await pdfText(plain)).not.toContain("Paraf");
   });
 
   it("a concurrent first archive wins and is served", async () => {

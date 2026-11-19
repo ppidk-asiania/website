@@ -55,6 +55,9 @@ export interface LetterItem {
   attachmentNote: string;
   letterDate: string | null;
   activityCode: string | null;
+  topDeskOnly: boolean;
+  initialsBox: boolean;
+  draftUrl: string | null;
   status: LetterStatus;
   statusLabel: string;
   requiresCoordinator: boolean;
@@ -105,6 +108,9 @@ export function toLetterItem(
     attachmentNote: letter.attachmentNote,
     letterDate: letter.letterDate,
     activityCode: letter.activityCode,
+    topDeskOnly: letter.topDeskOnly,
+    initialsBox: letter.initialsBox,
+    draftUrl: letter.draftUrl,
     status: letter.status,
     statusLabel: label(LETTER_STATUS_LABELS, letter.status),
     requiresCoordinator: type?.requiresCoordinator ?? false,
@@ -156,13 +162,18 @@ export function letterActions(
     actions.push("return");
   }
   if (status === "corrected") {
-    if (can.sign && item.secretary === null && item.coordinator?.uid !== viewerId) {
+    const desks = desksOf(item, item);
+    if (
+      can.sign &&
+      desks.includes("secretary") &&
+      item.secretary === null &&
+      item.coordinator?.uid !== viewerId
+    ) {
       actions.push("signSecretary");
     }
-    const hasCoordinatorDesk = desksOf(item).includes("coordinator");
     if (
       can.signCoordinator &&
-      hasCoordinatorDesk &&
+      desks.includes("coordinator") &&
       item.coordinator === null &&
       item.secretary?.uid !== viewerId
     ) {

@@ -68,6 +68,16 @@ export const LetterInputSchema = z
       .regex(/^[A-Z0-9-]{1,24}$/, "Use 1-24 letters, digits or '-'.")
       .nullable()
       .default(null),
+    /** Handled by the top desk alone: no correction, only the top desk signs and edits it. */
+    topDeskOnly: z.boolean().default(false),
+    /** Print the "Paraf" box on every page (useful for letters of several pages). */
+    initialsBox: z.boolean().default(false),
+    /** Where the draft lives (e.g. a Google Docs link), for own-PDF letters; never public. */
+    draftUrl: z
+      .url({ protocol: /^https$/ })
+      .max(1000)
+      .nullable()
+      .default(null),
   })
   .strict();
 export type LetterInput = z.infer<typeof LetterInputSchema>;
@@ -154,8 +164,16 @@ function assertStatus(letter: Letter, allowed: readonly LetterStatus[], message:
 export const isEditable = (letter: Pick<Letter, "status">) =>
   letter.status === "draft" || letter.status === "review";
 
-export function normalizeLetterInput(input: LetterInput, type: LetterType): LetterInput {
-  return type.requiresRecipient ? input : { ...input, recipient: "" };
+export function normalizeLetterInput(
+  input: LetterInput,
+  type: LetterType,
+  source: LetterSource,
+): LetterInput {
+  return {
+    ...input,
+    recipient: type.requiresRecipient ? input.recipient : "",
+    draftUrl: source === "upload" ? input.draftUrl : null,
+  };
 }
 
 export function missingFields(letter: Letter, type: LetterType): string[] {
@@ -176,7 +194,8 @@ function assertComplete(letter: Letter, type: LetterType) {
 export function submitForReview(letter: Letter, type: LetterType): Letter {
   assertStatus(letter, ["draft"], "Only drafts can be submitted for review.");
   assertComplete(letter, type);
-  return { ...letter, status: "review" };
+  // The secretariat may not exist yet at the start of a period: the top desk's own letter skips it.
+  return { ...letter, status: letter.topDeskOnly ? "corrected" : "review" };
 }
 
 export function passReview(letter: Letter, type: LetterType, uid: string): Letter {
@@ -202,8 +221,11 @@ export function returnLetter(letter: Letter, uid: string, note: string): Letter 
   };
 }
 
-export const desksOf = (type: Pick<LetterType, "requiresCoordinator">): readonly Desk[] =>
-  type.requiresCoordinator ? DESKS : ["secretary"];
+export const desksOf = (
+  type: Pick<LetterType, "requiresCoordinator">,
+  letter?: Pick<Letter, "topDeskOnly">,
+): readonly Desk[] =>
+  letter?.topDeskOnly ? ["coordinator"] : type.requiresCoordinator ? DESKS : ["secretary"];
 
 export function signDesk(
   letter: Letter,
@@ -213,12 +235,18 @@ export function signDesk(
   now: Date,
 ): Letter {
   assertStatus(letter, ["corrected"], "The secretariat must pass the letter before it is signed.");
-  if (!desksOf(type).includes(desk)) refuse("This letter type has no top signing desk.");
+  if (!desksOf(type, letter).includes(desk)) {
+    refuse(
+      letter.topDeskOnly
+        ? "This letter is signed by the top desk alone."
+        : "This letter type has no top signing desk.",
+    );
+  }
   if (letter[desk]) refuse("This desk has already signed.");
   const other = desk === "secretary" ? letter.coordinator : letter.secretary;
   if (other?.uid === uid) refuse("One person cannot hold both signing desks of a letter.");
   const signed = { ...letter, [desk]: { uid, at: now } };
-  const complete = desksOf(type).every((d) => signed[d] !== null);
+  const complete = desksOf(type, letter).every((d) => signed[d] !== null);
   return complete ? { ...signed, status: "approved" } : signed;
 }
 
