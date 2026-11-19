@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createSqlActionItemStore, createSqlMeetingStore } from "@website/db/sql";
+import { createSqlActionItemStore, createSqlAiStore, createSqlMeetingStore } from "@website/db/sql";
+import { modelFor } from "@website/domain/ai";
 import {
   isOverdue,
   mergeDraft,
@@ -11,7 +12,7 @@ import {
 } from "@website/domain/meetings";
 import type { ReportPdfInput } from "@website/pdf";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
-import { createAnthropicDrafter } from "../../apps/admin/src/server/anthropic";
+import { createAnthropicDrafter, createCallModel } from "../../apps/admin/src/server/anthropic";
 import { createMinutesActions, createMinutesFileRoute } from "../../apps/admin/src/server/minutes";
 import { fakeDb } from "../support/fake-db";
 
@@ -503,6 +504,7 @@ describe("machine-drafted minutes (F6)", () => {
         { uid: "member", name: "member" },
       ],
     });
+    expect((asked as unknown as DraftRequest).uid).toBe("sec");
     expect((asked as unknown as DraftRequest).transcript).toContain(
       "Budi: Setuju. Saya kirim besok.",
     );
@@ -553,8 +555,9 @@ describe("machine-drafted minutes (F6)", () => {
   });
 });
 
-describe("Anthropic adapter (F6)", () => {
+describe("Anthropic adapter and usage log (F6, step 10.5)", () => {
   const request: DraftRequest = {
+    uid: "u1",
     title: "Rapat",
     agenda: [{ id: "a1", title: "Opening" }],
     participants: [{ uid: "u1", name: "Rina" }],
@@ -563,14 +566,28 @@ describe("Anthropic adapter (F6)", () => {
   const answer = (body: unknown, status = 200) =>
     Promise.resolve(new Response(JSON.stringify(body), { status }));
   const draft = { items: [{ agendaItemId: "a1", notes: "Opened." }], actionItems: [] };
+  const usage = { input_tokens: 120, output_tokens: 30, cache_read_input_tokens: 7 };
+  const usageRows = () =>
+    [...fake.docs].filter(([path]) => path.startsWith("aiUsage/")).map(([, data]) => data);
+  const drafterOf = (fetchImpl: typeof fetch, env?: string) => {
+    const ai = createSqlAiStore(db());
+    return createAnthropicDrafter(
+      createCallModel({
+        apiKey: "sk-test",
+        fetchImpl,
+        modelFor: async (feature) => modelFor(feature, (await ai.readSettings()).settings, env),
+        recordUsage: (row) => ai.recordUsage(row),
+        now: () => clock,
+      }),
+    );
+  };
 
-  it("forces the tool, sends the key and validates the answer", async () => {
+  it("forces the tool, sends the key, validates the answer and logs one usage row", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
-    const drafterOf = (fetchImpl: typeof fetch) =>
-      createAnthropicDrafter({ apiKey: "sk-test", model: "claude-test", fetchImpl });
     const ok = drafterOf((url, init) => {
       calls.push({ url: url as string, init: init as RequestInit });
       return answer({
+        usage,
         content: [
           { type: "text", text: "Here" },
           { type: "tool_use", name: "minutes_draft", input: draft },
@@ -583,23 +600,62 @@ describe("Anthropic adapter (F6)", () => {
     expect(sent.url).toBe("https://api.anthropic.com/v1/messages");
     expect((sent.init.headers as Record<string, string>)["x-api-key"]).toBe("sk-test");
     expect(body).toMatchObject({
-      model: "claude-test",
+      model: "claude-sonnet-4-5",
       tool_choice: { type: "tool", name: "minutes_draft" },
     });
     expect(String((body["messages"] as Array<{ content: string }>)[0]?.content)).toContain(
       "Rina: halo",
     );
+    expect(usageRows()).toHaveLength(1);
+    expect(usageRows()[0]).toMatchObject({
+      feature: "minutes",
+      model: "claude-sonnet-4-5",
+      uid: "u1",
+      input: 120,
+      output: 30,
+      cacheWrite: 0,
+      cacheRead: 7,
+    });
+    // never the prompt or the answer
+    expect(JSON.stringify(usageRows())).not.toContain("halo");
+    expect(JSON.stringify(usageRows())).not.toContain("Opened.");
+  });
 
+  it("logs the usage of an answer that is then refused; a failed call logs none", async () => {
+    await expect(
+      drafterOf(() =>
+        answer({
+          usage,
+          content: [{ type: "tool_use", name: "minutes_draft", input: { items: "x" } }],
+        }),
+      ).draft(request),
+    ).rejects.toThrow("anthropic_invalid_answer");
+    expect(usageRows()).toHaveLength(1);
+    await expect(drafterOf(() => answer({ usage, nothing: true })).draft(request)).rejects.toThrow(
+      "anthropic_invalid_answer",
+    );
+    expect(usageRows()).toHaveLength(2);
     await expect(
       drafterOf(() => answer({ error: "overloaded" }, 529)).draft(request),
     ).rejects.toThrow("anthropic_529");
-    await expect(
-      drafterOf(() =>
-        answer({ content: [{ type: "tool_use", name: "minutes_draft", input: { items: "x" } }] }),
-      ).draft(request),
-    ).rejects.toThrow("anthropic_invalid_answer");
-    await expect(drafterOf(() => answer({ nothing: true })).draft(request)).rejects.toThrow(
-      "anthropic_invalid_answer",
-    );
+    expect(usageRows()).toHaveLength(2);
+  });
+
+  it("uses the model saved in settings/ai, and an env override only when listed", async () => {
+    fake.docs.set("settings/ai", { models: { minutes: "claude-haiku-4-5" }, version: 1 });
+    const modelSent = async (env?: string) => {
+      let model = "";
+      await drafterOf((_url, init) => {
+        model = (JSON.parse(init?.body as string) as { model: string }).model;
+        return answer({
+          usage,
+          content: [{ type: "tool_use", name: "minutes_draft", input: draft }],
+        });
+      }, env).draft(request);
+      return model;
+    };
+    expect(await modelSent()).toBe("claude-haiku-4-5");
+    expect(await modelSent("claude-sonnet-4-5")).toBe("claude-sonnet-4-5");
+    expect(await modelSent("gpt-5")).toBe("claude-haiku-4-5");
   });
 });

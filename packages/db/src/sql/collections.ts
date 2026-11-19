@@ -73,4 +73,5 @@ export const COLLECTIONS = [
   "chapterReports",
   "pageViewStats",
   "pageViewVisits",
+  "aiUsage",
 ] as const;

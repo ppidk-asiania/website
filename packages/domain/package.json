@@ -22,7 +22,8 @@
     "./meetings": "./src/meetings/index.ts",
     "./links": "./src/links/index.ts",
     "./zoom": "./src/zoom/index.ts",
-    "./tasks": "./src/tasks/index.ts"
+    "./tasks": "./src/tasks/index.ts",
+    "./ai": "./src/ai/index.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",

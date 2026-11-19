@@ -1,12 +1,15 @@
 import { isSuperadmin } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
+import { AiCard } from "@/components/ai-card";
 import { PageViewsCard, VIEW_PERIODS } from "@/components/page-views-card";
 import { StatCard, type StatCardProps } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { aiCard } from "@/server/ai";
 import { requireAdminViewer } from "@/server/context";
 import { getAdminEnv } from "@/server/env";
 import { pageViewReport, pageViewStore } from "@/server/page-views";
 import { integrationStatus } from "@/server/settings";
+import { adminStores } from "@/server/stores";
 import { dashboard } from "@/server/wiring";
 
 export const instant = false;
@@ -23,6 +26,9 @@ export default async function AdminDashboardPage({
   );
   const superadmin = isSuperadmin(viewer.principal);
   const setup = superadmin ? integrationStatus(getAdminEnv()) : null;
+  const ai = superadmin
+    ? await aiCard({ ai: adminStores().ai, env: getAdminEnv(), now: new Date() })
+    : null;
   const params = await searchParams;
   const viewPeriod = VIEW_PERIODS.find((p) => p.key === params["views"]) ?? VIEW_PERIODS[0];
   const viewPage = typeof params["page"] === "string" ? params["page"] : null;
@@ -145,6 +151,8 @@ export default async function AdminDashboardPage({
             </CardBody>
           </Card>
         ) : null}
+
+        {ai ? <AiCard data={ai} /> : null}
 
         {views ? (
           <div id="page-views">

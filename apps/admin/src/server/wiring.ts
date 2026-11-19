@@ -68,7 +68,9 @@ import { createLpjActions, createLpjFileRoute } from "./lpj";
 import { renderReportPdf } from "@website/pdf";
 import { createMeetingActions } from "./meetings";
 import { createMinutesActions, createMinutesFileRoute } from "./minutes";
-import { createAnthropicDrafter, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
+import { modelFor } from "@website/domain/ai";
+import { createAiActions } from "./ai";
+import { createAnthropicDrafter, createCallModel } from "./anthropic";
 import { createLinkActions } from "./links";
 import { goppiShortener, sidShortener } from "./shorteners";
 import { createZoomActions, createZoomTranscript } from "./zoom";
@@ -656,16 +658,27 @@ export const meetingActions = lazyEnv(() =>
   }),
 );
 
+export const aiActions = lazyEnv(() => createAiActions({ ai: adminStores().ai }));
+
 export const minutesActions = lazyEnv(() =>
   createMinutesActions({
     meetings: adminStores().meetings,
     actionItems: adminStores().actionItems,
     drafter: getAdminEnv().ANTHROPIC_API_KEY
-      ? createAnthropicDrafter({
-          apiKey: getAdminEnv().ANTHROPIC_API_KEY as string,
-          model: getAdminEnv().ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL,
-          fetchImpl: fetch,
-        })
+      ? createAnthropicDrafter(
+          createCallModel({
+            apiKey: getAdminEnv().ANTHROPIC_API_KEY as string,
+            fetchImpl: fetch,
+            modelFor: async (feature) =>
+              modelFor(
+                feature,
+                (await adminStores().ai.readSettings()).settings,
+                getAdminEnv().ANTHROPIC_MODEL,
+              ),
+            recordUsage: (row) => adminStores().ai.recordUsage(row),
+            now: () => new Date(),
+          }),
+        )
       : null,
     names: accountNames,
     logError: (message, fields) => adminStores().logger.error(message, fields),

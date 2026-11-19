@@ -111,6 +111,7 @@ export const ADMIN_PAGES = {
     },
   },
   tasks: { label: "Unit task boards", extras: { share: "Share unit boards with a person" } },
+  ai: { label: "AI settings (model per feature, usage and cost)" },
   calendar: { label: "Calendar (own items, .ics feed)", extras: { holidays: "Manage holidays" } },
 } as const satisfies Record<string, AdminPageDefinition>;
 

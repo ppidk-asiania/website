@@ -276,6 +276,7 @@ export function createMinutesActions(deps: MinutesDeps) {
       let output: DraftOutput;
       try {
         output = await deps.drafter.draft({
+          uid: principal.userId,
           title: meeting.title,
           agenda: meeting.agenda,
           participants: meeting.participantIds.map((uid) => ({ uid, name: names.get(uid) ?? uid })),

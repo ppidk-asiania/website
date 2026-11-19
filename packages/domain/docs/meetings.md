@@ -80,9 +80,17 @@ scheduled ──(end time passes, read-time)──→ finished
 ## Machine-drafted minutes (F6)
 
 - Port `MinutesDrafter` (`drafting.ts`); adapter `apps/admin/src/server/anthropic.ts`
-  (Anthropic Messages API, `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL`, default
-  `claude-sonnet-4-5`; forced tool output validated with `DraftOutputSchema`; 60 s timeout). No
-  key = the "Draft from transcript" button is hidden and the action refuses.
+  (Anthropic Messages API, `ANTHROPIC_API_KEY`; forced tool output validated with
+  `DraftOutputSchema`; 60 s timeout). The adapter calls the shared `callModel("minutes", uid, …)`
+  wrapper, which picks the model (`settings/ai`, default `claude-sonnet-4-5`; `ANTHROPIC_MODEL`
+  only if it is a listed model) and writes one `aiUsage` row (feature, model, uid, token counts,
+  time; never the prompt or the answer) as soon as the answer arrives, before it is validated, so
+  a refused answer is logged too. A failed HTTP call logs nothing. No key = the "Draft from
+  transcript" button is hidden and the action refuses. Models, prices and cost maths:
+  `@website/domain/ai` (`AI_MODELS`, `costOf`, `summarizeUsage`); the superadmin's Dashboard AI
+  card shows the key's last four characters, the model per feature, and requests / tokens /
+  estimated cost this month and last month (a model without a known price is listed apart, never
+  counted as zero). Changing a model needs `ai.edit` (audited, `module: ai`). DEC-22.
 - Input: a pasted transcript, a Zoom `.vtt` file, or **Pull Zoom transcript** when the room is a
   Zoom booking (`packages/domain/docs/zoom.md` → Webhooks). `parseVtt`
   drops the header, NOTE blocks, cue numbers and timings, keeps every spoken line, treats a

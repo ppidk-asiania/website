@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export interface DraftRequest {
+  readonly uid: string;
   readonly title: string;
   readonly agenda: ReadonlyArray<{ id: string; title: string }>;
   readonly participants: ReadonlyArray<{ uid: string; name: string }>;

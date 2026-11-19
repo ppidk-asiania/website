@@ -284,6 +284,11 @@ router.push("/things"); router.refresh();
   names, and a note when `MESSAGING_MODE` is `log`. Never a value (`src/server/settings.ts`,
   `tests/unit/admin-settings.test.ts`). Zoom settings stay on `/zoom` (`zoom.settings`), the
   letterhead on `/letters?tab=types`.
+- **AI card** (step 10.5, on the Dashboard, superadmin; `src/components/ai-card.tsx`,
+  `src/server/ai.ts`): key present (last four characters only), model per feature with a Models
+  button (`saveAiSettingsAction`, `ai.edit`), requests / tokens / estimated cost this month and
+  last month, "official bill: console.anthropic.com". Tests: `tests/integration/ai.test.ts`,
+  `tests/unit/ai.test.ts`.
 - **Tools** (`/tools`, `src/components/tools-page.tsx`): QR Generator and URL Shortener in cream
   cards on the dark page (layout scoped to `.admin-tools` in `globals.css`; fields and buttons
   follow the cream-surface colours). Links
