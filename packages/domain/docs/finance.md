@@ -7,11 +7,11 @@ Finance requests (I1), the cash book (I2) and the cash report (I3), ported from 
 ## What it does
 
 A unit asks for money (or for approval of a budget plan); the treasurer checks the numbers, the
-coordinator authorises, the treasurer transfers manually and records it with the proof of
+top desk authorises, the treasurer transfers manually and records it with the proof of
 transfer; the requester then marks it done. There is no payment gateway.
 
 ```
-draft ─→ submitted ─[treasurer review]─→ reviewed ─[coordinator authorisation]─→ authorized
+draft ─→ submitted ─[treasurer review]─→ reviewed ─[top desk authorisation]─→ authorized
   ↑                                                                                │ mark paid
   └── revision ←── returned by the desk whose turn it is (clears BOTH desks)       ↓ (proof)
                                                                            paid ─→ done
@@ -60,10 +60,13 @@ incomplete):
 ## Rules
 
 - **Separation of duties.** The requester (`createdBy`) never acts at a desk on their own request
-  (review, authorise, return, reject, mark paid), whatever their roles. The coordinator's
-  authorisation must come from a different person than the treasurer's review.
+  (review, authorise, return, reject, mark paid), whatever their roles. The top desk's
+  authorisation must come from a different person than the treasurer's review. The top desk's
+  title is the period's `coordinator` desk title (`deskTitle`, default "Sekretaris Jenderal"; see
+  `organization.md`); the Finance page prints it. The LPJ sheet's approval line prints the signer
+  desk's title.
 - **Whose turn.** `submitted` is at the treasurer's desk (`finance.review`), `reviewed` at the
-  coordinator's (`finance.authorize`); only that desk may return or reject. A return needs a
+  top desk's (`finance.authorize`); only that desk may return or reject. A return needs a
   note, clears both desk stamps and counts `revisionRound`; a rejection needs a reason and is
   final (make a new request).
 - **Mark paid** (`finance.pay`): only `authorized`; the amount actually transferred (> 0, same
@@ -120,14 +123,14 @@ either may be open; `from` after `to` is refused.
 ## Permissions (page `finance`)
 
 `finance.read`, `finance.edit` (make requests for one's unit), extras `finance.review`
-(treasurer), `finance.authorize` (coordinator), `finance.pay` (mark paid with proof),
+(treasurer), `finance.authorize` (top desk), `finance.pay` (mark paid with proof),
 `finance.cashbook` (manual cash book lines) and `finance.export` (cash report CSV/PDF).
 Unit-scoped assignments see and act on their unit's requests (and units below); global ones on
 all; the cash book and its report need a global assignment.
 
 Suggested roles for the Role Manager (roles are data, DEC-11; there is no seed script, create
 them there): **Treasurer** = `finance.review` + `finance.pay` + `finance.cashbook` +
-`finance.export`; **Coordinator** = `finance.authorize` + `finance.export`; **Director /
+`finance.export`; **Top desk** = `finance.authorize` + `finance.export`; **Director /
 requester** = `finance.edit` scoped to their unit.
 
 ## Where it lives
@@ -151,7 +154,7 @@ Imported with the programmes (`packages/domain/docs/programs.md` → Import from
   `penerimaan` → receipt, `pencairan` → disbursement, `reimburse` → reimbursement, `anggaran` →
   budget; statuses `diajukan` → submitted, `direview` → reviewed, `disetujui` → authorized,
   `dicairkan` → paid, `selesai` → done, `revisi` → revision, `ditolak` → rejected. All IDR
-  (PPIDK had no currency column), 2 minor digits. Desks: treasurer and coordinator with who,
+  (PPIDK had no currency column), 2 minor digits. Desks: treasurer and top desk with who,
   when and note; a rejection keeps PPIDK's reason (`uid` `ppidk`, at its last change: PPIDK did
   not record who rejected); `submittedAt` stays empty (not recorded); `doneAt` is PPIDK's last
   change. `programId` only when the programme is imported and of the same period (reported

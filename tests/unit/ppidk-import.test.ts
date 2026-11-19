@@ -89,6 +89,11 @@ const tables: PpidkTables = {
       "is_active",
       "archived_at",
       "lpj_deadline_days",
+      "core_label",
+      "coordinator_title",
+      "signer_title",
+      "coordinator_org_unit_id",
+      "signer_org_unit_id",
     ],
     [
       [
@@ -101,6 +106,11 @@ const tables: PpidkTables = {
         "0",
         "2026-11-01 00:00:00",
         "NULL",
+        "NULL",
+        "NULL",
+        "NULL",
+        "NULL",
+        "NULL",
       ],
       [
         "2",
@@ -112,13 +122,18 @@ const tables: PpidkTables = {
         "1",
         "NULL",
         "30",
+        "Pengurus Harian",
+        "Ketua Umum",
+        "NULL",
+        "100",
+        "NULL",
       ],
     ],
   ),
   org_units: tsv(
     ["id", "period_id", "parent_id", "name", "code", "type", "description", "sort", "is_active"],
     [
-      ["100", "2", "NULL", "Koordinator", "koor", "koordinator", "NULL", "0", "1"],
+      ["100", "2", "NULL", "Sekretaris Jenderal", "koor", "sekretaris_jenderal", "NULL", "0", "1"],
       ["101", "2", "100", "Direktorat Media", "MED", "direktorat", "Tupoksi", "1", "1"],
       ["102", "2", "101", "Bidang Desain", "MED-DSN", "bidang", "NULL", "0", "1"],
       ["103", "2", "100", "Lama", "OLD", "unit_aneh", "NULL", "0", "0"],
@@ -291,6 +306,7 @@ describe("PPIDK people import (block J)", () => {
   });
 
   it("maps the organisation: chapters, periods (one active), units with paths, universities", () => {
+    expect(doc("orgUnits/ppidk-unit-100")).toMatchObject({ type: "sekretaris_jenderal" });
     expect(doc("chapters/ppidk-chapter-7")).toMatchObject({ countryCode: "JP", active: true });
     expect(doc("chapterSlugs/jepang")).toEqual({ id: "ppidk-chapter-7" });
     expect(doc("periods/ppidk-period-1")).toMatchObject({
@@ -301,7 +317,13 @@ describe("PPIDK people import (block J)", () => {
       name: "2026/2027",
       status: "active",
       lpjDeadlineDays: 30,
+      coreLabel: "Pengurus Harian",
+      desks: {
+        coordinator: { title: "Ketua Umum", orgUnitId: "ppidk-unit-100" },
+        signer: { title: "", orgUnitId: null },
+      },
     });
+    expect(doc("periods/ppidk-period-1")).toMatchObject({ coreLabel: "Bapelha Inti" });
     expect(doc("settings/activePeriod")).toMatchObject({ periodId: "ppidk-period-2" });
     expect(doc("orgUnits/ppidk-unit-102")).toMatchObject({
       parentId: "ppidk-unit-101",

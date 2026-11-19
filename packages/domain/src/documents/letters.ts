@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
+import { deskTitle } from "../organizations";
 import { RuleViolationError, type EntityMeta } from "../shared";
 import type { Letterhead } from "./letterhead";
 import { checkNumberPattern } from "./numbering";
@@ -212,7 +213,7 @@ export function signDesk(
   now: Date,
 ): Letter {
   assertStatus(letter, ["corrected"], "The secretariat must pass the letter before it is signed.");
-  if (!desksOf(type).includes(desk)) refuse("This letter type has no Coordinator desk.");
+  if (!desksOf(type).includes(desk)) refuse("This letter type has no top signing desk.");
   if (letter[desk]) refuse("This desk has already signed.");
   const other = desk === "secretary" ? letter.coordinator : letter.secretary;
   if (other?.uid === uid) refuse("One person cannot hold both signing desks of a letter.");
@@ -266,10 +267,16 @@ export function issueUpload(
   return { ...letter, status: "issued", issuedAt: now, archive };
 }
 
-export function deskLabel(desk: Desk, type: LetterType, unitName: string | null): string {
-  if (desk === "coordinator") return "Koordinator PPIDK Asia-Oseania";
+/** Letter desk "coordinator" is the period's coordinator desk; "secretary" is its signer desk. */
+export function deskLabel(
+  desk: Desk,
+  type: LetterType,
+  unitName: string | null,
+  period?: Parameters<typeof deskTitle>[0],
+): string {
+  if (desk === "coordinator") return `${deskTitle(period, "coordinator")} PPIDK Asia-Oseania`;
   return type.requiresCoordinator
-    ? "Sekretaris Jenderal PPIDK Asia-Oseania"
+    ? `${deskTitle(period, "signer")} PPIDK Asia-Oseania`
     : (unitName ?? "PPIDK Asia-Oseania");
 }
 

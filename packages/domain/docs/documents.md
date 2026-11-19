@@ -45,7 +45,7 @@ draft ─→ review ─→ corrected ─→ desks ─→ approved ─→ issued 
   the letters of that unit and the units below it (`orgUnitPath`, `scopedOrgUnitIds`); the list
   shows only those letters. A global assignment covers all.
 - **Desks** (Letters page extras, roles are data): `review` (secretariat: pass the correction
-  or return it), `sign` (Secretary-General desk), `sign_coordinator` (second desk, only for
+  or return it), `sign` (signer desk), `sign_coordinator` (top desk, only for
   types that require it), `issue`, `cancel`. Nobody signs before the correction is passed;
   one person never holds both desks of a letter.
 - **Issue** (`letters.issue`), ONE transaction: the next number from
@@ -60,14 +60,19 @@ draft ─→ review ─→ corrected ─→ desks ─→ approved ─→ issued 
   cancel), never revertible (a step is undone by returning or cancelling). The snapshot stores
   the body's length, not the body.
 - **Letter types** (`letter_types.edit`, `/letters?tab=types`): name, code (unique case-insensitively,
-  trimmed), number pattern (checked, with a live example), digits of `{nomor}`, Coordinator desk,
+  trimmed), number pattern (checked, with a live example), digits of `{nomor}`, top desk,
   recipient, whether the verification page shows the content to anyone, in use, order.
   Deactivated, never deleted. The code is fixed once a letter of the type has been numbered: it
   is part of every `contentDigest`, so changing it would make the public verification report
   those letters as altered. Give the permissions in the Role Manager, as in PPIDK: the
-  Secretary-General's role every desk but the Coordinator's plus letter types and incoming
-  letters; the Coordinator's role `sign_coordinator` and `cancel`; directors and directorate
+  signer desk's role every desk but the top desk's plus letter types and incoming
+  letters; the top desk's role `sign_coordinator` and `cancel`; directors and directorate
   secretaries `letters.edit` (scoped to their unit by the appointment).
+- **Desk titles** (step 10.1): the two desks are named by the letter's own period
+  (`deskTitle(period, "signer" | "coordinator")`, default "Sekretaris Eksekutif" / "Sekretaris
+  Jenderal"; `organization.md`). The Letters page, the signature block of the PDF and the signers
+  frozen at issue print them, so a letter of period A keeps A's titles after period B renames
+  them. Issued letters keep their frozen `signers`; new ones use the titles in force at issue.
 - Not built yet: PPIDK's format checker (warnings) and notifications to the desks.
 
 ## Letter PDF, letterhead, archive (D1, D9)

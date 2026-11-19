@@ -61,14 +61,14 @@ const letter: Letter = {
   signers: [
     {
       name: "Budi K",
-      desk: "Koordinator PPIDK Asia-Oseania",
+      desk: "Sekretaris Jenderal PPIDK Asia-Oseania",
       position: null,
       period: "2026/2027",
       at,
     },
     {
       name: "Rina S",
-      desk: "Sekretaris Jenderal PPIDK Asia-Oseania",
+      desk: "Sekretaris Eksekutif PPIDK Asia-Oseania",
       position: "Sekjen",
       period: "2026/2027",
       at,
@@ -141,13 +141,13 @@ describe("letter desks as printed", () => {
   it("issued letters print the names frozen at issue; others the current names", () => {
     expect(letterDesks(letter, context)).toEqual([
       {
-        label: "Koordinator PPIDK Asia-Oseania",
+        label: "Sekretaris Jenderal PPIDK Asia-Oseania",
         name: "Budi K",
         signedOn: "2 November 2026",
         signature: null,
       },
       {
-        label: "Sekretaris Jenderal PPIDK Asia-Oseania",
+        label: "Sekretaris Eksekutif PPIDK Asia-Oseania",
         name: "Rina S",
         signedOn: "2 November 2026",
         signature: null,
@@ -155,9 +155,14 @@ describe("letter desks as printed", () => {
     ]);
     const corrected = { ...letter, status: "corrected" as const, signers: [], coordinator: null };
     expect(letterDesks(corrected, context)).toEqual([
-      { label: "Koordinator PPIDK Asia-Oseania", name: null, signedOn: null, signature: null },
       {
         label: "Sekretaris Jenderal PPIDK Asia-Oseania",
+        name: null,
+        signedOn: null,
+        signature: null,
+      },
+      {
+        label: "Sekretaris Eksekutif PPIDK Asia-Oseania",
         name: "Now Renamed",
         signedOn: "2 November 2026",
         signature: null,

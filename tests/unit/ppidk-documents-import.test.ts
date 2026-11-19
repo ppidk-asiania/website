@@ -342,8 +342,8 @@ describe("PPIDK documents import (step 4.10)", () => {
       note: "Narasumber",
       activity: "LKMM 2026",
       signers: [
-        { name: "Rio", desk: "Koordinator PPIDK Asia-Oseania" },
-        { name: "Ana", desk: "Sekretaris Jenderal PPIDK Asia-Oseania" },
+        { name: "Rio", desk: "Sekretaris Jenderal PPIDK Asia-Oseania" },
+        { name: "Ana", desk: "Sekretaris Eksekutif PPIDK Asia-Oseania" },
       ],
     });
     expect(await verify("SHEET-22222")).toMatchObject({

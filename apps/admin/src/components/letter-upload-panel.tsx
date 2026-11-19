@@ -18,18 +18,19 @@ const DEFAULTS: Record<Key, Spot & { sizeMm?: number }> = {
   secretary: { page: 1, xMm: 130, yMm: 230 },
   coordinator: { page: 1, xMm: 30, yMm: 230 },
 };
-const LABELS: Record<Key, string> = {
-  qr: "QR and code",
-  secretary: "Secretary-General's signature",
-  coordinator: "Coordinator's signature",
-};
 
 export function LetterUploadPanel(props: {
   letter: LetterItem;
+  deskTitles: { coordinator: string; signer: string };
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const { letter, onDone, onError } = props;
+  const { letter, deskTitles, onDone, onError } = props;
+  const LABELS: Record<Key, string> = {
+    qr: "QR and code",
+    secretary: `${deskTitles.signer}'s signature`,
+    coordinator: `${deskTitles.coordinator}'s signature`,
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const keys: Key[] = letter.requiresCoordinator

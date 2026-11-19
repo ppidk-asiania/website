@@ -25,7 +25,12 @@ import {
   type UploadedLetterFile,
   type UploadPlacement,
 } from "@website/domain/documents";
-import { orgUnitPath, type OrgUnit } from "@website/domain/organizations";
+import {
+  DEFAULT_PERIOD_DESKS,
+  orgUnitPath,
+  type OrgUnit,
+  type PeriodDesks,
+} from "@website/domain/organizations";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { sha256Hex } from "@website/security";
 import { safeId } from "@website/security/validation";
@@ -507,7 +512,10 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
         const signers: SignerSnapshot[] = [];
         for (const d of signed) {
           signers.push(
-            await signerSnapshot(tx, d, letter, type, unit, period.get("name") as string | null),
+            await signerSnapshot(tx, d, letter, type, unit, {
+              name: period.get("name") as string | null,
+              desks: (period.get("desks") as PeriodDesks | undefined) ?? DEFAULT_PERIOD_DESKS,
+            }),
           );
         }
         let code = makeVerificationCode(random);
@@ -580,7 +588,7 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
     letter: Letter,
     type: LetterType,
     unit: OrgUnit,
-    period: string | null,
+    period: { name: string | null; desks: PeriodDesks },
   ): Promise<SignerSnapshot> {
     const signature = letter[d] as DeskSignature;
     const [user, seats] = await Promise.all([
@@ -600,9 +608,9 @@ export function createSqlLetterStore(db: Database, random: (n: number) => number
         (seat?.get("name") as string | undefined) ??
         (user.get("name") as string | null | undefined) ??
         (user.get("email") as string),
-      desk: deskLabel(d, type, unit.name),
+      desk: deskLabel(d, type, unit.name, period),
       position: (seat?.get("title") as string | undefined) ?? null,
-      period,
+      period: period.name,
       at: signature.at,
     };
   }

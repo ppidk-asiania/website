@@ -195,8 +195,8 @@ export function createNotices(deps: NoticeDeps) {
       } else if (saved.status === "reviewed") {
         await desk(
           "finance.authorize",
-          "Pengajuan keuangan menunggu otorisasi koordinator.",
-          "A finance request waits for the coordinator's authorisation.",
+          "Pengajuan keuangan menunggu otorisasi.",
+          "A finance request waits for authorisation.",
         );
       } else if (saved.status === "authorized") {
         await desk(

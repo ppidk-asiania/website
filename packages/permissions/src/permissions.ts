@@ -37,15 +37,15 @@ export const ADMIN_PAGES = {
     extras: {
       review: "Review applications (revision, fail, pass to interview)",
       offer: "Offer seats",
-      confirm: "Approve placements and ratify (Sekjen)",
+      confirm: "Approve placements and ratify",
     },
   },
   letters: {
     label: "Letters",
     extras: {
       review: "Correct and pass or return letters (secretariat)",
-      sign: "Sign as Secretary-General",
-      sign_coordinator: "Sign as Coordinator",
+      sign: "Sign - signer desk",
+      sign_coordinator: "Sign - top desk",
       issue: "Issue letters (give the number)",
       cancel: "Cancel issued letters",
     },
@@ -92,7 +92,7 @@ export const ADMIN_PAGES = {
     label: "Finance requests",
     extras: {
       review: "Review requests (treasurer)",
-      authorize: "Authorise requests (coordinator)",
+      authorize: "Authorise requests (top desk)",
       pay: "Mark requests paid with proof of transfer",
       cashbook: "Write manual cash book entries (treasurer)",
       export: "Export the cash report (CSV, PDF)",

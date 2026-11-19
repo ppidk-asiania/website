@@ -5,6 +5,9 @@ export interface PeriodItem {
   version: number;
   name: string;
   cabinet: string;
+  coreLabel: string;
+  coordinatorTitle: string;
+  signerTitle: string;
   startsOn: string;
   endsOn: string;
   vision: string;
@@ -19,6 +22,9 @@ export function toPeriodItem(p: Period): PeriodItem {
     version: p.version,
     name: p.name,
     cabinet: p.cabinet,
+    coreLabel: p.coreLabel,
+    coordinatorTitle: p.desks.coordinator.title,
+    signerTitle: p.desks.signer.title,
     startsOn: p.startsOn,
     endsOn: p.endsOn,
     vision: p.vision,

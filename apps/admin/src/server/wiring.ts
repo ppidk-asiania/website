@@ -203,7 +203,7 @@ export async function letterContext(
   if (!type) return null;
   const names = new Map([...people].map(([uid, u]) => [uid, u.name ?? u.email ?? uid]));
   return {
-    context: { type, unitName: unit?.name ?? "", names, letterhead: settings.letterhead },
+    context: { type, unitName: unit?.name ?? "", names, letterhead: settings.letterhead, period },
     period: period?.name ?? null,
   };
 }
@@ -603,6 +603,7 @@ export const lpjActions = lazyEnv(() =>
 export const lpjFile = lazyEnv(() =>
   createLpjFileRoute({
     getLpj: (id) => adminStores().lpj.get(id),
+    period: (id) => adminStores().periods.get(id),
     names: async (uids) => {
       const people = await adminStores().accounts.getMany(uids);
       return new Map([...people].map(([uid, u]) => [uid, u.name ?? u.email ?? uid]));

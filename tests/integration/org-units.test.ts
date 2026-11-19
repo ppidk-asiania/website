@@ -72,11 +72,11 @@ describe("organisation structure (org units)", () => {
   it("stores parentId and the ancestor path; a unit's path covers its role scope", async () => {
     expect(
       await actions().save(...as(staff(["organizations.edit"])))({
-        ...unit("Koordinator", "KOOR", null, "koordinator"),
+        ...unit("Koordinator", "KOOR", null, "sekretaris_jenderal"),
         version: null,
       }),
     ).toEqual({ ok: false, error: "forbidden" });
-    const koor = await create("Koordinator", "koor", null, "koordinator");
+    const koor = await create("Koordinator", "koor", null, "sekretaris_jenderal");
     const media = await create("Direktorat Media", "MED", koor);
     const design = await create("Bidang Desain", "MED-DSN", media, "bidang");
     expect(await units.get(design)).toMatchObject({
@@ -123,7 +123,7 @@ describe("organisation structure (org units)", () => {
   });
 
   it("refuses a duplicate code in the period, a parent from elsewhere and parent changes on save", async () => {
-    const koor = await create("Koordinator", "KOOR", null, "koordinator");
+    const koor = await create("Koordinator", "KOOR", null, "sekretaris_jenderal");
     expect(
       await actions().save(...as(secretary))({ ...unit("Again", "koor", null), version: null }),
     ).toMatchObject({ error: "refused", issues: [expect.stringContaining("code")] });
@@ -156,8 +156,8 @@ describe("organisation structure (org units)", () => {
   });
 
   it("moving a unit rewrites the whole subtree's paths in one transaction; cycles are refused", async () => {
-    const koor = await create("Koordinator", "KOOR", null, "koordinator");
-    const sekjen = await create("Sekretaris Jenderal", "SEKJEN", koor, "sekjen");
+    const koor = await create("Koordinator", "KOOR", null, "sekretaris_jenderal");
+    const sekjen = await create("Sekretaris Jenderal", "SEKJEN", koor, "sekretaris_eksekutif");
     const media = await create("Direktorat Media", "MED", koor);
     const design = await create("Bidang Desain", "MED-DSN", media, "bidang");
     const staffUnit = await create("Staf Desain", "MED-DSN-S", design, "staf");
@@ -216,7 +216,7 @@ describe("organisation structure (org units)", () => {
   });
 
   it("deletes softly a unit without units below it; the delete can be reverted", async () => {
-    const koor = await create("Koordinator", "KOOR", null, "koordinator");
+    const koor = await create("Koordinator", "KOOR", null, "sekretaris_jenderal");
     const media = await create("Direktorat Media", "MED", koor);
     expect(
       await actions().remove(...as(staff(["structure.read"])))({ id: media, version: 1 }),
@@ -252,7 +252,7 @@ describe("organisation structure (org units)", () => {
   });
 
   it("an archived period's structure is read-only", async () => {
-    const koor = await create("Koordinator", "KOOR", null, "koordinator");
+    const koor = await create("Koordinator", "KOOR", null, "sekretaris_jenderal");
     const media = await create("Direktorat Media", "MED", koor);
     const db = fake.db as unknown as Db;
     const periods = createPeriodActions({

@@ -45,8 +45,8 @@
   settings document `settings/appointmentRoles` (data, edited on the Structure page with
   `roles.edit`; only existing custom roles, never built-in ones; "suggested" =
   `SUGGESTED_APPOINTMENT_ROLES`; create those roles in Role Manager → Edit Role first):
-  every officer → officer role (global); head of a core unit (coordinator, secretary general,
-  treasurer and deputies) → that seat's role (global); head / secretary of any other unit → the
+  every officer → officer role (global); head of a core unit (secretary general, executive secretary,
+  executive treasurer and deputies) → that seat's role (global); head / secretary of any other unit → the
   unit-head / unit-secretary role scoped to that unit (`derivedAssignments`). They carry
   `periodId`, `source: "appointment"` and `appointmentId`. Ending the appointment sets `revokedAt`
   on exactly those (a manual role stays) and ends the person's sessions; a role from an

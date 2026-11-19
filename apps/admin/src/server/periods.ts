@@ -47,7 +47,11 @@ export function createPeriodActions(deps: PeriodDeps) {
   const save = createGuardedAction({
     permission: "periods.edit",
     input: SaveInput,
-    handler: async ({ id, version, ...input }, _principal, audit) => {
+    handler: async (
+      { id, version, coordinatorTitle, signerTitle, ...input },
+      _principal,
+      audit,
+    ) => {
       const saved = await deps.periods.write(
         id ?? null,
         version,
@@ -62,6 +66,13 @@ export function createPeriodActions(deps: PeriodDeps) {
           return {
             ...input,
             ...dates,
+            desks: {
+              coordinator: {
+                title: coordinatorTitle,
+                orgUnitId: current?.desks.coordinator.orgUnitId ?? null,
+              },
+              signer: { title: signerTitle, orgUnitId: current?.desks.signer.orgUnitId ?? null },
+            },
             vision: current?.vision ?? "",
             mission: current?.mission ?? "",
             lpjDeadlineDays: current?.lpjDeadlineDays ?? 30,

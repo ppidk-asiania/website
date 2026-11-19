@@ -115,12 +115,15 @@ export const EVENT_TYPE_LABELS = {
 } as const satisfies Record<EventType, Label>;
 
 export const ORG_UNIT_TYPE_LABELS = {
-  koordinator: { id: "Koordinator", en: "Coordinator" },
-  wakil_koordinator: { id: "Wakil Koordinator", en: "Deputy Coordinator" },
-  sekjen: { id: "Sekretaris Jenderal", en: "Secretary General" },
-  wasekjen: { id: "Wakil Sekretaris Jenderal", en: "Deputy Secretary General" },
-  bendahara: { id: "Bendahara Umum", en: "Treasurer" },
-  wakil_bendahara: { id: "Wakil Bendahara Umum", en: "Deputy Treasurer" },
+  sekretaris_jenderal: { id: "Sekretaris Jenderal", en: "Secretary General" },
+  wakil_sekretaris_jenderal: { id: "Wakil Sekretaris Jenderal", en: "Deputy Secretary General" },
+  sekretaris_eksekutif: { id: "Sekretaris Eksekutif", en: "Executive Secretary" },
+  wakil_sekretaris_eksekutif: {
+    id: "Wakil Sekretaris Eksekutif",
+    en: "Deputy Executive Secretary",
+  },
+  bendahara: { id: "Bendahara Eksekutif", en: "Executive Treasurer" },
+  wakil_bendahara: { id: "Wakil Bendahara Eksekutif", en: "Deputy Executive Treasurer" },
   direktorat: { id: "Direktorat", en: "Directorate" },
   biro: { id: "Biro", en: "Bureau" },
   bidang: { id: "Bidang", en: "Field" },
@@ -234,7 +237,7 @@ export const LPJ_DESK_LABELS = {
 export const FINANCE_STATUS_LABELS = {
   draft: { id: "Draf", en: "Draft" },
   submitted: { id: "Diajukan", en: "Submitted (treasurer)" },
-  reviewed: { id: "Direview bendahara", en: "Reviewed (coordinator)" },
+  reviewed: { id: "Direview bendahara", en: "Reviewed (to authorise)" },
   authorized: { id: "Disetujui", en: "Authorised (to pay)" },
   paid: { id: "Dicairkan", en: "Paid" },
   done: { id: "Selesai", en: "Done" },

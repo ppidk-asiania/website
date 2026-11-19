@@ -73,7 +73,7 @@ beforeEach(() => {
   const db = fake.db as unknown as Db;
   fake.docs.set("settings/activePeriod", { periodId: "p2026" });
   fake.docs.set("periods/p2026", { status: "active" });
-  fake.docs.set("orgUnits/koor", unit("koor", "koordinator"));
+  fake.docs.set("orgUnits/koor", unit("koor", "sekretaris_jenderal"));
   fake.docs.set("orgUnits/media", unit("media", "direktorat"));
   fake.docs.set("orgUnits/old", unit("old", "direktorat", "p2025"));
   fake.docs.set("roles/officer", role(["events.read", "structure.read"]));
@@ -139,13 +139,13 @@ describe("derived roles of an appointment (B7, PPIDK PenugasanService)", () => {
       { roleId: "officer", scope: { type: "global" } },
       { roleId: "directorate_secretary", scope: { type: "orgUnit", orgUnitId: "dsn" } },
     ]);
-    expect(derivedAssignments("head", { id: "koor", type: "koordinator" }, map)).toEqual([
+    expect(derivedAssignments("head", { id: "koor", type: "sekretaris_jenderal" }, map)).toEqual([
       { roleId: "officer", scope: { type: "global" } },
       { roleId: "coordinator", scope: { type: "global" } },
     ]);
-    expect(derivedAssignments("secretary", { id: "sj", type: "sekjen" }, map)).toEqual([
-      { roleId: "officer", scope: { type: "global" } },
-    ]);
+    expect(
+      derivedAssignments("secretary", { id: "sj", type: "sekretaris_eksekutif" }, map),
+    ).toEqual([{ roleId: "officer", scope: { type: "global" } }]);
   });
 });
 

@@ -42,6 +42,7 @@ import {
 
 interface Props {
   periodName: string | null;
+  coordinatorTitle: string;
   initial: FinanceItem[];
   units: { id: string; name: string }[];
   desks: {
@@ -82,7 +83,7 @@ export function FinancePage(props: Props) {
   return <FinanceList key={pathname} {...props} />;
 }
 
-function FinanceList({ periodName, initial: items, units, desks }: Props) {
+function FinanceList({ periodName, coordinatorTitle, initial: items, units, desks }: Props) {
   const toast = useToastMessage();
   const router = useRouter();
   const [tab, setTab] = useState<FinanceTab>("all");
@@ -430,7 +431,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
             ) : null}
             <dt>Treasurer review</dt>
             <dd>{r.treasurer ?? "—"}</dd>
-            <dt>Coordinator authorisation</dt>
+            <dt>{coordinatorTitle} authorisation</dt>
             <dd>{r.coordinator ?? "—"}</dd>
             {r.revisionNote ? (
               <>
@@ -616,7 +617,7 @@ function FinanceList({ periodName, initial: items, units, desks }: Props) {
                     icon="check"
                     onClick={() =>
                       ask({
-                        title: "Authorise (coordinator)",
+                        title: `Authorise (${coordinatorTitle})`,
                         action: authorizeFinanceAction,
                         done: "Request authorised",
                         required: false,

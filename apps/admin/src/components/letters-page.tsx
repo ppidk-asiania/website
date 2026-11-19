@@ -88,6 +88,7 @@ interface Props {
   units: { id: string; name: string }[];
   viewerId: string;
   desks: LetterDesks;
+  deskTitles: { coordinator: string; signer: string };
   canWrite: boolean;
   canManageTypes: boolean;
   sectionTabs: ReactNode;
@@ -95,16 +96,18 @@ interface Props {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const ACTION_LABELS: Record<Exclude<LetterActionKey, "edit" | "delete">, string> = {
+const actionLabels = (
+  titles: Props["deskTitles"],
+): Record<Exclude<LetterActionKey, "edit" | "delete">, string> => ({
   submit: "Submit for review",
   pass: "Pass correction",
   return: "Return to draft",
-  signSecretary: "Sign (Secretary-General)",
-  signCoordinator: "Sign (Coordinator)",
+  signSecretary: `Sign (${titles.signer})`,
+  signCoordinator: `Sign (${titles.coordinator})`,
   issue: "Issue and number",
   issueFile: "Issue the stamped PDF",
   cancel: "Cancel letter",
-};
+});
 
 export type LetterSection = "outgoing" | "incoming" | "types";
 
@@ -132,7 +135,8 @@ export function LettersPage(props: Props) {
 }
 
 function LettersList(props: Props) {
-  const { initial: items, types, units, viewerId, desks, canWrite, periodName } = props;
+  const { initial: items, types, units, viewerId, desks, deskTitles, canWrite, periodName } = props;
+  const labels = actionLabels(deskTitles);
   const toast = useToastMessage();
   const router = useRouter();
   const [tab, setTab] = useState<LetterTab>("all");
@@ -253,7 +257,7 @@ function LettersList(props: Props) {
       case "signSecretary":
         return void act(signLetterAction, "Signed");
       case "signCoordinator":
-        return void act(signLetterAsCoordinatorAction, "Signed as Coordinator");
+        return void act(signLetterAsCoordinatorAction, `Signed as ${deskTitles.coordinator}`);
       case "return":
       case "cancel":
       case "issue":
@@ -389,7 +393,7 @@ function LettersList(props: Props) {
               {errorFor(
                 "typeId",
                 type?.requiresCoordinator
-                  ? "Signed by the Secretary-General and the Coordinator."
+                  ? `Signed by the ${deskTitles.signer} and the ${deskTitles.coordinator}.`
                   : undefined,
               )}
             </div>
@@ -570,7 +574,7 @@ function LettersList(props: Props) {
             </dd>
             <dt>Written by</dt>
             <dd>{current.authorName}</dd>
-            <dt>Secretary-General</dt>
+            <dt>{deskTitles.signer}</dt>
             <dd>
               {current.secretary
                 ? `${current.secretary.name}, ${formatInZone(current.secretary.at, zone)}`
@@ -578,7 +582,7 @@ function LettersList(props: Props) {
             </dd>
             {current.requiresCoordinator ? (
               <>
-                <dt>Coordinator</dt>
+                <dt>{deskTitles.coordinator}</dt>
                 <dd>
                   {current.coordinator
                     ? `${current.coordinator.name}, ${formatInZone(current.coordinator.at, zone)}`
@@ -611,6 +615,7 @@ function LettersList(props: Props) {
           {current.source === "upload" && current.status === "awaiting_file" ? (
             <LetterUploadPanel
               letter={current}
+              deskTitles={deskTitles}
               onDone={(message) => {
                 toast.show(message);
                 router.refresh();
@@ -677,9 +682,7 @@ function LettersList(props: Props) {
                     disabled={busy}
                     onClick={() => runAction(key)}
                   >
-                    {key === "issue" && current.source === "upload"
-                      ? "Take number"
-                      : ACTION_LABELS[key]}
+                    {key === "issue" && current.source === "upload" ? "Take number" : labels[key]}
                   </Button>
                 ),
               )}

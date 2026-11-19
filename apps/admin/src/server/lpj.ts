@@ -14,6 +14,7 @@ import {
   type LpjDesk,
   type LpjReport,
 } from "@website/domain/programs";
+import { deskTitle, type Period } from "@website/domain/organizations";
 import { RuleViolationError } from "@website/domain/shared";
 import type { ReportPdfInput } from "@website/pdf";
 import {
@@ -115,6 +116,7 @@ export function lpjSheet(
   lpj: LpjReport,
   names: ReadonlyMap<string, string>,
   now: Date,
+  period: Pick<Period, "desks"> | null = null,
 ): ReportPdfInput {
   const name = (uid: string) => names.get(uid) ?? uid;
   const desk = (label: string, signature: LpjReport["secretariat"]) =>
@@ -160,7 +162,7 @@ export function lpjSheet(
           `Diajukan / Submitted: ${lpj.submittedBy && lpj.submittedAt ? `${name(lpj.submittedBy)}, ${day(lpj.submittedAt)}` : "-"}`,
           desk("Sekretariat / Secretariat", lpj.secretariat),
           desk("Bendahara / Treasurer", lpj.treasurer),
-          desk("Persetujuan / Approval", lpj.approval),
+          desk(`Persetujuan / Approval (${deskTitle(period, "signer")})`, lpj.approval),
         ],
       },
     ],
@@ -173,6 +175,7 @@ const notFound = () =>
 
 export function createLpjFileRoute(deps: {
   readonly getLpj: (id: string) => Promise<LpjReport | null>;
+  readonly period: (id: string) => Promise<Pick<Period, "desks"> | null>;
   readonly names: (uids: readonly string[]) => Promise<ReadonlyMap<string, string>>;
   readonly render: (input: ReportPdfInput) => Promise<Uint8Array>;
   readonly now: () => Date;
@@ -191,7 +194,12 @@ export function createLpjFileRoute(deps: {
         (u): u is string => typeof u === "string",
       );
       const bytes = await deps.render(
-        lpjSheet(lpj, await deps.names([...new Set(uids)]), deps.now()),
+        lpjSheet(
+          lpj,
+          await deps.names([...new Set(uids)]),
+          deps.now(),
+          await deps.period(lpj.periodId),
+        ),
       );
       return new Response(new Uint8Array(bytes), {
         headers: {

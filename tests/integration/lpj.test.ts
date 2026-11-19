@@ -285,6 +285,7 @@ describe("LPJ PDF, rendered at download time", () => {
   const route = (render = renderReportPdf) =>
     createLpjFileRoute({
       getLpj: (id) => createSqlLpjStore(db()).get(id),
+      period: () => Promise.resolve(null),
       names,
       render,
       now: () => clock,
@@ -303,7 +304,9 @@ describe("LPJ PDF, rendered at download time", () => {
     expect(text).toContain("Laporan Pertanggungjawaban");
     expect(text).toContain("Sari Sekretariat, 2026-11-04");
     expect(text).toContain("Bendahara / Treasurer: Belum diperiksa / not yet reviewed");
-    expect(text).toContain("Persetujuan / Approval: Belum diperiksa / not yet reviewed");
+    expect(text).toContain(
+      "Persetujuan / Approval (Sekretaris Eksekutif): Belum diperiksa / not yet reviewed",
+    );
     expect(text).toContain("JPY 50,000");
     expect(text).toContain("JPY 42,000");
   });
@@ -320,6 +323,16 @@ describe("LPJ PDF, rendered at download time", () => {
     expect(lines).toContain("Realisasi / Spent: -");
     expect(lines).toContain("Diajukan / Submitted: -");
     expect(lines).toContain("PIC: -");
+    expect(lines).toContain("Persetujuan / Approval (Sekretaris Eksekutif): ");
+    const renamed = lpjSheet(lpj, new Map(), clock, {
+      desks: {
+        coordinator: { title: "", orgUnitId: null },
+        signer: { title: "Sekretaris Umum", orgUnitId: null },
+      },
+    });
+    expect(renamed.sections.flatMap((s) => s.lines).join("\n")).toContain(
+      "Persetujuan / Approval (Sekretaris Umum): ",
+    );
     const done = lpjSheet(
       {
         ...lpj,

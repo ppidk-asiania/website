@@ -177,9 +177,38 @@ export interface ChapterReader {
 export const PERIOD_STATUSES = ["draft", "active", "archived"] as const;
 export type PeriodStatus = (typeof PERIOD_STATUSES)[number];
 
+export const DEFAULT_CORE_LABEL = "Bapelha Inti";
+
+export interface PeriodDesk {
+  readonly title: string;
+  readonly orgUnitId: string | null;
+}
+export interface PeriodDesks {
+  readonly coordinator: PeriodDesk;
+  readonly signer: PeriodDesk;
+}
+export type PeriodDeskKey = keyof PeriodDesks;
+
+/** An empty title means the default: the title of the desk's default unit type. */
+export const DEFAULT_PERIOD_DESKS: PeriodDesks = {
+  coordinator: { title: "", orgUnitId: null },
+  signer: { title: "", orgUnitId: null },
+};
+const DEFAULT_DESK_TITLES: Readonly<Record<PeriodDeskKey, string>> = {
+  coordinator: "Sekretaris Jenderal",
+  signer: "Sekretaris Eksekutif",
+};
+
+export const deskTitle = (
+  period: { readonly desks: PeriodDesks } | null | undefined,
+  desk: PeriodDeskKey,
+): string => period?.desks[desk].title.trim() || DEFAULT_DESK_TITLES[desk];
+
 export interface Period extends EntityMeta {
   readonly name: string;
   readonly cabinet: string;
+  readonly coreLabel: string;
+  readonly desks: PeriodDesks;
   readonly startsOn: string;
   readonly endsOn: string;
   readonly vision: string;
@@ -201,6 +230,11 @@ export const PeriodFormSchema = z
       "Write the years of the period, e.g. 2026-2027.",
     ),
     cabinet: safeText(120).pipe(z.string().min(2, "Enter the cabinet name.")),
+    coreLabel: safeText(80)
+      .pipe(z.string().min(2, "Enter the core group's name."))
+      .default(DEFAULT_CORE_LABEL),
+    coordinatorTitle: safeText(80, { allowEmpty: true }).default(""),
+    signerTitle: safeText(80, { allowEmpty: true }).default(""),
   })
   .strict();
 
@@ -209,10 +243,10 @@ export const canDeletePeriod = (status: PeriodStatus): boolean => status !== "ac
 export const canActivatePeriod = (status: PeriodStatus): boolean => status === "draft";
 
 export const ORG_UNIT_TYPES = [
-  "koordinator",
-  "wakil_koordinator",
-  "sekjen",
-  "wasekjen",
+  "sekretaris_jenderal",
+  "wakil_sekretaris_jenderal",
+  "sekretaris_eksekutif",
+  "wakil_sekretaris_eksekutif",
   "bendahara",
   "wakil_bendahara",
   "direktorat",
@@ -341,10 +375,10 @@ export const APPOINTMENT_SEATS = ["head", "secretary", "member"] as const;
 export type AppointmentSeat = (typeof APPOINTMENT_SEATS)[number];
 
 export const CORE_UNIT_TYPES = [
-  "koordinator",
-  "wakil_koordinator",
-  "sekjen",
-  "wasekjen",
+  "sekretaris_jenderal",
+  "wakil_sekretaris_jenderal",
+  "sekretaris_eksekutif",
+  "wakil_sekretaris_eksekutif",
   "bendahara",
   "wakil_bendahara",
 ] as const satisfies readonly OrgUnitType[];
@@ -372,10 +406,11 @@ export const SUGGESTED_APPOINTMENT_ROLES: AppointmentRoleMap = {
   unitHead: "director",
   unitSecretary: "directorate_secretary",
   core: {
-    koordinator: "coordinator",
-    wakil_koordinator: "coordinator",
-    sekjen: "secretary_general",
-    wasekjen: "secretary_general",
+    // Role ids are data and did not move: people and powers stayed, only the names changed.
+    sekretaris_jenderal: "coordinator",
+    wakil_sekretaris_jenderal: "coordinator",
+    sekretaris_eksekutif: "secretary_general",
+    wakil_sekretaris_eksekutif: "secretary_general",
     bendahara: "treasurer",
     wakil_bendahara: "treasurer",
   },

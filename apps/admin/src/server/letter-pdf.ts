@@ -15,6 +15,7 @@ import {
   type LetterheadImage,
   type LetterType,
 } from "@website/domain/documents";
+import type { Period } from "@website/domain/organizations";
 import {
   renderCertificatePdf,
   renderLetterPdf,
@@ -51,6 +52,8 @@ export interface LetterContext {
   readonly unitName: string;
   readonly names: ReadonlyMap<string, string>;
   readonly letterhead: Letterhead;
+  /** The letter's own period: its desk titles are printed. Missing = the defaults. */
+  readonly period?: Pick<Period, "desks"> | null;
 }
 
 export class ArchiveDamagedError extends Error {
@@ -67,7 +70,7 @@ export function letterDesks(
     : (["secretary"] as const);
   return order.map((desk) => {
     const signature = letter[desk];
-    const label = deskLabel(desk, context.type, context.unitName);
+    const label = deskLabel(desk, context.type, context.unitName, context.period);
     const frozen = letter.signers.find((s) => s.desk === label && signature !== null);
     return {
       label,

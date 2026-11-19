@@ -58,7 +58,7 @@ function example(draft: Draft): string {
       seq: 7,
       padding: Number(draft.numberPadding) || 3,
       typeCode: draft.code || "SU",
-      unitCode: "SEKJEN",
+      unitCode: "SEK",
       activityCode: "LKMM",
       date: new Date().toISOString().slice(0, 10),
     });
@@ -313,7 +313,7 @@ function LetterTypesList({
       width: "26%",
       render: (t) => (
         <span className="admin-table__sub">
-          {t.requiresCoordinator ? "Secretary-General + Coordinator" : "Secretary-General / unit"}
+          {t.requiresCoordinator ? "Signer desk + top desk" : "Signer desk / unit"}
         </span>
       ),
     },
@@ -468,7 +468,7 @@ function LetterTypesList({
               {errorFor("description")}
             </div>
             <div className="admin-field admin-form-grid__full">
-              {check("requiresCoordinator", "Also signed by the Coordinator (second desk)")}
+              {check("requiresCoordinator", "Also signed by the top desk (second desk)")}
               {check("requiresRecipient", "Has a recipient")}
               {check(
                 "contentPublic",

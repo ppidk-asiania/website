@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { orgUnitPath } from "@website/domain/organizations";
+import { deskTitle, orgUnitPath } from "@website/domain/organizations";
 import { can, canInSomeScope, scopedOrgUnitIds, type Principal } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { toIncomingItem } from "@/components/incoming-model";
@@ -89,6 +89,10 @@ async function outgoingSection(principal: Principal, sectionTabs: ReactNode) {
         .filter((u) => u.active && can(principal, "letters.edit", { orgUnitPath: orgUnitPath(u) }))
         .map((u) => ({ id: u.id, name: u.name }))}
       viewerId={principal.userId}
+      deskTitles={{
+        coordinator: deskTitle(period, "coordinator"),
+        signer: deskTitle(period, "signer"),
+      }}
       desks={{
         review: canInSomeScope(principal, "letters.review"),
         sign: canInSomeScope(principal, "letters.sign"),

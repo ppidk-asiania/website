@@ -134,7 +134,7 @@ describe("letter workflow (draft → review → corrected → desks → approved
     expect(both.status).toBe("approved");
     expect(desksOf(type())).toEqual(["secretary"]);
     expect(() => signDesk(corrected, type(), "coordinator", "koor", now)).toThrow(
-      "no Coordinator desk",
+      "no top signing desk",
     );
     expect(signDesk({ ...corrected }, type(), "secretary", "sekjen", now).status).toBe("approved");
     const reversed = signDesk(
@@ -179,13 +179,23 @@ describe("letter workflow (draft → review → corrected → desks → approved
     expect(() => cancelLetter(letter(), "x", now)).toThrow("Only numbered letters");
   });
 
-  it("desk labels as printed", () => {
-    expect(deskLabel("coordinator", type(), null)).toBe("Koordinator PPIDK Asia-Oseania");
+  it("desk labels as printed, from the period's desk titles", () => {
+    expect(deskLabel("coordinator", type(), null)).toBe("Sekretaris Jenderal PPIDK Asia-Oseania");
     expect(deskLabel("secretary", type({ requiresCoordinator: true }), "Media")).toBe(
-      "Sekretaris Jenderal PPIDK Asia-Oseania",
+      "Sekretaris Eksekutif PPIDK Asia-Oseania",
     );
     expect(deskLabel("secretary", type(), "Direktorat Media")).toBe("Direktorat Media");
     expect(deskLabel("secretary", type(), null)).toBe("PPIDK Asia-Oseania");
+    const period = {
+      desks: {
+        coordinator: { title: "Ketua Umum", orgUnitId: null },
+        signer: { title: "Sekretaris Umum", orgUnitId: null },
+      },
+    };
+    expect(deskLabel("coordinator", type(), null, period)).toBe("Ketua Umum PPIDK Asia-Oseania");
+    expect(deskLabel("secretary", type({ requiresCoordinator: true }), "Media", period)).toBe(
+      "Sekretaris Umum PPIDK Asia-Oseania",
+    );
   });
 });
 

@@ -4,6 +4,7 @@ import {
   type EducationLevel,
 } from "@website/domain/members";
 import {
+  DEFAULT_CORE_LABEL,
   derivedAssignments,
   ORG_UNIT_TYPES,
   type AppointmentRoleMap,
@@ -186,6 +187,17 @@ export function mapPpidk(
     set(`periods/${docId}`, {
       name: p["year_label"] ?? p["name"],
       cabinet: p["cabinet_name"] ?? "",
+      coreLabel: p["core_label"] || DEFAULT_CORE_LABEL,
+      desks: {
+        coordinator: {
+          title: p["coordinator_title"] ?? "",
+          orgUnitId: p["coordinator_org_unit_id"] ? id("unit", p["coordinator_org_unit_id"]) : null,
+        },
+        signer: {
+          title: p["signer_title"] ?? "",
+          orgUnitId: p["signer_org_unit_id"] ? id("unit", p["signer_org_unit_id"]) : null,
+        },
+      },
       startsOn: day(p["starts_on"]),
       endsOn: day(p["ends_on"]),
       vision: p["vision"] ?? "",

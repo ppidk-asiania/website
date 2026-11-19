@@ -12,7 +12,8 @@ shows the active chapters on `/map` (Asia–Oceania dot map, one marker per chap
 its card) and lists the same chapters with their count on About.
 
 Board periods (kepengurusan, feature A1) are kept on the **Organizations → Period** tab. The form
-has only the period (its years, e.g. 2026-2027) and the cabinet; the start and end dates come from
+has the period (its years, e.g. 2026-2027), the cabinet, the core group's name (`coreLabel`,
+default "Bapelha Inti") and the two desk titles (see "Seat and desk names" below); the start and end dates come from
 the years (1 January of the first, 31 December of the last). Vision, mission and the LPJ deadline
 are still stored (from the import; new periods get empty notes and 30 days). A new period is a
 draft; **Set as Active** makes it the active period and archives the one that was active;
@@ -32,6 +33,7 @@ These members are display data for the cabinet page only — not accounts and no
   `src/components/organizations-page.tsx`, rows in `chapters-model.ts`
 - Web: `apps/web/src/server/chapters.ts`, `src/app/map/…`, About `src/app/about/page.tsx`, map
   image `apps/web/public/map/asia-oceania.svg` (from PPIDK)
+- Seat and desk names (step 10.1): see the section below; `deskTitle` is in the same domain file.
 - Periods: `Period`, `PeriodFormSchema`, `periodDatesFromName`, `canChangePeriod`,
   `canActivatePeriod`, `canDeletePeriod` in the same domain file; database `packages/db/src/sql/periods.ts`
   (`periods/{id}`, `settings/activePeriod`); admin `apps/admin/src/server/periods.ts`, the Period
@@ -119,6 +121,30 @@ These members are display data for the cabinet page only — not accounts and no
   `structure.read` to see the list. Audit module `structure`, resource `orgUnit`; only DELETE
   entries are revertible (a revert of an edit would not rewrite the paths below the unit).
 
+### Seat and desk names (step 10.1)
+
+The statutes renamed the top seats; people and powers did not move, only names did.
+
+- Core unit types are `sekretaris_jenderal`, `wakil_sekretaris_jenderal`, `sekretaris_eksekutif`,
+  `wakil_sekretaris_eksekutif`, `bendahara` (label "Bendahara Eksekutif") and `wakil_bendahara`.
+  The old ids `koordinator`, `wakil_koordinator`, `sekjen`, `wasekjen` are removed, not swapped: a
+  stored unit with an old id fails the schema instead of silently changing meaning, and the PPIDK
+  import maps an unknown type to `staf`. Role ids in `SUGGESTED_APPOINTMENT_ROLES` are data and
+  kept (`coordinator`, `secretary_general`).
+- **Owner task**: run `infrastructure/scripts/rename-core-unit-types.mjs` once (needs
+  `DATABASE_URL`; dry run by default, `--apply` writes). It renames the stored unit types and the
+  keys of `settings/appointmentRoles` (`map.core`). Until it has run, a unit saved under an old
+  type cannot be edited, and appointing the head of a core unit reads no role for it.
+- A period has `coreLabel` (default "Bapelha Inti") and `desks`: `coordinator` (default title
+  "Sekretaris Jenderal") and `signer` (default "Sekretaris Eksekutif"), each `{ title, orgUnitId }`.
+  An empty title means the default. `deskTitle(period, desk)` is the one function every label
+  reads (letters page, letter PDF, finance page, LPJ sheet). `orgUnitId` is stored and imported
+  (`periods.core_label`, `coordinator_title`, `signer_title`, `coordinator_org_unit_id`,
+  `signer_org_unit_id`) but not yet used: binding a desk to a unit comes with step 10.2.
+- Code names (`coordinator`, `secretary` desks, `requiresCoordinator`, permission ids) did not
+  change; only labels did. Permission ids: `letters.sign` = signer desk, `letters.sign_coordinator`
+  = top desk, `finance.authorize` = top desk, `recruitment.confirm` = approve placements.
+
 ### Chapter officers, quarterly reports and risk signal (H1-H3)
 
 - Code: `packages/domain/src/organizations/chapter-records.ts` (quarter maths, signal, officer
@@ -129,7 +155,7 @@ These members are display data for the cabinet page only — not accounts and no
   warning shows from 60 days before the end; an empty end date reads "unknown", never "expired".
 - Report (`chapterReports/{chapterId}_{yyyy}Q{n}`): active members, activities, obstacles. The
   chapter admin (`organizations.edit` for that chapter) submits for its own chapter; a global
-  holder (secretariat/Sekjen) may submit on its behalf and the report is marked
+  holder (secretariat) may submit on its behalf and the report is marked
   `filledByCentre` (decided from the submitter's scope at submit time). Submitting again for the
   same quarter replaces it; reports are never deleted; a quarter that has not started is refused.
 - Signal (computed on read, shown next to the board's own `risk` note): only finished quarters

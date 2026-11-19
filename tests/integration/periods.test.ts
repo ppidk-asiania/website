@@ -81,6 +81,33 @@ describe("board periods (Organizations → Period)", () => {
     expect(activePeriodId()).toBeUndefined();
   });
 
+  it("saves the core label and the desk titles; a new period starts with the defaults", async () => {
+    const id = await create();
+    expect(await store.get(id)).toMatchObject({
+      coreLabel: "Bapelha Inti",
+      desks: {
+        coordinator: { title: "", orgUnitId: null },
+        signer: { title: "", orgUnitId: null },
+      },
+    });
+    const saved = await actions().save(...as(secretary))({
+      ...period,
+      id,
+      version: 1,
+      coreLabel: "Pengurus Harian",
+      coordinatorTitle: "Ketua Umum",
+      signerTitle: "Sekretaris Umum",
+    });
+    expect(saved).toMatchObject({ ok: true });
+    expect(await store.get(id)).toMatchObject({
+      coreLabel: "Pengurus Harian",
+      desks: {
+        coordinator: { title: "Ketua Umum", orgUnitId: null },
+        signer: { title: "Sekretaris Umum", orgUnitId: null },
+      },
+    });
+  });
+
   it("activating archives the previous active period, in one transaction, audited", async () => {
     const first = await create({ name: "2025/2026" });
     const second = await create();

@@ -5,11 +5,16 @@ import {
   createSqlLetterStore,
   createSqlLetterTypeStore,
 } from "@website/db/sql";
-import { DEFAULT_LETTERHEAD, letterCanonical, type Letter } from "@website/domain/documents";
+import {
+  DEFAULT_LETTERHEAD,
+  letterCanonical,
+  type Letter,
+  type LetterType,
+} from "@website/domain/documents";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { pdfText } from "@website/pdf";
-import { createLetterPdf } from "../../apps/admin/src/server/letter-pdf";
+import { createLetterPdf, letterDesks } from "../../apps/admin/src/server/letter-pdf";
 import { createLetterActions } from "../../apps/admin/src/server/letters";
 import { fakeDb } from "../support/fake-db";
 
@@ -413,14 +418,14 @@ describe("letters workflow", () => {
     expect(issued.signers).toEqual([
       {
         name: "koor@example.org",
-        desk: "Koordinator PPIDK Asia-Oseania",
+        desk: "Sekretaris Jenderal PPIDK Asia-Oseania",
         position: null,
         period: "2026/2027",
         at: clock,
       },
       {
         name: "Rina Sekjen",
-        desk: "Sekretaris Jenderal PPIDK Asia-Oseania",
+        desk: "Sekretaris Eksekutif PPIDK Asia-Oseania",
         position: "Sekretaris Jenderal",
         period: "2026/2027",
         at: clock,
@@ -462,6 +467,37 @@ describe("letters workflow", () => {
       .map(([, e]) => (e as { action: string }).action);
     expect(audit).toContain("PUBLISH");
     expect(audit).toContain("UNPUBLISH");
+  });
+
+  it("freezes the period's own desk titles; a later period renaming them changes nothing issued", async () => {
+    const desks = (coordinator: string, signer: string) => ({
+      coordinator: { title: coordinator, orgUnitId: null },
+      signer: { title: signer, orgUnitId: null },
+    });
+    fake.docs.set("periods/p1", {
+      name: "2026/2027",
+      desks: desks("Ketua Umum", "Sekretaris Umum"),
+    });
+    const { id, version } = await approvedLetter({ requiresCoordinator: true });
+    await actions().issue(...as(secretariat))({ id, version });
+    fake.docs.set("periods/p2", { name: "2027/2028", desks: desks("Presiden", "Sekjen Baru") });
+    const issued = (await letters().get(id)) as Letter;
+    expect(issued.signers.map((s) => s.desk)).toEqual([
+      "Ketua Umum PPIDK Asia-Oseania",
+      "Sekretaris Umum PPIDK Asia-Oseania",
+    ]);
+    const printed = (period: { desks: ReturnType<typeof desks> }) =>
+      letterDesks(issued, {
+        type: { requiresCoordinator: true } as LetterType,
+        unitName: "",
+        names: new Map(),
+        letterhead: DEFAULT_LETTERHEAD,
+        period,
+      }).map((d) => [d.label, d.name]);
+    expect(printed({ desks: desks("Ketua Umum", "Sekretaris Umum") })).toEqual([
+      ["Ketua Umum PPIDK Asia-Oseania", "koor@example.org"],
+      ["Sekretaris Umum PPIDK Asia-Oseania", "Rina Sekjen"],
+    ]);
   });
 
   it("refuses issue before approval, uploads, and the wrong desks; returning clears the desks", async () => {

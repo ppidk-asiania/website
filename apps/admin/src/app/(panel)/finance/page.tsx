@@ -1,4 +1,4 @@
-import { orgUnitPath } from "@website/domain/organizations";
+import { deskTitle, orgUnitPath } from "@website/domain/organizations";
 import { can, canInSomeScope, scopedOrgUnitIds } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { toFinanceItem } from "@/components/finance-model";
@@ -40,6 +40,7 @@ export default async function AdminFinancePage() {
   return (
     <FinancePage
       periodName={period?.name ?? null}
+      coordinatorTitle={deskTitle(period, "coordinator")}
       initial={requests.map((r) =>
         toFinanceItem(r, names, unitName.get(r.orgUnitId) ?? "", principal.userId),
       )}

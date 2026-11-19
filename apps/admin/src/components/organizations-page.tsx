@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { DEFAULT_CORE_LABEL } from "@website/domain/organizations";
 import {
   activatePeriodAction,
   addUniversityAction,
@@ -228,6 +229,9 @@ function OrganizationsList({
         : { version: null }),
       name: value("name"),
       cabinet: value("cabinet"),
+      coreLabel: value("coreLabel"),
+      coordinatorTitle: value("coordinatorTitle"),
+      signerTitle: value("signerTitle"),
     });
     setBusy(false);
     if (!result.ok) {
@@ -471,6 +475,19 @@ function OrganizationsList({
                 },
               ],
               ["cabinet", "Cabinet *", "Cabinet Name", { minLength: 2 }],
+              ["coreLabel", "Core group *", "Bapelha Inti", { minLength: 2 }],
+              [
+                "coordinatorTitle",
+                "Top desk title",
+                "Empty: Sekretaris Jenderal",
+                { required: false },
+              ],
+              [
+                "signerTitle",
+                "Signer desk title",
+                "Empty: Sekretaris Eksekutif",
+                { required: false },
+              ],
             ] as const
           ).map(([key, text, placeholder, rules]) => (
             <div className="admin-field" key={key}>
@@ -483,7 +500,13 @@ function OrganizationsList({
                 required
                 {...rules}
                 placeholder={placeholder}
-                defaultValue={periodModal?.mode === "edit" ? periodModal.item[key] : ""}
+                defaultValue={
+                  periodModal?.mode === "edit"
+                    ? periodModal.item[key]
+                    : key === "coreLabel"
+                      ? DEFAULT_CORE_LABEL
+                      : ""
+                }
                 aria-invalid={periodErrors[key] ? true : undefined}
                 aria-describedby={`org-period-${key}-error`}
               />

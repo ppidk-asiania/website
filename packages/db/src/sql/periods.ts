@@ -1,6 +1,13 @@
 import type { Database } from "./store";
 import type { AuditEvent, Snapshot } from "@website/audit";
-import { canActivatePeriod, type Period, type PeriodStatus } from "@website/domain/organizations";
+import {
+  canActivatePeriod,
+  DEFAULT_CORE_LABEL,
+  DEFAULT_PERIOD_DESKS,
+  type Period,
+  type PeriodDesks,
+  type PeriodStatus,
+} from "@website/domain/organizations";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { createSqlAuditWriter } from "./audit";
@@ -13,6 +20,8 @@ function toPeriod(id: string, data: Record<string, unknown>): Period {
     id,
     name: data["name"] as string,
     cabinet: data["cabinet"] as string,
+    coreLabel: (data["coreLabel"] as string | undefined) ?? DEFAULT_CORE_LABEL,
+    desks: (data["desks"] as PeriodDesks | undefined) ?? DEFAULT_PERIOD_DESKS,
     startsOn: data["startsOn"] as string,
     endsOn: data["endsOn"] as string,
     vision: data["vision"] as string,
@@ -30,6 +39,8 @@ export function periodSnapshot(p: PeriodFields): Snapshot {
   return {
     name: p.name,
     cabinet: p.cabinet,
+    coreLabel: p.coreLabel,
+    desks: { coordinator: { ...p.desks.coordinator }, signer: { ...p.desks.signer } },
     startsOn: p.startsOn,
     endsOn: p.endsOn,
     vision: p.vision,
