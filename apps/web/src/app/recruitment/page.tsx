@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { isRecruitmentOpen } from "@website/domain/recruitment";
+import { redirect } from "next/navigation";
+import { isRecruitmentOpen, soleOpen } from "@website/domain/recruitment";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { formatEventTime } from "@/lib/event-time";
 import { publishedRecruitments } from "@/server/recruitment-wiring";
@@ -15,6 +16,8 @@ export default async function RecruitmentListPage() {
   const language = languageFrom(jar.get(LANG_COOKIE)?.value);
   const t = DICTIONARIES[language].recruitment;
   const now = new Date();
+  const only = soleOpen(recruitments, now);
+  if (only) redirect(`/recruitment/${only.id}`);
   const state = (r: (typeof recruitments)[number]) =>
     isRecruitmentOpen(r, now) ? t.open : r.opensAt > now ? t.upcoming : t.closed;
   return (

@@ -7,7 +7,7 @@ import { FormFields } from "@/components/form-fields";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { answersFrom, valuesFrom, type FieldValues } from "@/lib/form-answers";
 import type { ApplyResult } from "@/server/recruitment";
-import { saveApplicationDraftAction, submitApplicationAction } from "../actions";
+import { saveApplicationDraftAction } from "../actions";
 
 interface Unit {
   id: string;
@@ -88,17 +88,13 @@ export function ApplyForm(props: {
       ),
     });
 
-  const run = async (submit: boolean) => {
+  // Leaving the step saves the draft; sending happens on step 4.
+  const run = async (review: boolean) => {
     setBusy(true);
     try {
       const draft = await saveDraft();
-      if (!submit || !draft.ok) {
-        show(draft, t.saved);
-        return;
-      }
-      const result = await submitApplicationAction({ recruitmentId: props.recruitmentId });
-      show(result, t.submitted);
-      if (result.ok) router.push(`/recruitment/${props.recruitmentId}`);
+      show(draft, t.saved);
+      if (review && draft.ok) router.push(`/recruitment/${props.recruitmentId}/apply?step=4`);
     } catch {
       setMessage(t.failed);
     } finally {
@@ -215,7 +211,7 @@ export function ApplyForm(props: {
           {busy ? t.saving : t.saveDraft}
         </button>
         <button className="ui-button" type="submit" disabled={busy}>
-          {t.submit}
+          {t.steps.review}
         </button>
       </div>
       {message && (

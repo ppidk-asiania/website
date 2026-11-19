@@ -95,7 +95,7 @@ export default async function RecruitmentPage({ params }: PageProps<"/recruitmen
         </p>
       ) : !complete ? (
         <p>
-          <a href={`/account/profile?next=${encodeURIComponent(path)}`}>{t.profile}</a>
+          <a href={`${path}/apply`}>{t.profile}</a>
         </p>
       ) : (
         <div className="ui-form">

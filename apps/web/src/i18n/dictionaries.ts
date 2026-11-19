@@ -319,6 +319,15 @@ const id = {
     proofMissing:
       "Kamu belum mengunggah bukti status mahasiswa, jadi lamaran belum bisa dikirim. Unggah dokumen yang menyatakan statusmu aktif di profilmu.",
     proofLink: "Unggah bukti di profil",
+    steps: {
+      data: "Data diri",
+      proof: "Bukti mahasiswa",
+      application: "Lamaran",
+      review: "Tinjau dan kirim",
+      next: "Lanjut",
+      reviewIntro: "Periksa datamu, lalu kirim. Ingin mengubah lamaran?",
+      fixAnswers: "Beberapa jawaban belum lengkap. Kembali ke langkah Lamaran.",
+    },
     yourApplication: "Pendaftaranmu",
     statusLabel: "Status",
     statuses: {
@@ -1142,6 +1151,15 @@ const en: Dictionary = {
     proofMissing:
       "You have not uploaded a proof of student status, so the application cannot be sent yet. Upload a document that states your status is active on your profile.",
     proofLink: "Upload the proof on your profile",
+    steps: {
+      data: "Personal data",
+      proof: "Student proof",
+      application: "Application",
+      review: "Review and send",
+      next: "Continue",
+      reviewIntro: "Check your details, then send. Want to change the application?",
+      fixAnswers: "Some answers are incomplete. Go back to the Application step.",
+    },
     yourApplication: "Your application",
     statusLabel: "Status",
     statuses: {

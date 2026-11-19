@@ -20,7 +20,8 @@ shows ONE next action.
   `/recruitment` (`src/components/recruitment-page.tsx`, `recruitment-model.ts`) and
   `/recruitment/{id}/applications` (`applications-page.tsx`, `applications-model.ts`),
   `/recruitment/{id}/interviews` (`interviews-page.tsx`; actions `src/server/interviews.ts`).
-- Web: `/recruitment`, `/recruitment/[id]` (status + next action), `/recruitment/[id]/apply`,
+- Web: `/recruitment`, `/recruitment/[id]` (status + next action), `/recruitment/[id]/apply` (four steps, below),
+  `/recruitment` goes straight to the recruitment when exactly one is open (`soleOpen`);
   upload route `POST /api/recruitment/[id]/portfolio[?question=q_…]`; logic
   `apps/web/src/server/recruitment.ts`, wiring `recruitment-wiring.ts`.
 - Tests: `tests/unit/recruitment.test.ts`, `tests/unit/admin-recruitment.test.ts`,
@@ -53,6 +54,13 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   apply page says so before the form (drafts can still be saved). Drafts check answers without requiring them; submit
   needs the window open, 1..maxChoices distinct units of the recruitment, every required answer
   and a portfolio when a chosen unit is flagged. Withdrawing is possible until a seat is taken.
+- **Apply wizard** (step 11.4): `/recruitment/[id]/apply?step=1..4` on one page: (1) personal data =
+  the profile form of `/account/profile` (same component, same `saveProfileAction`), (2) student
+  proof = `StudentProofForm` (same route as the profile page), (3) the application form (saves the
+  draft when left), (4) review and send (`submitApplicationAction`). `applyStep` opens the first
+  unfinished step (profile incomplete -> 1, proof missing -> 2, else 3) and refuses a step past what
+  is done. The page is exempt from the "complete your profile" redirect; an applicant whose
+  application is running is sent to the status page. Not built: a short code per recruitment in the URL.
 - **Files**: portfolios and file-question answers are PDFs only (`%PDF-` magic bytes), at most
   5 MB, stored privately (no URL): `recruitment/{id}/{uid}/portfolio_…pdf` and
   `forms/{formId}/{uid}_…pdf`. File answers come only from the upload route; a file "answer" sent

@@ -15,6 +15,8 @@ import {
   documentsOpen,
   lateUploadOpen,
   waitingFor,
+  applyStep,
+  soleOpen,
   nextAction,
   offerExpired,
   portfolioPath,
@@ -150,6 +152,29 @@ describe("applying (C3 steps 1-2)", () => {
     expect(formFilePath("form1", "uid9", now, "abcdef12-0000")).toBe(
       `forms/form1/uid9_${now.getTime()}_abcdef12.pdf`,
     );
+  });
+
+  it("opens the apply wizard on the first unfinished step and never past what is done", () => {
+    const none = { profile: false, proof: false };
+    const profile = { profile: true, proof: false };
+    const both = { profile: true, proof: true };
+    expect(applyStep(none)).toBe(1);
+    expect(applyStep(profile)).toBe(2);
+    expect(applyStep(both)).toBe(3);
+    expect(applyStep(both, 4)).toBe(4);
+    expect(applyStep(both, 1)).toBe(1);
+    expect(applyStep(profile, 3)).toBe(2);
+    expect(applyStep(none, 2)).toBe(1);
+    expect(applyStep(both, 9)).toBe(3);
+  });
+
+  it("goes straight to the only open recruitment", () => {
+    const one = { ...window, id: "one" };
+    const closed = { ...one, id: "closed", published: false };
+    expect(soleOpen([one], now)?.id).toBe("one");
+    expect(soleOpen([closed, one], now)?.id).toBe("one");
+    expect(soleOpen([one, { ...one, id: "two" }], now)).toBeNull();
+    expect(soleOpen([closed], now)).toBeNull();
   });
 
   it("shows ONE next action per state", () => {

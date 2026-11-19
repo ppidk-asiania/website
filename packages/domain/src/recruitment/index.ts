@@ -181,6 +181,24 @@ export function isRecruitmentOpen(
   return r.published && r.deletedAt === null && r.opensAt <= now && now < r.closesAt;
 }
 
+/** The one open recruitment, or null when none or several are open. */
+export function soleOpen<
+  T extends Pick<Recruitment, "published" | "opensAt" | "closesAt" | "deletedAt">,
+>(list: readonly T[], now: Date): T | null {
+  const open = list.filter((r) => isRecruitmentOpen(r, now));
+  return open.length === 1 ? (open[0] ?? null) : null;
+}
+
+/** Apply wizard: 1 data, 2 proof, 3 application, 4 review. Opens on the first unfinished step; a step past what is done is refused. */
+export function applyStep(
+  done: { readonly profile: boolean; readonly proof: boolean },
+  requested?: number,
+): 1 | 2 | 3 | 4 {
+  const reach = !done.profile ? 1 : !done.proof ? 2 : 4;
+  const wanted = ([1, 2, 3, 4] as const).find((s) => s === requested && s <= reach);
+  return wanted ?? (Math.min(reach, 3) as 1 | 2 | 3);
+}
+
 export function checkChoices(r: Pick<Recruitment, "maxChoices" | "units">, choices: unknown) {
   const parsed = z.array(safeId).safeParse(choices);
   if (!parsed.success || parsed.data.length === 0) {

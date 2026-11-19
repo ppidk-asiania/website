@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { safeReturnUrl, signInUrl } from "@website/auth";
-import { PRIVACY_POLICY_VERSION, studyStatus, type MemberProfile } from "@website/domain/members";
+import { PRIVACY_POLICY_VERSION, studyStatus } from "@website/domain/members";
 import { AppShell } from "@website/ui";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { activeChapters } from "@/server/chapters";
@@ -10,7 +10,8 @@ import { getAppUrls } from "@/server/env";
 import { ownProfile, ownStudentProof } from "@/server/profile-wiring";
 import { getSignedInUser } from "@/server/session";
 import { GraduationForm } from "./graduation-form";
-import { ProfileForm, type ProfileFormValues } from "./profile-form";
+import { toFormValues } from "./form-values";
+import { ProfileForm } from "./profile-form";
 import { WhatsappLink } from "./whatsapp-link";
 import { StudentProofForm } from "./student-proof-form";
 
@@ -19,25 +20,6 @@ export const metadata: Metadata = { title: "Member profile", robots: { index: fa
 export const instant = false;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-const toFormValues = (p: MemberProfile | null): ProfileFormValues | null =>
-  p && {
-    fullName: p.fullName,
-    gender: p.gender,
-    dateOfBirth: p.dateOfBirth,
-    ppiCountry: p.ppiCountry,
-    university: p.university,
-    universityId: p.universityId ?? null,
-    educationLevel: p.educationLevel,
-    majors: [...p.majors],
-    yearOfEntry: p.yearOfEntry,
-    estimatedGraduationYear: p.estimatedGraduationYear,
-    addressAbroad: p.addressAbroad,
-    addressIndonesia: p.addressIndonesia,
-    whatsappNumber: p.whatsappNumber,
-    emergencyContact: p.emergencyContact,
-    timezone: p.timezone,
-  };
 
 export default async function ProfilePage({ searchParams }: { searchParams: SearchParams }) {
   const user = await getSignedInUser();

@@ -95,7 +95,7 @@ fixed, note, by, at }`. Only `updateProof` / `proofsOf` (`packages/db/src/sql/me
   LoA/CoE); supporting = student card, optional. PDF, JPEG, PNG or WebP by magic bytes, at most
   5 MB, stored privately (not re-encoded, not encrypted: the committee opens them through the
   normal 15-minute signed link): `members/proofs/{uid}/{main|supporting}_{id}.{ext}`.
-- Web: upload on `/account/profile` (`apps/web/src/server/student-proof.ts`, route
+- Web: upload on `/account/profile` and as step 2 of the apply wizard (same component), (`apps/web/src/server/student-proof.ts`, route
   `/api/account/student-proof?file=main|supporting[&confirmed=1]`). A new main file needs the
   confirmation "this document states my active status" (`confirmed=1`, checked on the server); a
   supporting file needs a main file first. `GET ?file=…&v=<version>` shows the owner's own file only
