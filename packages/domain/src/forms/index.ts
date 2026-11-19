@@ -51,6 +51,8 @@ export interface Question {
   readonly maxSelections: number | null;
   readonly min: number | null;
   readonly max: number | null;
+  /** File questions of a recruitment form only: the application is accepted without it. */
+  readonly mayFollow?: boolean;
 }
 
 export interface Form extends EntityMeta {
@@ -117,9 +119,13 @@ export const QuestionInputSchema = z
     maxSelections: z.number().int().min(1).nullable(),
     min: z.number().finite().nullable(),
     max: z.number().finite().nullable(),
+    mayFollow: z.boolean().optional(),
   })
   .strict()
   .superRefine((q, ctx) => {
+    if (q.mayFollow && q.type !== "file") {
+      ctx.addIssue({ code: "custom", path: ["mayFollow"], message: "Only a file may follow." });
+    }
     if (isChoice(q.type)) {
       if (q.options.length < 2) {
         ctx.addIssue({ code: "custom", path: ["options"], message: "Add at least 2 options." });
@@ -152,6 +158,8 @@ export const QuestionInputSchema = z
     maxSelections: q.type === "multi_choice" ? q.maxSelections : null,
     min: q.type === "number" ? q.min : null,
     max: q.type === "number" ? q.max : null,
+    // stored only when set, so questions saved before this switch still compare equal
+    ...(q.mayFollow ? { mayFollow: true } : {}),
   }));
 export type QuestionInput = z.output<typeof QuestionInputSchema>;
 

@@ -32,6 +32,7 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
       recruitment={{
         id: recruitment.id,
         title: recruitment.title,
+        personalityTest: recruitment.personalityTest,
         units: recruitment.units.map((u) => ({ id: u.orgUnitId, name: u.name })),
       }}
       initial={applications.map((a) =>

@@ -1,6 +1,7 @@
 import { answerText, type FileAnswer, type Question } from "@website/domain/forms";
 import {
   offerExpired,
+  waitingFor,
   AXES,
   type Application,
   type PersonalityScore,
@@ -53,6 +54,7 @@ export interface ApplicationItem {
   pacts: FileAnswer[];
   pactNote: string | null;
   appointmentId: string | null;
+  waitingFor: string[];
   personality: { full: string; axes: string } | null;
   revisions: {
     round: number;
@@ -105,6 +107,7 @@ export function toApplicationItem(
     pacts: [...a.pacts],
     pactNote: a.pactNote,
     appointmentId: a.appointmentId,
+    waitingFor: waitingFor(questions, a.answers).map((q) => q.label),
     personality: personality && {
       full: personality.full,
       axes: AXES.map(

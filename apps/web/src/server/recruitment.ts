@@ -21,6 +21,7 @@ export interface ApplyingDeps {
     | "saveDraft"
     | "setPortfolio"
     | "setAnswerFile"
+    | "setLateFile"
     | "submit"
     | "withdraw"
     | "respondOffer"
@@ -135,16 +136,24 @@ export function createApplying(deps: ApplyingDeps) {
         return Response.json({ error: "invalid" }, { status: 400 });
       }
       const current = await deps.store.ownApplication(recruitment.id, g.uid);
+      // after submit a "may follow" file goes through setLateFile, which checks everything
+      const late =
+        questionId !== null &&
+        current !== null &&
+        current.status !== "draft" &&
+        current.status !== "revision";
       const refusal =
         target === "pact"
           ? current?.status === "approved"
             ? null
             : "locked"
-          : !isRecruitmentOpen(recruitment, deps.now())
-            ? "closed"
-            : current === null || current.status === "draft" || current.status === "revision"
-              ? null
-              : "locked";
+          : late
+            ? null
+            : !isRecruitmentOpen(recruitment, deps.now())
+              ? "closed"
+              : current === null || current.status === "draft" || current.status === "revision"
+                ? null
+                : "locked";
       if (refusal) return Response.json({ ok: false, error: refusal }, { status: 400 });
       const name = safeText(200).safeParse(decodeName(request.headers.get("x-file-name")));
       const bytes = await readBodyLimited(request, MAX_PORTFOLIO_BYTES);
@@ -172,7 +181,9 @@ export function createApplying(deps: ApplyingDeps) {
           ? await deps.store.setPact(recruitment.id, g.uid, file, now)
           : questionId === null
             ? await deps.store.setPortfolio(recruitment.id, g.uid, file, now)
-            : await deps.store.setAnswerFile(recruitment.id, g.uid, questionId, file, now);
+            : late
+              ? await deps.store.setLateFile(recruitment.id, g.uid, questionId, file, now)
+              : await deps.store.setAnswerFile(recruitment.id, g.uid, questionId, file, now);
       const result = toResult(outcome);
       if (!result.ok) await deps.storage.remove?.(path);
       return Response.json(result.ok ? { ok: true, name: file.name } : result, {

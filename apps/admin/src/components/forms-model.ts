@@ -79,6 +79,7 @@ export interface QuestionDraft {
   label: string;
   description: string;
   required: boolean;
+  mayFollow: boolean;
   options: string;
   allowOther: boolean;
   maxSelections: string;
@@ -92,6 +93,7 @@ export const blankQuestion = (): QuestionDraft => ({
   label: "",
   description: "",
   required: false,
+  mayFollow: false,
   options: "",
   allowOther: false,
   maxSelections: "",
@@ -108,6 +110,7 @@ export function toDraft(q: Question): QuestionDraft {
     label: q.label,
     description: q.description,
     required: q.required,
+    mayFollow: q.mayFollow === true,
     options: q.options.join("\n"),
     allowOther: q.allowOther,
     maxSelections: numberText(q.maxSelections),
@@ -125,6 +128,7 @@ export function fromDraft(d: QuestionDraft) {
     label: d.label,
     description: d.description,
     required: d.required,
+    mayFollow: d.type === "file" && d.mayFollow,
     options: d.options
       .split("\n")
       .map((o) => o.trim())

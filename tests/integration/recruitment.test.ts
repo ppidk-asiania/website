@@ -675,3 +675,164 @@ describe("file questions in the recruitment form", () => {
     expect(await unnamed.json()).toEqual({ ok: true, name: "file.pdf" });
   });
 });
+
+describe("recruitment switches (11.2)", () => {
+  const field = (patch: Record<string, unknown>) => ({
+    id: "",
+    type: "long_text",
+    label: "Why?",
+    description: "",
+    required: true,
+    options: [],
+    allowOther: false,
+    maxSelections: null,
+    min: null,
+    max: null,
+    ...patch,
+  });
+  const letterQuestion = (mayFollow: boolean) =>
+    field({ id: "q_letter", type: "file", label: "Recommendation letter", mayFollow });
+  const deadline = "2026-11-25T00:00:00.000Z";
+
+  async function open(mayFollow: boolean, patch: Record<string, unknown> = {}) {
+    const form = await createFormActions({
+      forms: createSqlFormStore(db()),
+      now: () => clock,
+      uuid: () => "22222222-0000-4000-8000-000000000000",
+      token: () => "unused-token-0000000000000",
+      logExport: () => undefined,
+    }).save(...as(committee))({
+      title: "With letter",
+      description: "",
+      usage: "recruitment",
+      opensAt: null,
+      closesAt: null,
+      questions: [field({ id: "q_text" }), letterQuestion(mayFollow)],
+      version: null,
+    });
+    if (!form.ok) throw new Error(JSON.stringify(form));
+    const created = await recruitmentActions().save(...as(committee))({
+      ...setup,
+      formId: form.data.id,
+      version: null,
+      ...patch,
+    });
+    if (!created.ok) throw new Error(JSON.stringify(created));
+    await recruitmentActions().setPublished(...as(committee))({
+      id: created.data.id,
+      version: 1,
+      published: true,
+    });
+    recruitmentId = created.data.id;
+  }
+
+  const submitted = async () => {
+    await applying().saveDraft(ari, {
+      recruitmentId,
+      choices: ["finance"],
+      answers: { q_text: "Because." },
+    });
+    return applying().submit(ari, { recruitmentId });
+  };
+  const sendLetter = (user = ari, question = "q_letter") =>
+    applying().uploadFile(
+      user,
+      recruitmentId,
+      question,
+      new Request("https://web.test/x", {
+        method: "POST",
+        body: pdf,
+        headers: { "x-file-name": "letter.pdf" },
+      }),
+    );
+  const own = async () => {
+    const a = await web().ownApplication(recruitmentId, "ari");
+    if (!a) throw new Error("no application");
+    return a;
+  };
+
+  it("stores the personality switch (on by default) and the document deadline", async () => {
+    expect(await createSqlRecruitmentStore(db()).get(recruitmentId)).toMatchObject({
+      personalityTest: true,
+      documentDeadline: null,
+    });
+    await open(true, { personalityTest: false, documentDeadline: deadline });
+    expect(await createSqlRecruitmentStore(db()).get(recruitmentId)).toMatchObject({
+      personalityTest: false,
+      documentDeadline: new Date(deadline),
+    });
+  });
+
+  it("a closed recruitment can still be switched to run without the test", async () => {
+    clock = new Date("2026-11-21T00:00:00Z");
+    const saved = await recruitmentActions().save(...as(committee))({
+      ...setup,
+      formId,
+      id: recruitmentId,
+      version: 2,
+      personalityTest: false,
+    });
+    expect(saved).toMatchObject({ ok: true });
+    expect(await createSqlRecruitmentStore(db()).get(recruitmentId)).toMatchObject({
+      personalityTest: false,
+    });
+  });
+
+  it("submit accepts the application without a mayFollow file", async () => {
+    await open(true);
+    expect(await submitted()).toMatchObject({ ok: true, status: "submitted" });
+    expect((await own()).answers).not.toHaveProperty("q_letter");
+  });
+
+  it("submit still needs a required file that may not follow", async () => {
+    await open(false);
+    expect(await submitted()).toEqual({
+      ok: false,
+      error: "answers",
+      fields: { q_letter: "This question is required." },
+    });
+  });
+
+  it("a letter arrives after submit, without a status change or revision round", async () => {
+    await open(true, { documentDeadline: deadline });
+    await submitted();
+    const before = await own();
+    clock = new Date("2026-11-22T00:00:00Z"); // after the closing time, before the deadline
+    const response = await sendLetter();
+    expect(response.status).toBe(201);
+    const after = await own();
+    expect(after).toMatchObject({ status: "submitted", revisionRound: before.revisionRound });
+    expect(after.answers["q_letter"]).toMatchObject({ name: "letter.pdf" });
+    expect(after.version).toBe(before.version + 1);
+    expect(saved.at(-1)?.path).toMatch(/^forms\/.+\/ari_/);
+  });
+
+  it("refuses a late upload after the deadline and says the date", async () => {
+    await open(true, { documentDeadline: deadline });
+    await submitted();
+    clock = new Date("2026-11-26T00:00:00Z");
+    const response = await sendLetter();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "refused",
+      message: expect.stringContaining("2026-11-25"),
+    });
+    expect((await own()).answers).not.toHaveProperty("q_letter");
+  });
+
+  it("without a deadline the letter can follow at any time", async () => {
+    await open(true);
+    await submitted();
+    clock = new Date("2027-03-01T00:00:00Z");
+    expect((await sendLetter()).status).toBe(201);
+  });
+
+  it("only mayFollow file questions of a submitted, live application take a late file", async () => {
+    await open(true);
+    await submitted();
+    expect((await sendLetter(ari, "q_text")).status).toBe(400); // not a file question
+    await applying().withdraw(ari, { recruitmentId });
+    expect((await sendLetter()).status).toBe(400); // withdrawn
+  });
+});

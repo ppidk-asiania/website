@@ -83,7 +83,9 @@ store(result.answers); // keyed by question id
   are never published at a public link.
 - **Files** are for signed-in applicants only: a public form cannot have a file question
   (`assertPublishable`), so guests never upload anything. A file answer is a private Storage
-  path under `forms/{formId}/…`.
+  path under `forms/{formId}/…`. A file question may be marked `mayFollow` ("May follow after
+  submit"): the recruitment accepts the application without it (`mayFollow` is stored only when
+  set; see `recruitment.md`).
 - **Public forms (C2):** `forms.publish` publishes a public form at `/f/{token}` on the website
   (128-bit random token, created once and kept when a closed form is re-opened) and closes it.
   `publicAnswerState` is the guard of that path: recruitment, draft and deleted forms are "not

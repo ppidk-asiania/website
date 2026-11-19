@@ -7,6 +7,7 @@ import {
   assertTransition,
   checkChoices,
   isRecruitmentOpen,
+  lateUploadOpen,
   offerExpired,
   portfolioRequired,
   revisionDocId,
@@ -48,6 +49,8 @@ function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
     formId: data["formId"] as string,
     formVersion: data["formVersion"] as number,
     pactTemplateUrl: (data["pactTemplateUrl"] as string | null | undefined) ?? null,
+    personalityTest: (data["personalityTest"] as boolean | undefined) ?? true,
+    documentDeadline: toDate(data["documentDeadline"]),
     published: data["published"] as boolean,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
@@ -69,6 +72,8 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
     formId: r.formId,
     formVersion: r.formVersion,
     pactTemplateUrl: r.pactTemplateUrl,
+    personalityTest: r.personalityTest,
+    documentDeadline: r.documentDeadline?.toISOString() ?? null,
     published: r.published,
   };
 }
@@ -318,6 +323,8 @@ export function createSqlRecruitmentStore(db: Database) {
           formId: input.formId,
           formVersion: form.get("currentVersion") as number,
           pactTemplateUrl: input.pactTemplateUrl,
+          personalityTest: input.personalityTest,
+          documentDeadline: input.documentDeadline,
           published: current?.published ?? false,
           version: (current?.version ?? 0) + 1,
           createdAt: current?.createdAt ?? now,
@@ -833,6 +840,36 @@ export function createSqlRecruitmentWebStore(db: Database) {
       });
     },
 
+    /** A "may follow" file after submit: no status change, no revision round. */
+    setLateFile(
+      recruitmentId: string,
+      uid: string,
+      questionId: string,
+      file: FileAnswer,
+      now: Date,
+    ) {
+      return change(recruitmentId, uid, now, (r, current, questions) => {
+        const mayFollow = questions.some(
+          (q) => q.id === questionId && q.type === "file" && q.mayFollow,
+        );
+        if (
+          !current ||
+          !mayFollow ||
+          !lateUploadOpen({ documentDeadline: null }, current.status, now)
+        ) {
+          return { ok: false, error: "locked" };
+        }
+        if (!lateUploadOpen(r, current.status, now)) {
+          return {
+            ok: false,
+            error: "refused",
+            message: `Documents could be added until ${r.documentDeadline?.toISOString().slice(0, 16).replace("T", " ")} UTC.`,
+          };
+        }
+        return bump(current, now, { answers: { ...current.answers, [questionId]: file } });
+      });
+    },
+
     submit(recruitmentId: string, uid: string, now: Date) {
       return change(
         recruitmentId,
@@ -849,7 +886,10 @@ export function createSqlRecruitmentWebStore(db: Database) {
           if (portfolioRequired(r, current.choices) && !current.portfolio) {
             return { ok: false, error: "refused", message: "Upload your portfolio (PDF)." };
           }
-          const parsed = parseAnswers(questions, current.answers);
+          const parsed = parseAnswers(
+            questions.map((q) => (q.mayFollow ? { ...q, required: false } : q)),
+            current.answers,
+          );
           if (!parsed.ok) return { ok: false, error: "answers", fields: parsed.fields };
           assertTransition(current.status, "submitted");
           return bump(current, now, { status: "submitted", submittedAt: now });

@@ -46,6 +46,8 @@ interface Draft {
   maxChoices: string;
   offerDays: string;
   pactTemplateUrl: string;
+  personalityTest: boolean;
+  documentDeadline: string;
   formId: string;
   units: UnitDraft[];
 }
@@ -103,6 +105,8 @@ function RecruitmentList({ initial: items, periods, unitsByPeriod, forms, canEdi
       maxChoices: String(r?.maxChoices ?? 2),
       offerDays: String(r?.offerDays ?? 3),
       pactTemplateUrl: r?.pactTemplateUrl ?? "",
+      personalityTest: r?.personalityTest ?? true,
+      documentDeadline: r?.documentDeadline ? wall(r.documentDeadline) : "",
       formId: r?.formId ?? forms[0]?.id ?? "",
       units: unitDrafts(unitsByPeriod[periodId] ?? [], r?.units ?? []),
     });
@@ -123,6 +127,8 @@ function RecruitmentList({ initial: items, periods, unitsByPeriod, forms, canEdi
       maxChoices: Number(draft.maxChoices),
       offerDays: Number(draft.offerDays),
       pactTemplateUrl: draft.pactTemplateUrl,
+      personalityTest: draft.personalityTest,
+      documentDeadline: wallTimeToUtc(draft.documentDeadline, zone)?.toISOString() ?? null,
       formId: draft.formId,
       units: unitsInput(draft.units),
     });
@@ -398,6 +404,32 @@ function RecruitmentList({ initial: items, periods, unitsByPeriod, forms, canEdi
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />
               {errorFor("description")}
+            </div>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="rec-documents">
+                Documents may follow until
+              </label>
+              <input
+                id="rec-documents"
+                className="admin-input"
+                type="datetime-local"
+                value={draft.documentDeadline}
+                onChange={(e) => setDraft({ ...draft, documentDeadline: e.target.value })}
+              />
+              {errorFor(
+                "documentDeadline",
+                "For file questions marked “may follow”. May be after the closing time; empty = no limit.",
+              )}
+            </div>
+            <div className="admin-field">
+              <label className="admin-check-label">
+                <input
+                  type="checkbox"
+                  checked={draft.personalityTest}
+                  onChange={(e) => setDraft({ ...draft, personalityTest: e.target.checked })}
+                />
+                Applicants take the personality test
+              </label>
             </div>
             <div className="admin-field admin-form-grid__full">
               <label className="admin-field__label" htmlFor="rec-pact">

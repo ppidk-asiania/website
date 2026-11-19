@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { signInUrl } from "@website/auth";
-import { canBook, nextAction } from "@website/domain/recruitment";
+import { canBook, lateUploadOpen, nextAction, waitingFor } from "@website/domain/recruitment";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { formatEventTime } from "@/lib/event-time";
 import { hasCompleteProfile, ownTimezone } from "@/server/profile-wiring";
 import { personalityResults, personalityTest, recruitmentStore } from "@/server/recruitment-wiring";
 import { getSignedInUser } from "@/server/session";
 import { InterviewTimes } from "./interview-times";
+import { LateUploads } from "./late-uploads";
 import { OfferButtons } from "./offer-buttons";
 import { PactUpload } from "./pact-upload";
 import { WithdrawButton } from "./withdraw-button";
@@ -42,16 +43,25 @@ export default async function RecruitmentPage({ params }: PageProps<"/recruitmen
     : [null, false, []];
   if (!r.published && !application) notFound();
   const tested =
-    user && application && application.submittedAt
+    r.personalityTest && user && application && application.submittedAt
       ? await personalityResults().get(user.uid)
       : null;
   const personalityLink =
-    user && application?.submittedAt && !tested && application.status !== "withdrawn"
+    r.personalityTest &&
+    user &&
+    application?.submittedAt &&
+    !tested &&
+    application.status !== "withdrawn"
       ? `/test/personality/${personalityTest().linkFor(user.uid)}`
       : null;
   const p = DICTIONARIES[language].personality;
   const now = new Date();
-  const action = nextAction(r, application, now);
+  const waiting = application?.submittedAt
+    ? waitingFor(await recruitmentStore().questions(r), application.answers)
+    : [];
+  const uploadLater =
+    application !== null && waiting.length > 0 && lateUploadOpen(r, application.status, now);
+  const action = nextAction(r, application, now, uploadLater);
   const [slots, zone] =
     user && action === "interview"
       ? await Promise.all([recruitmentStore().slots(r.id), ownTimezone(user.uid)])
@@ -144,6 +154,20 @@ export default async function RecruitmentPage({ params }: PageProps<"/recruitmen
                 </p>
               )}
               <PactUpload recruitmentId={r.id} labels={t} />
+            </>
+          )}
+          {uploadLater && (
+            <>
+              {r.documentDeadline && (
+                <p className="site-muted">
+                  {t.uploadLaterUntil}: {formatEventTime(r.documentDeadline, "UTC", language)} (UTC)
+                </p>
+              )}
+              <LateUploads
+                recruitmentId={r.id}
+                questions={waiting.map((q) => ({ id: q.id, label: q.label }))}
+                labels={t}
+              />
             </>
           )}
           {personalityLink && (

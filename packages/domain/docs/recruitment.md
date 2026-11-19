@@ -92,6 +92,16 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   purpose "personality"; no sign-in needed). The server scores the answers (-3..3, all 60
   required) and stores ONE result in `personalityResults/{uid}` (scores only, never
   overwritten). The committee sees it on the application.
+- **Switches** (`recruitment.edit`, also on a closed recruitment): `personalityTest` (default
+  true; off = no test link on the application page, no "not taken yet" line for the committee)
+  and `documentDeadline` (optional, may be after the closing time). A file question marked
+  `mayFollow` is not required at submit. After submit (also after the window closed) the
+  applicant uploads it from the application page (`setLateFile`, upload route
+  `?question=q_…`): no status change, no revision round, only for `mayFollow` file questions in
+  `LATE_UPLOAD_STATUSES`; after `documentDeadline` it is refused with the date (no deadline = no
+  limit of its own). `nextAction` returns `upload_later` instead of `wait_review` while files are
+  missing; the committee sees "Waiting for: <question>". The 3-day reminder before the document
+  deadline and the AI-analysis input (11.9) are not built.
 - **Offers** expire at read time (`offerExpired`): no job releases them; an expired offer cannot
   be answered and the committee may offer again.
 - **Files** are opened by the committee through 15-minute signed links, only for paths that

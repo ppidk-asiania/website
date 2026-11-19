@@ -851,6 +851,16 @@ function QuestionEditor({
           </label>
         ) : null}
         {q.type === "file" ? (
+          <label className="admin-check-label">
+            <input
+              type="checkbox"
+              checked={q.mayFollow}
+              onChange={(e) => onChange({ mayFollow: e.target.checked })}
+            />
+            May follow after submit
+          </label>
+        ) : null}
+        {q.type === "file" ? (
           <span className="admin-field__hint">
             Files are for recruitment forms (signed-in applicants); public forms cannot ask for
             files.

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
-import type { Answers, FileAnswer } from "../forms";
+import type { Answers, FileAnswer, Question } from "../forms";
 import { TimezoneSchema } from "../members/profile";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
 
@@ -83,6 +83,10 @@ export interface Recruitment extends EntityMeta {
   readonly formId: string;
   readonly formVersion: number;
   readonly pactTemplateUrl: string | null;
+  /** Off: no personality test link and no test block for the committee. */
+  readonly personalityTest: boolean;
+  /** Until when "may follow" files can be uploaded; null = no limit of its own. */
+  readonly documentDeadline: Date | null;
   readonly published: boolean;
 }
 
@@ -141,6 +145,11 @@ export const RecruitmentInputSchema = z
     maxChoices: z.number().int().min(1).max(MAX_CHOICES),
     offerDays: z.number().int().min(1).max(60),
     formId: safeId,
+    personalityTest: z.boolean().default(true),
+    documentDeadline: date
+      .nullable()
+      .optional()
+      .transform((v) => v ?? null),
     pactTemplateUrl: z
       .string()
       .trim()
@@ -241,11 +250,35 @@ export function takeSeat(counter: { quota: number; filled: number } | null): num
 export const offerExpired = (offer: Offer | null, now: Date) =>
   offer !== null && offer.expiresAt <= now;
 
+/** Statuses in which a "may follow" file can still be added (never a revision round). */
+const LATE_UPLOAD_STATUSES: readonly ApplicationStatus[] = [
+  "submitted",
+  "interview",
+  "offered",
+  "accepted",
+  "approved",
+  "pakta_review",
+];
+
+export const documentsOpen = (r: Pick<Recruitment, "documentDeadline">, now: Date) =>
+  r.documentDeadline === null || now <= r.documentDeadline;
+
+export const lateUploadOpen = (
+  r: Pick<Recruitment, "documentDeadline">,
+  status: ApplicationStatus,
+  now: Date,
+) => LATE_UPLOAD_STATUSES.includes(status) && documentsOpen(r, now);
+
+/** The "may follow" file questions an application has not answered yet. */
+export const waitingFor = (questions: readonly Question[], answers: Answers): Question[] =>
+  questions.filter((q) => q.type === "file" && q.mayFollow && answers[q.id] === undefined);
+
 export type NextAction =
   | "start"
   | "complete"
   | "revise"
   | "wait_review"
+  | "upload_later"
   | "interview"
   | "respond_offer"
   | "wait_approval"
@@ -259,6 +292,7 @@ export function nextAction(
   r: Pick<Recruitment, "published" | "opensAt" | "closesAt" | "deletedAt">,
   application: Pick<Application, "status" | "offer"> | null,
   now: Date,
+  uploadLater = false,
 ): NextAction {
   const open = isRecruitmentOpen(r, now);
   if (application === null) return open ? "start" : "closed";
@@ -268,7 +302,7 @@ export function nextAction(
     case "revision":
       return open ? "revise" : "closed";
     case "submitted":
-      return "wait_review";
+      return uploadLater ? "upload_later" : "wait_review";
     case "interview":
       return "interview";
     case "offered":

@@ -23,6 +23,8 @@ const r: Recruitment = {
   formId: "f1",
   formVersion: 2,
   pactTemplateUrl: null,
+  personalityTest: true,
+  documentDeadline: null,
   published: true,
   version: 3,
   createdAt: new Date("2026-10-01T00:00:00Z"),
@@ -44,6 +46,14 @@ describe("Recruitment page model", () => {
       open: true,
       units: [{ orgUnitId: "media", quota: 2, filled: 1, portfolioRequired: true }],
     });
+    expect(
+      toRecruitmentItem(
+        { ...r, personalityTest: false, documentDeadline: new Date("2026-11-25T00:00:00Z") },
+        "",
+        new Map(),
+        new Date("2026-11-05T00:00:00Z"),
+      ),
+    ).toMatchObject({ personalityTest: false, documentDeadline: "2026-11-25T00:00:00.000Z" });
     expect(toRecruitmentItem(r, "", new Map(), new Date("2026-12-01T00:00:00Z"))).toMatchObject({
       open: false,
       units: [{ filled: 0 }],
@@ -187,6 +197,16 @@ describe("selection queue model", () => {
         },
       }).personality,
     ).toEqual({ full: "ENFJ-A", axes: "80% E · 60% N · 55% F · 70% J · 51% A" });
+  });
+
+  it("names the files an application is waiting for", () => {
+    const follow = { ...question("q_letter", "file"), mayFollow: true };
+    const waiting = (a: typeof application, questions: Parameters<typeof toApplicationItem>[2]) =>
+      toApplicationItem(a, r, questions, null, [], at).waitingFor;
+    expect(waiting(application, [question("q_cv", "file"), follow])).toEqual(["q_letter"]);
+    expect(
+      waiting({ ...application, answers: { q_letter: application.answers.q_cv } }, [follow]),
+    ).toEqual([]);
   });
 
   it("puts every status in exactly one step tab", () => {

@@ -12,6 +12,9 @@ import {
   formFilePath,
   isFinal,
   isRecruitmentOpen,
+  documentsOpen,
+  lateUploadOpen,
+  waitingFor,
   nextAction,
   offerExpired,
   portfolioPath,
@@ -20,6 +23,7 @@ import {
   seatCounterId,
   TRANSITIONS,
 } from "@website/domain/recruitment";
+import { QuestionInputSchema, type Question } from "@website/domain/forms";
 
 const now = new Date("2026-11-10T12:00:00Z");
 const window = {
@@ -246,5 +250,86 @@ describe("interview slots (C3-I)", () => {
     expect(() => assertBookable({ ...slot, booked: 2 }, before)).toThrow(/full/);
     expect(() => assertBookable(null, before)).toThrow(/no longer available/);
     expect(() => assertBookable(slot, slot.startsAt)).toThrow(/no longer available/);
+  });
+});
+
+describe("recruitment switches (11.2)", () => {
+  it("keeps the personality test on by default and the document deadline optional", () => {
+    expect(RecruitmentInputSchema.parse(input)).toMatchObject({
+      personalityTest: true,
+      documentDeadline: null,
+    });
+    expect(
+      RecruitmentInputSchema.parse({
+        ...input,
+        personalityTest: false,
+        documentDeadline: "2026-11-25T00:00:00Z",
+      }),
+    ).toMatchObject({ personalityTest: false, documentDeadline: new Date("2026-11-25T00:00:00Z") });
+    expect(
+      RecruitmentInputSchema.parse({ ...input, documentDeadline: null }).documentDeadline,
+    ).toBe(null);
+    expect(RecruitmentInputSchema.safeParse({ ...input, personalityTest: "no" }).success).toBe(
+      false,
+    );
+  });
+
+  const question = (patch: Record<string, unknown>) => ({
+    id: "q_letter",
+    type: "file",
+    label: "Recommendation letter",
+    description: "",
+    required: true,
+    options: [],
+    allowOther: false,
+    maxSelections: null,
+    min: null,
+    max: null,
+    ...patch,
+  });
+
+  it("lets only file questions follow, and stores the flag only when set", () => {
+    expect(QuestionInputSchema.parse(question({ mayFollow: true }))).toMatchObject({
+      mayFollow: true,
+    });
+    expect(QuestionInputSchema.parse(question({ mayFollow: false }))).not.toHaveProperty(
+      "mayFollow",
+    );
+    expect(QuestionInputSchema.parse(question({}))).not.toHaveProperty("mayFollow");
+    expect(
+      QuestionInputSchema.safeParse(question({ type: "short_text", mayFollow: true })).success,
+    ).toBe(false);
+  });
+
+  const letter = QuestionInputSchema.parse(question({ mayFollow: true })) as Question;
+  const cv = QuestionInputSchema.parse(question({ id: "q_cv", label: "CV" })) as Question;
+
+  it("lists the files an application still waits for", () => {
+    expect(waitingFor([letter, cv], {})).toEqual([letter]);
+    expect(waitingFor([letter, cv], { q_letter: "x" as never })).toEqual([]);
+  });
+
+  it("accepts late files until the deadline, or without a limit when there is none", () => {
+    const deadline = new Date("2026-11-25T00:00:00Z");
+    expect(documentsOpen({ documentDeadline: null }, now)).toBe(true);
+    expect(documentsOpen({ documentDeadline: deadline }, deadline)).toBe(true);
+    expect(documentsOpen({ documentDeadline: deadline }, new Date("2026-11-25T00:00:01Z"))).toBe(
+      false,
+    );
+    const open = { documentDeadline: deadline };
+    expect(lateUploadOpen(open, "submitted", now)).toBe(true);
+    expect(lateUploadOpen(open, "interview", now)).toBe(true);
+    expect(lateUploadOpen(open, "draft", now)).toBe(false);
+    expect(lateUploadOpen(open, "withdrawn", now)).toBe(false);
+    expect(lateUploadOpen(open, "submitted", new Date("2026-12-01T00:00:00Z"))).toBe(false);
+  });
+
+  it("shows upload_later below the status actions", () => {
+    const status = (s: (typeof APPLICATION_STATUSES)[number], later: boolean) =>
+      nextAction(window, { status: s, offer: null }, now, later);
+    expect(status("submitted", true)).toBe("upload_later");
+    expect(status("submitted", false)).toBe("wait_review");
+    expect(status("revision", true)).toBe("revise");
+    expect(status("interview", true)).toBe("interview");
   });
 });
