@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/list-controls";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
+import { APPOINTMENT_SEATS, SEAT_WORDS } from "@website/domain/organizations";
 import { unitDrafts, unitsInput, type RecruitmentItem, type UnitDraft } from "./recruitment-model";
 
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -488,6 +489,22 @@ function RecruitmentList({ initial: items, periods, unitsByPeriod, forms, canEdi
                           />
                           Portfolio
                         </label>
+                        {APPOINTMENT_SEATS.map((seat) => (
+                          <label key={seat} className="admin-check-label">
+                            <input
+                              type="checkbox"
+                              checked={u.seats.includes(seat)}
+                              onChange={(e) =>
+                                updateUnit(i, {
+                                  seats: APPOINTMENT_SEATS.filter((s) =>
+                                    s === seat ? e.target.checked : u.seats.includes(s),
+                                  ),
+                                })
+                              }
+                            />
+                            {SEAT_WORDS[seat]}
+                          </label>
+                        ))}
                       </>
                     ) : null}
                   </div>

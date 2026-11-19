@@ -1,3 +1,4 @@
+import type { AppointmentSeat } from "@website/domain/organizations";
 import { isRecruitmentOpen, type Recruitment } from "@website/domain/recruitment";
 
 export interface RecruitmentItem {
@@ -23,6 +24,7 @@ export interface RecruitmentItem {
     name: string;
     quota: number;
     portfolioRequired: boolean;
+    seats: readonly AppointmentSeat[];
     filled: number;
   }[];
 }
@@ -62,6 +64,7 @@ export interface UnitDraft {
   offered: boolean;
   quota: string;
   portfolioRequired: boolean;
+  seats: AppointmentSeat[];
   filled: number;
 }
 
@@ -78,6 +81,7 @@ export function unitDrafts(
       offered: offered !== undefined,
       quota: offered ? String(offered.quota) : "1",
       portfolioRequired: offered?.portfolioRequired ?? false,
+      seats: offered ? [...offered.seats] : ["member"],
       filled: offered?.filled ?? 0,
     };
   });
@@ -90,4 +94,5 @@ export const unitsInput = (drafts: readonly UnitDraft[]) =>
       orgUnitId: d.orgUnitId,
       quota: Number(d.quota),
       portfolioRequired: d.portfolioRequired,
+      seats: d.seats,
     }));

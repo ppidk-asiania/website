@@ -18,7 +18,9 @@ const r: Recruitment = {
   opensAt: new Date("2026-11-01T00:00:00Z"),
   closesAt: new Date("2026-11-20T00:00:00Z"),
   maxChoices: 2,
-  units: [{ orgUnitId: "media", name: "Media", quota: 2, portfolioRequired: true }],
+  units: [
+    { orgUnitId: "media", name: "Media", quota: 2, portfolioRequired: true, seats: ["member"] },
+  ],
   offerDays: 3,
   formId: "f1",
   formVersion: 2,
@@ -77,6 +79,7 @@ describe("Recruitment page model", () => {
         offered: false,
         quota: "1",
         portfolioRequired: false,
+        seats: ["member"],
         filled: 0,
       },
       {
@@ -86,10 +89,13 @@ describe("Recruitment page model", () => {
         offered: true,
         quota: "2",
         portfolioRequired: true,
+        seats: ["member"],
         filled: 1,
       },
     ]);
-    expect(unitsInput(drafts)).toEqual([{ orgUnitId: "media", quota: 2, portfolioRequired: true }]);
+    expect(unitsInput(drafts)).toEqual([
+      { orgUnitId: "media", quota: 2, portfolioRequired: true, seats: ["member"] },
+    ]);
   });
 });
 
@@ -101,6 +107,7 @@ describe("selection queue model", () => {
     userId: "ari",
     status: "offered" as const,
     choices: ["media", "gone"],
+    choiceSeats: { media: "secretary" as const },
     answers: {
       q_why: "Because.",
       q_cv: {
@@ -112,7 +119,11 @@ describe("selection queue model", () => {
     },
     portfolio: null,
     revisionRound: 1,
-    offer: { orgUnitId: "media", expiresAt: new Date("2026-11-09T00:00:00Z") },
+    offer: {
+      orgUnitId: "media",
+      seat: "head" as const,
+      expiresAt: new Date("2026-11-09T00:00:00Z"),
+    },
     interview: null,
     pacts: [],
     pactNote: null,
@@ -165,10 +176,10 @@ describe("selection queue model", () => {
       name: "Ari Wibowo",
       statusLabel: "Offered",
       choices: [
-        { id: "media", name: "Media" },
-        { id: "gone", name: "gone" },
+        { id: "media", name: "Media", seat: "Sekretaris Staf Media" },
+        { id: "gone", name: "gone", seat: null },
       ],
-      offer: { unitName: "Media", expired: true },
+      offer: { unitName: "Media", seat: "head", seatLabel: "Kepala Staf Media", expired: true },
       answers: [
         { id: "q_why", text: "Because.", file: null },
         { id: "q_cv", text: "cv.pdf", file: { name: "cv.pdf" } },

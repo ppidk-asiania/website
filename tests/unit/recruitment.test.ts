@@ -7,6 +7,8 @@ import {
   assertBookable,
   canBook,
   checkChoices,
+  checkChoiceSeats,
+  makeOffer,
   slotTimes,
   SlotPlanSchema,
   formFilePath,
@@ -35,9 +37,15 @@ const window = {
   closesAt: new Date("2026-11-20T00:00:00Z"),
 };
 const units = [
-  { orgUnitId: "media", name: "Media", quota: 2, portfolioRequired: true },
-  { orgUnitId: "finance", name: "Finance", quota: 1, portfolioRequired: false },
-  { orgUnitId: "edu", name: "Education", quota: 3, portfolioRequired: false },
+  { orgUnitId: "media", name: "Media", quota: 2, portfolioRequired: true, seats: ["member"] },
+  { orgUnitId: "finance", name: "Finance", quota: 1, portfolioRequired: false, seats: ["member"] },
+  {
+    orgUnitId: "edu",
+    name: "Education",
+    quota: 3,
+    portfolioRequired: false,
+    seats: ["head", "secretary", "member"],
+  },
 ];
 const input = {
   periodId: "p2026",
@@ -356,5 +364,40 @@ describe("recruitment switches (11.2)", () => {
     expect(status("submitted", false)).toBe("wait_review");
     expect(status("revision", true)).toBe("revise");
     expect(status("interview", true)).toBe("interview");
+  });
+});
+
+describe("seats per unit (step 11.1)", () => {
+  const rec = { maxChoices: 2, units, offerDays: 3 };
+
+  it("opens [member] by default and only known seats", () => {
+    expect(RecruitmentInputSchema.parse(input).units[0]?.seats).toEqual(["member"]);
+    const open = (seats: string[]) =>
+      RecruitmentInputSchema.safeParse({
+        ...input,
+        units: [{ ...input.units[0], seats }],
+      }).success;
+    expect(open(["head", "secretary"])).toBe(true);
+    expect(open([])).toBe(false);
+    expect(open(["boss"])).toBe(false);
+    expect(open(["member", "member"])).toBe(false);
+  });
+
+  it("fills a single seat silently and takes the wish for a unit with several", () => {
+    expect(checkChoiceSeats(rec, ["media"], {}, true)).toEqual({ media: "member" });
+    expect(checkChoiceSeats(rec, ["media", "edu"], { edu: "secretary" }, true)).toEqual({
+      media: "member",
+      edu: "secretary",
+    });
+    expect(checkChoiceSeats(rec, ["edu"], {}, false)).toEqual({});
+    expect(() => checkChoiceSeats(rec, ["edu"], {}, true)).toThrow(/Choose a seat in Education/);
+    expect(() => checkChoiceSeats(rec, ["edu"], { edu: "treasurer" }, true)).toThrow(
+      /not open in Education/,
+    );
+  });
+
+  it("offers only a seat the unit opened", () => {
+    expect(makeOffer(rec, "edu", "head", now)).toMatchObject({ orgUnitId: "edu", seat: "head" });
+    expect(() => makeOffer(rec, "media", "head", now)).toThrow(/not open in Media/);
   });
 });

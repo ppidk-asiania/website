@@ -2,6 +2,7 @@ import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
 import type { Answers, FileAnswer, Question } from "../forms";
 import { TimezoneSchema } from "../members/profile";
+import { APPOINTMENT_SEATS, type AppointmentSeat } from "../organizations";
 import { RuleViolationError, wallTimeToUtc, type EntityMeta } from "../shared";
 
 export const APPLICATION_STATUSES = [
@@ -69,6 +70,8 @@ export interface RecruitmentUnit {
   readonly name: string;
   readonly quota: number;
   readonly portfolioRequired: boolean;
+  /** Seats opened in this unit (step 11.1); the quota counts all of them together. */
+  readonly seats: readonly AppointmentSeat[];
 }
 
 export interface Recruitment extends EntityMeta {
@@ -97,6 +100,8 @@ export interface Booking {
 
 export interface Offer {
   readonly orgUnitId: string;
+  /** An offer made before step 11.1 has no seat in storage and reads as member. */
+  readonly seat: AppointmentSeat;
   readonly expiresAt: Date;
 }
 
@@ -106,6 +111,8 @@ export interface Application {
   readonly userId: string;
   readonly status: ApplicationStatus;
   readonly choices: readonly string[];
+  /** Seat wish per chosen unit; a wish, not binding. */
+  readonly choiceSeats: Readonly<Record<string, AppointmentSeat>>;
   readonly answers: Answers;
   readonly portfolio: FileAnswer | null;
   readonly revisionRound: number;
@@ -132,6 +139,11 @@ export const RecruitmentUnitInputSchema = z
     orgUnitId: safeId,
     quota: z.number().int().min(1, "At least 1 seat.").max(500),
     portfolioRequired: z.boolean(),
+    seats: z
+      .array(z.enum(APPOINTMENT_SEATS))
+      .min(1, "Open at least one seat.")
+      .refine((seats) => new Set(seats).size === seats.length, "Each seat once.")
+      .default(["member"]),
   })
   .strict();
 
@@ -217,6 +229,30 @@ export function checkChoices(r: Pick<Recruitment, "maxChoices" | "units">, choic
   return parsed.data;
 }
 
+const seatName = (seat: AppointmentSeat, unit: RecruitmentUnit) =>
+  `The seat "${seat}" is not open in ${unit.name}.`;
+
+/** Seat wishes for the chosen units: one open seat is filled in, otherwise the wish; `complete` (submit) needs every wish. */
+export function checkChoiceSeats(
+  r: Pick<Recruitment, "units">,
+  choices: readonly string[],
+  wishes: unknown,
+  complete: boolean,
+): Record<string, AppointmentSeat> {
+  const parsed = z.record(safeId, z.enum(APPOINTMENT_SEATS)).safeParse(wishes ?? {});
+  if (!parsed.success) throw new RuleViolationError("Choose a seat from the list.");
+  const result: Record<string, AppointmentSeat> = {};
+  for (const unit of r.units.filter((u) => choices.includes(u.orgUnitId))) {
+    const wish = parsed.data[unit.orgUnitId];
+    const [only] = unit.seats;
+    if (unit.seats.length === 1 && only) result[unit.orgUnitId] = only;
+    else if (wish && unit.seats.includes(wish)) result[unit.orgUnitId] = wish;
+    else if (wish) throw new RuleViolationError(seatName(wish, unit));
+    else if (complete) throw new RuleViolationError(`Choose a seat in ${unit.name}.`);
+  }
+  return result;
+}
+
 export function portfolioRequired(r: Pick<Recruitment, "units">, choices: readonly string[]) {
   return r.units.some((u) => u.portfolioRequired && choices.includes(u.orgUnitId));
 }
@@ -250,12 +286,13 @@ export const PactNoteSchema = safeText(1000, { multiline: true });
 export function makeOffer(
   r: Pick<Recruitment, "units" | "offerDays">,
   orgUnitId: string,
+  seat: AppointmentSeat,
   now: Date,
 ): Offer {
-  if (!r.units.some((u) => u.orgUnitId === orgUnitId)) {
-    throw new RuleViolationError("Offer one of the units of this recruitment.");
-  }
-  return { orgUnitId, expiresAt: new Date(now.getTime() + r.offerDays * 86_400_000) };
+  const unit = r.units.find((u) => u.orgUnitId === orgUnitId);
+  if (!unit) throw new RuleViolationError("Offer one of the units of this recruitment.");
+  if (!unit.seats.includes(seat)) throw new RuleViolationError(seatName(seat, unit));
+  return { orgUnitId, seat, expiresAt: new Date(now.getTime() + r.offerDays * 86_400_000) };
 }
 
 export function takeSeat(counter: { quota: number; filled: number } | null): number {

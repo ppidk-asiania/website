@@ -104,10 +104,12 @@ export default async function ApplyPage({
             id: u.orgUnitId,
             name: u.name,
             portfolioRequired: u.portfolioRequired,
+            seats: u.seats,
           }))}
           questions={questions}
           initial={{
             choices: [...(application?.choices ?? [])],
+            choiceSeats: { ...(application?.choiceSeats ?? {}) },
             answers: { ...(application?.answers ?? {}) },
             portfolio: application?.portfolio?.name ?? null,
           }}

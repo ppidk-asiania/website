@@ -587,14 +587,14 @@ describe("edge cases kept safe", () => {
     });
     const application = await web().ownApplication(recruitmentId, "ari");
     expect(application).toMatchObject({
-      offer: { orgUnitId: "media", expiresAt },
+      offer: { orgUnitId: "media", seat: "member", expiresAt },
       portfolio: null,
     });
     expect(applicationSnapshot(application!)).toEqual({
       status: "offered",
       choices: ["media"],
       revisionRound: 0,
-      offer: { orgUnitId: "media", expiresAt: "2026-11-13T00:00:00.000Z" },
+      offer: { orgUnitId: "media", seat: "member", expiresAt: "2026-11-13T00:00:00.000Z" },
       portfolio: null,
       pacts: [],
       appointmentId: null,

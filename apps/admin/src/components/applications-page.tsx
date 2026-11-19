@@ -44,6 +44,7 @@ import {
   type ApplicationItem,
   type QueueTab,
 } from "./applications-model";
+import { SEAT_WORDS, type AppointmentSeat } from "@website/domain/organizations";
 import type { ApplicationAnalysis, ProofCheck } from "@website/domain/recruitment";
 
 type SortKey = "name" | "submitted";
@@ -77,7 +78,7 @@ export function ApplicationsPage(props: {
     id: string;
     title: string;
     personalityTest: boolean;
-    units: { id: string; name: string }[];
+    units: { id: string; name: string; seats: readonly AppointmentSeat[] }[];
   };
   initial: ApplicationItem[];
   canReview: boolean;
@@ -100,6 +101,7 @@ export function ApplicationsPage(props: {
   const [pending, setPending] = useState<Pending | null>(null);
   const [request, setRequest] = useState("");
   const [unit, setUnit] = useState("");
+  const [seat, setSeat] = useState<AppointmentSeat>("member");
   const [seatTitle, setSeatTitle] = useState("");
   const [proofFilter, setProofFilter] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -123,6 +125,12 @@ export function ApplicationsPage(props: {
   );
   const table = useListTable(filtered, sortValue, undefined, filterText);
   const current = items.find((a) => a.id === openId) ?? null;
+  /** The applicant's wish in a unit when that seat is open, else the unit's first open seat. */
+  const wishFor = (a: ApplicationItem, unitId: string): AppointmentSeat => {
+    const open = recruitment.units.find((u) => u.id === unitId)?.seats ?? [];
+    const wish = a.choices.find((c) => c.id === unitId)?.wish;
+    return wish && open.includes(wish) ? wish : (open[0] ?? "member");
+  };
 
   const run = async (
     action: (input: unknown) => Promise<Parameters<typeof actionMessage>[0] | { ok: true }>,
@@ -197,7 +205,7 @@ export function ApplicationsPage(props: {
       width: "24%",
       render: (a) => (
         <span className="admin-table__sub">
-          {a.choices.map((c, i) => `${i + 1}. ${c.name}`).join("  ")}
+          {a.choices.map((c, i) => `${i + 1}. ${c.seat ?? c.name}`).join("  ")}
         </span>
       ),
     },
@@ -267,12 +275,12 @@ export function ApplicationsPage(props: {
             <dt>E-mail</dt>
             <dd>{current.email || "—"}</dd>
             <dt>Choices</dt>
-            <dd>{current.choices.map((c, i) => `${i + 1}. ${c.name}`).join(", ")}</dd>
+            <dd>{current.choices.map((c, i) => `${i + 1}. ${c.seat ?? c.name}`).join(", ")}</dd>
             {current.offer ? (
               <>
                 <dt>Offer</dt>
                 <dd>
-                  {current.offer.unitName} until {formatInZone(current.offer.expiresAt, "UTC")} UTC
+                  {current.offer.seatLabel} until {formatInZone(current.offer.expiresAt, "UTC")} UTC
                   {current.offer.expired ? " (expired)" : ""}
                 </dd>
               </>
@@ -484,7 +492,9 @@ export function ApplicationsPage(props: {
                   icon="send"
                   disabled={busy}
                   onClick={() => {
-                    setUnit(current.choices[0]?.id ?? recruitment.units[0]?.id ?? "");
+                    const first = current.choices[0]?.id ?? recruitment.units[0]?.id ?? "";
+                    setUnit(first);
+                    setSeat(wishFor(current, first));
                     setPending({ kind: "offer" });
                   }}
                 >
@@ -598,7 +608,7 @@ export function ApplicationsPage(props: {
                 icon="send"
                 disabled={busy || !unit}
                 onClick={() =>
-                  void run(offerApplicationAction, { orgUnitId: unit }, "Seat offered")
+                  void run(offerApplicationAction, { orgUnitId: unit, seat }, "Seat offered")
                 }
               >
                 Offer
@@ -614,11 +624,31 @@ export function ApplicationsPage(props: {
               id="offer-unit"
               className="admin-select"
               value={unit}
-              onChange={(e) => setUnit(e.target.value)}
+              onChange={(e) => {
+                setUnit(e.target.value);
+                setSeat(wishFor(current, e.target.value));
+              }}
             >
               {recruitment.units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="admin-field">
+            <label className="admin-field__label" htmlFor="offer-seat">
+              Seat *
+            </label>
+            <Select
+              id="offer-seat"
+              className="admin-select"
+              value={seat}
+              onChange={(e) => setSeat(e.target.value as AppointmentSeat)}
+            >
+              {(recruitment.units.find((u) => u.id === unit)?.seats ?? []).map((s) => (
+                <option key={s} value={s}>
+                  {SEAT_WORDS[s]}
                 </option>
               ))}
             </Select>
@@ -707,7 +737,7 @@ export function ApplicationsPage(props: {
           asForm
           open={pending?.kind === "ratify"}
           title="Ratify and appoint"
-          subtitle={`${current.name} is confirmed and appointed to ${current.offer?.unitName ?? "the unit"} (member seat) of the active period, with the roles of that seat.`}
+          subtitle={`${current.name} is confirmed and appointed to ${current.offer?.unitName ?? "the unit"} (${current.offer?.seatLabel ?? "member"}) of the active period, with the roles of that seat.`}
           onClose={() => setPending(null)}
           footer={
             <div className="admin-modal__footer-row">

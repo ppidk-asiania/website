@@ -7,7 +7,7 @@ import type {
   SqlAppointmentStore,
   SqlRoleStore,
 } from "@website/db/sql";
-import { derivedAssignments, type OrgUnit } from "@website/domain/organizations";
+import { APPOINTMENT_SEATS, derivedAssignments, type OrgUnit } from "@website/domain/organizations";
 import type { FileAnswer } from "@website/domain/forms";
 import {
   isRecruitmentOpen,
@@ -111,11 +111,11 @@ export function createApplicationActions(deps: ApplicationDeps) {
     reject: decision("recruitment.review", Ref, to("rejected")),
     offer: decision(
       "recruitment.offer",
-      Ref.extend({ orgUnitId: safeId }).strict(),
-      ({ orgUnitId }, _userId, now) =>
+      Ref.extend({ orgUnitId: safeId, seat: z.enum(APPOINTMENT_SEATS).default("member") }).strict(),
+      ({ orgUnitId, seat }, _userId, now) =>
         (_application, recruitment) => ({
           status: "offered",
-          offer: makeOffer(recruitment, orgUnitId, now),
+          offer: makeOffer(recruitment, orgUnitId, seat, now),
         }),
     ),
 
@@ -154,7 +154,7 @@ export function createApplicationActions(deps: ApplicationDeps) {
           );
         }
         if (!unit) throw new RuleViolationError("This unit does not exist.");
-        const derived = derivedAssignments("member", unit, stored.map);
+        const derived = derivedAssignments(application.offer.seat, unit, stored.map);
         const roles = await deps.roles.getMany(derived.map((d) => d.roleId));
         for (const { roleId } of derived) {
           const role = roles.get(roleId);

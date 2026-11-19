@@ -55,6 +55,7 @@ type Applicant = { readonly uid: string } | null;
 const Ref = z.object({ recruitmentId: safeId }).strict();
 const Draft = Ref.extend({
   choices: z.array(safeId).max(10),
+  choiceSeats: z.record(safeId, z.string().max(20)).default({}),
   answers: z.record(z.string().max(40), z.unknown()),
 }).strict();
 
@@ -90,9 +91,14 @@ export function createApplying(deps: ApplyingDeps) {
     async saveDraft(user: Applicant, input: unknown): Promise<ApplyResult> {
       const g = await gate(user, Draft, input);
       if (!g.ok) return g.result;
-      const { recruitmentId, choices, answers } = g.data;
+      const { recruitmentId, choices, choiceSeats, answers } = g.data;
       return toResult(
-        await deps.store.saveDraft(recruitmentId, g.uid, { choices, answers }, deps.now()),
+        await deps.store.saveDraft(
+          recruitmentId,
+          g.uid,
+          { choices, choiceSeats, answers },
+          deps.now(),
+        ),
       );
     },
 

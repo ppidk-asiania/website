@@ -1,5 +1,6 @@
 import { answerText, type FileAnswer, type Question } from "@website/domain/forms";
 import type { MemberProfile, ProofMark } from "@website/domain/members";
+import { seatLabel, type AppointmentSeat, type OrgUnitType } from "@website/domain/organizations";
 import {
   offerExpired,
   waitingFor,
@@ -53,10 +54,17 @@ export interface ApplicationItem {
   email: string;
   status: ApplicationStatus;
   statusLabel: string;
-  choices: { id: string; name: string }[];
+  choices: { id: string; name: string; seat: string | null; wish: AppointmentSeat | null }[];
   submittedAt: string | null;
   revisionRound: number;
-  offer: { orgUnitId: string; unitName: string; expiresAt: string; expired: boolean } | null;
+  offer: {
+    orgUnitId: string;
+    unitName: string;
+    seat: AppointmentSeat;
+    seatLabel: string;
+    expiresAt: string;
+    expired: boolean;
+  } | null;
   answers: { id: string; label: string; text: string; file: FileAnswer | null }[];
   portfolio: FileAnswer | null;
   pacts: FileAnswer[];
@@ -85,8 +93,11 @@ export function toApplicationItem(
   now: Date,
   personality: Pick<PersonalityScore, "full" | "axes"> | null = null,
   proof: Pick<MemberProfile, "studentProof" | "proofReview"> | null = null,
+  unitTypes: ReadonlyMap<string, OrgUnitType> = new Map(),
 ): ApplicationItem {
   const unitName = (id: string) => r.units.find((u) => u.orgUnitId === id)?.name ?? id;
+  const seatOf = (id: string, seat: AppointmentSeat) =>
+    seatLabel(seat, { name: unitName(id), type: unitTypes.get(id) ?? "staf" });
   return {
     id: a.id,
     version: a.version,
@@ -95,12 +106,17 @@ export function toApplicationItem(
     email: user?.email ?? "",
     status: a.status,
     statusLabel: label(APPLICATION_STATUS_LABELS, a.status),
-    choices: a.choices.map((id) => ({ id, name: unitName(id) })),
+    choices: a.choices.map((id) => {
+      const seat = a.choiceSeats[id];
+      return { id, name: unitName(id), seat: seat ? seatOf(id, seat) : null, wish: seat ?? null };
+    }),
     submittedAt: a.submittedAt?.toISOString() ?? null,
     revisionRound: a.revisionRound,
     offer: a.offer && {
       orgUnitId: a.offer.orgUnitId,
       unitName: unitName(a.offer.orgUnitId),
+      seat: a.offer.seat,
+      seatLabel: seatOf(a.offer.orgUnitId, a.offer.seat),
       expiresAt: a.offer.expiresAt.toISOString(),
       expired: offerExpired(a.offer, now),
     },

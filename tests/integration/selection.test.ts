@@ -268,6 +268,7 @@ describe("offers and seats (recruitment.offer; accept on the website)", () => {
     ).toMatchObject({ ok: true, data: { status: "offered" } });
     expect((await web().ownApplication(recruitmentId, "ari"))?.offer).toEqual({
       orgUnitId: "finance",
+      seat: "member",
       expiresAt: new Date("2026-11-13T05:00:00Z"),
     });
     expect(seats("finance")).toBe(0);
@@ -455,5 +456,86 @@ describe("files of an application (recruitment.review)", () => {
     expect(await decisions().fileUrl(...as(reviewer))({ id: "missing", path: "x" })).toMatchObject({
       error: "refused",
     });
+  });
+});
+
+describe("seats per unit (step 11.1)", () => {
+  const openSeats = (unit: string, seats: string[]) => {
+    const doc = fake.docs.get(`recruitments/${recruitmentId}`) as {
+      units: { orgUnitId: string; seats?: string[] }[];
+    };
+    for (const u of doc.units) if (u.orgUnitId === unit) u.seats = seats;
+  };
+  const draft = (uid: string, choices: string[], choiceSeats: Record<string, string>) =>
+    applying().saveDraft(
+      { uid },
+      { recruitmentId, choices, choiceSeats, answers: { q_why: "Hi" } },
+    );
+  const submitSeat = async (uid: string) => {
+    await draft(uid, ["media"], { media: "member" });
+    await applying().submit({ uid }, { recruitmentId });
+  };
+  const offer = (uid: string, seat: string, orgUnitId = "media") =>
+    decisions().offer(...as(offerer))({ id: appId(uid), version: version(uid), orgUnitId, seat });
+  const accept = async (uid: string) => {
+    await applying().respondOffer({ uid }, { recruitmentId, accept: true });
+  };
+
+  it("keeps the seat wish; a single-seat unit is filled in silently", async () => {
+    openSeats("media", ["head", "secretary", "member"]);
+    expect(await draft("ari", ["media", "finance"], { media: "secretary" })).toMatchObject({
+      ok: true,
+    });
+    expect(fake.docs.get(`applications/${appId("ari")}`)?.["choiceSeats"]).toEqual({
+      media: "secretary",
+      finance: "member",
+    });
+    expect(await draft("ari", ["media"], { media: "treasurer" })).toMatchObject({
+      error: "refused",
+    });
+    await draft("ari", ["media"], {});
+    expect(await applying().submit({ uid: "ari" }, { recruitmentId })).toMatchObject({
+      error: "refused",
+      message: expect.stringContaining("Choose a seat in Direktorat Media"),
+    });
+  });
+
+  it("offers a seat the unit opened; an offer without a seat is member", async () => {
+    openSeats("media", ["secretary", "member"]);
+    await submitSeat("ari");
+    await decisions().pass(...as(reviewer))({ id: appId("ari"), version: version("ari") });
+    expect(await offer("ari", "head")).toMatchObject({ error: "refused" });
+    expect(await offer("ari", "secretary")).toMatchObject({ ok: true });
+    expect(fake.docs.get(`applications/${appId("ari")}`)?.["offer"]).toMatchObject({
+      seat: "secretary",
+    });
+    const legacy = await decisions().offer(...as(offerer))({
+      id: appId("ari"),
+      version: version("ari"),
+      orgUnitId: "media",
+    });
+    expect(legacy).toMatchObject({ ok: true });
+    expect(fake.docs.get(`applications/${appId("ari")}`)?.["offer"]).toMatchObject({
+      seat: "member",
+    });
+  });
+
+  it("refuses head while the unit has an active head or another accepted head offer", async () => {
+    openSeats("media", ["head", "member"]);
+    for (const uid of ["ari", "budi"]) {
+      await submitSeat(uid);
+      await decisions().pass(...as(reviewer))({ id: appId(uid), version: version(uid) });
+    }
+    fake.docs.set("appointments/old", { orgUnitId: "media", seat: "head", status: "active" });
+    expect(await offer("ari", "head")).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("already has a head")],
+    });
+    fake.docs.delete("appointments/old");
+    expect(await offer("ari", "head")).toMatchObject({ ok: true });
+    expect(await offer("budi", "head")).toMatchObject({ ok: true }); // offered, not accepted yet
+    await accept("ari");
+    expect(await offer("budi", "head")).toMatchObject({ error: "refused" });
+    expect(await offer("budi", "member")).toMatchObject({ ok: true });
   });
 });

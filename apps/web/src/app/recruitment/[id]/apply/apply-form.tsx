@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SEAT_WORDS, type AppointmentSeat } from "@website/domain/organizations";
 import type { AnswerValue, Question } from "@website/domain/forms";
 import { FormFields } from "@/components/form-fields";
 import type { Dictionary } from "@/i18n/dictionaries";
@@ -13,6 +14,7 @@ interface Unit {
   id: string;
   name: string;
   portfolioRequired: boolean;
+  seats: readonly AppointmentSeat[];
 }
 
 export function ApplyForm(props: {
@@ -20,7 +22,12 @@ export function ApplyForm(props: {
   maxChoices: number;
   units: Unit[];
   questions: readonly Question[];
-  initial: { choices: string[]; answers: Record<string, AnswerValue>; portfolio: string | null };
+  initial: {
+    choices: string[];
+    choiceSeats: Record<string, AppointmentSeat>;
+    answers: Record<string, AnswerValue>;
+    portfolio: string | null;
+  };
   labels: Dictionary["recruitment"];
   formLabels: Dictionary["forms"];
 }) {
@@ -29,6 +36,7 @@ export function ApplyForm(props: {
   const [choices, setChoices] = useState<string[]>(() =>
     Array.from({ length: props.maxChoices }, (_, i) => props.initial.choices[i] ?? ""),
   );
+  const [seats, setSeats] = useState(props.initial.choiceSeats);
   const [value, setValue] = useState<FieldValues>(() =>
     valuesFrom(props.questions, props.initial.answers),
   );
@@ -82,6 +90,7 @@ export function ApplyForm(props: {
     saveApplicationDraftAction({
       recruitmentId: props.recruitmentId,
       choices: chosen,
+      choiceSeats: seats,
       answers: answersFrom(
         props.questions.filter((q) => q.type !== "file"),
         value,
@@ -168,6 +177,27 @@ export function ApplyForm(props: {
                   </option>
                 ))}
             </select>
+            {(() => {
+              const open = props.units.find((u) => u.id === choice)?.seats ?? [];
+              return open.length > 1 ? (
+                <select
+                  className="ui-input"
+                  aria-label={t.seat}
+                  required
+                  value={seats[choice] ?? ""}
+                  onChange={(e) =>
+                    setSeats({ ...seats, [choice]: e.target.value as AppointmentSeat })
+                  }
+                >
+                  <option value="">{t.seat}</option>
+                  {open.map((s) => (
+                    <option key={s} value={s}>
+                      {SEAT_WORDS[s]}
+                    </option>
+                  ))}
+                </select>
+              ) : null;
+            })()}
           </label>
         ))}
       </fieldset>

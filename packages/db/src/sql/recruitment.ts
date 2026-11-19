@@ -6,6 +6,7 @@ import {
   applicationId,
   assertTransition,
   checkChoices,
+  checkChoiceSeats,
   isRecruitmentOpen,
   lateUploadOpen,
   offerExpired,
@@ -26,7 +27,13 @@ import {
   type RecruitmentInput,
   type RecruitmentUnit,
 } from "@website/domain/recruitment";
-import type { Appointment, DerivedAssignment } from "@website/domain/organizations";
+import {
+  seatsFor,
+  type OrgUnitType,
+  type Appointment,
+  type AppointmentSeat,
+  type DerivedAssignment,
+} from "@website/domain/organizations";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { prepareAppointment, writeAppointment, type AppointmentAudit } from "./appointments";
@@ -44,7 +51,9 @@ function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
     opensAt: toDate(data["opensAt"]) as Date,
     closesAt: toDate(data["closesAt"]) as Date,
     maxChoices: data["maxChoices"] as number,
-    units: data["units"] as RecruitmentUnit[],
+    units: (
+      data["units"] as (Omit<RecruitmentUnit, "seats"> & { seats?: AppointmentSeat[] })[]
+    ).map((u) => ({ ...u, seats: u.seats ?? ["member"] })),
     offerDays: data["offerDays"] as number,
     formId: data["formId"] as string,
     formVersion: data["formVersion"] as number,
@@ -67,7 +76,7 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
     opensAt: r.opensAt.toISOString(),
     closesAt: r.closesAt.toISOString(),
     maxChoices: r.maxChoices,
-    units: r.units.map((u) => ({ ...u })),
+    units: r.units.map((u) => ({ ...u, seats: [...u.seats] })),
     offerDays: r.offerDays,
     formId: r.formId,
     formVersion: r.formVersion,
@@ -79,7 +88,8 @@ export function recruitmentSnapshot(r: RecruitmentFields): Snapshot {
 }
 
 export function toApplication(id: string, data: Record<string, unknown>): Application {
-  const offer = data["offer"] as { orgUnitId: string; expiresAt: unknown } | null | undefined;
+  const offer = data["offer"] as
+    { orgUnitId: string; seat?: AppointmentSeat; expiresAt: unknown } | null | undefined;
   const interview = data["interview"] as { slotId: string; startsAt: unknown } | null | undefined;
   return {
     id,
@@ -87,11 +97,16 @@ export function toApplication(id: string, data: Record<string, unknown>): Applic
     userId: data["userId"] as string,
     status: data["status"] as ApplicationStatus,
     choices: data["choices"] as string[],
+    choiceSeats: (data["choiceSeats"] as Application["choiceSeats"] | undefined) ?? {},
     answers: data["answers"] as Answers,
     portfolio: (data["portfolio"] as FileAnswer | null | undefined) ?? null,
     revisionRound: data["revisionRound"] as number,
     offer: offer
-      ? { orgUnitId: offer.orgUnitId, expiresAt: toDate(offer.expiresAt) as Date }
+      ? {
+          orgUnitId: offer.orgUnitId,
+          seat: offer.seat ?? "member",
+          expiresAt: toDate(offer.expiresAt) as Date,
+        }
       : null,
     interview: interview
       ? { slotId: interview.slotId, startsAt: toDate(interview.startsAt) as Date }
@@ -112,7 +127,11 @@ export function applicationSnapshot(a: Application): Snapshot {
     choices: [...a.choices],
     revisionRound: a.revisionRound,
     offer: a.offer
-      ? { orgUnitId: a.offer.orgUnitId, expiresAt: a.offer.expiresAt.toISOString() }
+      ? {
+          orgUnitId: a.offer.orgUnitId,
+          seat: a.offer.seat,
+          expiresAt: a.offer.expiresAt.toISOString(),
+        }
       : null,
     portfolio: a.portfolio ? a.portfolio.name : null,
     pacts: a.pacts.map((p) => p.name),
@@ -125,6 +144,7 @@ const applicationDoc = (a: Application) => ({
   userId: a.userId,
   status: a.status,
   choices: a.choices,
+  choiceSeats: a.choiceSeats,
   answers: a.answers,
   portfolio: a.portfolio,
   revisionRound: a.revisionRound,
@@ -300,11 +320,17 @@ export function createSqlRecruitmentStore(db: Database) {
           if ((filled.get(u.orgUnitId) ?? 0) > u.quota) {
             throw new RuleViolationError(`${name} already has more accepted seats than that.`);
           }
+          const allowed = seatsFor(unit.data() as { type: OrgUnitType });
+          if (allowed.length > 1 && u.seats.some((seat) => !allowed.includes(seat))) {
+            throw new RuleViolationError(`${name} cannot open those seats.`);
+          }
           return {
             orgUnitId: u.orgUnitId,
             name,
             quota: u.quota,
             portfolioRequired: u.portfolioRequired,
+            // a core unit is its own seat: no choice
+            seats: allowed.length === 1 ? allowed : u.seats,
           };
         });
         const taken = removed.find((u) => (filled.get(u.orgUnitId) ?? 0) > 0);
@@ -430,7 +456,12 @@ export function createSqlApplicationStore(db: Database) {
         const prepared = await prepareAppointment(
           db,
           tx,
-          { userId: current.userId, orgUnitId, seat: "member", title: appointment.title },
+          {
+            userId: current.userId,
+            orgUnitId,
+            seat: (current.offer as Offer).seat,
+            title: appointment.title,
+          },
           checked,
           now,
         );
@@ -486,10 +517,41 @@ export function createSqlApplicationStore(db: Database) {
           holdsSeat(current.status) && !holdsSeat(decision.status) && current.offer
             ? counters.doc(seatCounterId(recruitment.id, current.offer.orgUnitId))
             : null;
-        const [offerSeat, releaseSeat] = await Promise.all([
+        const forHead = decision.offer?.seat === "head" ? decision.offer.orgUnitId : null;
+        const [offerSeat, releaseSeat, activeHead, others] = await Promise.all([
           offerCounter && tx.get(offerCounter),
           releaseCounter && tx.get(releaseCounter),
+          forHead === null
+            ? null
+            : tx.get(
+                db
+                  .collection("appointments")
+                  .where("orgUnitId", "==", forHead)
+                  .where("seat", "==", "head")
+                  .where("status", "==", "active"),
+              ),
+          forHead === null
+            ? null
+            : tx.get(applications.where("recruitmentId", "==", recruitment.id)),
         ]);
+        if (
+          activeHead &&
+          (!activeHead.empty ||
+            others?.docs.some((doc) => {
+              const other = toApplication(doc.id, doc.data());
+              return (
+                other.id !== current.id &&
+                holdsSeat(other.status) &&
+                other.status !== "confirmed" &&
+                other.offer?.orgUnitId === forHead &&
+                other.offer.seat === "head"
+              );
+            }))
+        ) {
+          throw new RuleViolationError(
+            "This unit already has a head, or another applicant has accepted the head seat.",
+          );
+        }
         if (offerSeat) {
           takeSeat(
             offerSeat.exists
@@ -708,6 +770,7 @@ export function createSqlRecruitmentWebStore(db: Database) {
       userId: uid,
       status: "draft" as const,
       choices: [],
+      choiceSeats: {},
       answers: {},
       portfolio: null,
       revisionRound: 0,
@@ -774,15 +837,21 @@ export function createSqlRecruitmentWebStore(db: Database) {
     saveDraft(
       recruitmentId: string,
       uid: string,
-      draft: { choices: string[]; answers: Readonly<Record<string, unknown>> },
+      draft: {
+        choices: string[];
+        choiceSeats: Readonly<Record<string, string>>;
+        answers: Readonly<Record<string, unknown>>;
+      },
       now: Date,
     ) {
       return change(recruitmentId, uid, now, (r, current, questions) => {
         if (!isRecruitmentOpen(r, now)) return { ok: false, error: "closed" };
         if (!editable(current)) return { ok: false, error: "locked" };
         let choices: string[] = [];
+        let choiceSeats: Application["choiceSeats"] = {};
         try {
           choices = draft.choices.length === 0 ? [] : checkChoices(r, draft.choices);
+          choiceSeats = checkChoiceSeats(r, choices, draft.choiceSeats, false);
         } catch (error) {
           return { ok: false, error: "refused", message: (error as Error).message };
         }
@@ -799,7 +868,11 @@ export function createSqlRecruitmentWebStore(db: Database) {
         const files = Object.fromEntries(
           Object.entries(application.answers).filter(([id]) => fileIds.has(id)),
         );
-        return bump(application, now, { choices, answers: { ...parsed.answers, ...files } });
+        return bump(application, now, {
+          choices,
+          choiceSeats,
+          answers: { ...parsed.answers, ...files },
+        });
       });
     },
 
@@ -879,7 +952,7 @@ export function createSqlRecruitmentWebStore(db: Database) {
           if (!isRecruitmentOpen(r, now)) return { ok: false, error: "closed" };
           if (!current || !editable(current)) return { ok: false, error: "locked" };
           try {
-            checkChoices(r, current.choices);
+            checkChoiceSeats(r, checkChoices(r, current.choices), current.choiceSeats, true);
           } catch (error) {
             return { ok: false, error: "refused", message: (error as Error).message };
           }

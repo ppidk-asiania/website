@@ -37,6 +37,9 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
     applications.map((a) => a.id),
     uids,
   );
+  const unitTypes = new Map(
+    (await adminReads.listOrgUnits(recruitment.periodId)).map((u) => [u.id, u.type]),
+  );
   const now = new Date();
   return (
     <ApplicationsPage
@@ -44,7 +47,7 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
         id: recruitment.id,
         title: recruitment.title,
         personalityTest: recruitment.personalityTest,
-        units: recruitment.units.map((u) => ({ id: u.orgUnitId, name: u.name })),
+        units: recruitment.units.map((u) => ({ id: u.orgUnitId, name: u.name, seats: u.seats })),
       }}
       initial={applications.map((a) =>
         toApplicationItem(
@@ -56,6 +59,7 @@ export default async function ApplicationsRoute({ params }: { params: Promise<{ 
           now,
           personality.get(a.userId) ?? null,
           proofs.get(a.userId) ?? null,
+          unitTypes,
         ),
       )}
       canReview={can(viewer.principal, "recruitment.review")}

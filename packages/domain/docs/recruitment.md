@@ -115,6 +115,19 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   limit of its own). `nextAction` returns `upload_later` instead of `wait_review` while files are
   missing; the committee sees "Waiting for: <question>". The 3-day reminder before the document
   deadline and the AI-analysis input (11.9) are not built.
+- **Seats per unit** (step 11.1, seats from 10.2 `seatsFor`/`seatLabel`/role map): each unit entry of a
+  recruitment has `seats` (default `[member]`; stored recruitments without it read as `[member]`),
+  chosen on the set-up page; the quota stays per unit for all seats together. A core unit is its own
+  seat: its seats are forced to `seatsFor` (head) and the applicant gets no choice. The applicant's
+  choice carries a seat wish (`applications.choiceSeats`, `checkChoiceSeats`): a unit with one open seat
+  is filled in silently, with several the wish is required at submit (a draft may leave it empty) and
+  is not binding. The offer is unit + `seat` (`makeOffer`, must be open in that unit; an offer stored
+  before this step has no seat and reads as member). `head` is refused while the unit has an active
+  head or another application of the recruitment holds an accepted/approved/pakta-review head offer.
+  Ratify appoints the OFFERED seat through the same appointment transaction, so roles come from
+  `derivedAssignments(seat, ...)` (a head gets the unit-head role) and `canRatifyInto` checks those.
+  The applicants list and application page show the seat with `seatLabel`. Not built: quota, seats
+  and portfolio rule on the unit (PPIDK "Formasi" page); they stay per recruitment.
 - **Offers** expire at read time (`offerExpired`): no job releases them; an expired offer cannot
   be answered and the committee may offer again.
 - **Student proof review** (`recruitment.review`): on the application page the committee opens

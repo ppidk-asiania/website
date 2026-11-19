@@ -254,6 +254,27 @@ describe("ratification (C3 step 9)", () => {
     expect(modules.sort()).toEqual(["appointments", "recruitment", "users"]);
   });
 
+  it("appoints the offered seat; its roles come from the seat, not the member role", async () => {
+    fake.docs.set("roles/directorate_secretary", role(["events.read"]));
+    setApplication("pakta_review", {
+      offer: { orgUnitId: "media", seat: "secretary", expiresAt: clock },
+    });
+    fake.docs.set("users/ari", user("ari", ["visitor"]));
+    expect(
+      await actions().ratify(...as("sekjen"))({ id: "rec1_ari", version: 5, title: "Sekretaris" }),
+    ).toMatchObject({ ok: true, data: { status: "confirmed" } });
+    expect(appointments()).toEqual([expect.objectContaining({ seat: "secretary" })]);
+    const assignments = fake.docs.get("users/ari")?.["roleAssignments"] as Array<
+      Record<string, unknown>
+    >;
+    expect(assignments).toContainEqual(
+      expect.objectContaining({
+        roleId: "directorate_secretary",
+        scope: { type: "orgUnit", orgUnitId: "media" },
+      }),
+    );
+  });
+
   it("refuses: own application, no second sign-in method, escalation, inactive period", async () => {
     setApplication("pakta_review");
     const ratify = (uid: string) =>
