@@ -7,6 +7,7 @@ export const EXPIRING_COLLECTIONS = [
   "attendanceCodes",
   "whatsappConversations",
   "pageViewVisits",
+  "whatsappLinkCodes",
 ] as const;
 
 export async function deleteExpired(
@@ -21,6 +22,7 @@ export async function deleteExpired(
     attendanceCodes: 0,
     whatsappConversations: 0,
     pageViewVisits: 0,
+    whatsappLinkCodes: 0,
   };
   for (const name of EXPIRING_COLLECTIONS) {
     deleted[name] = await db.runTransaction(async (tx) => {

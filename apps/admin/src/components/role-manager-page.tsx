@@ -556,6 +556,7 @@ function PersonModal({
   const router = useRouter();
   const [chosen, setChosen] = useState(row.roleId ?? "");
   const [methods, setMethods] = useState<string | null>(null);
+  const [whatsapp, setWhatsapp] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -568,8 +569,12 @@ function PersonModal({
     void personDetailsAction({ uid }).then(
       (result) => {
         if (!live) return;
-        if (!result.ok) return setMethods("Unavailable");
-        const { providers, mfaFactors, passkeys } = result.data;
+        if (!result.ok) {
+          setWhatsapp("Unavailable");
+          return setMethods("Unavailable");
+        }
+        const { providers, mfaFactors, passkeys, whatsappVerified } = result.data;
+        setWhatsapp(whatsappVerified ? "Verified" : "Not verified");
         const list = [
           ...providers.map((p) =>
             p === "google.com" ? "Google" : p === "password" ? "E-mail and password" : p,
@@ -580,7 +585,10 @@ function PersonModal({
         setMethods(list.join(", ") || "—");
       },
       () => {
-        if (live) setMethods("Unavailable");
+        if (live) {
+          setMethods("Unavailable");
+          setWhatsapp("Unavailable");
+        }
       },
     );
     return () => {
@@ -700,6 +708,8 @@ function PersonModal({
         <dd>{formatUtc(row.lastSignInAt ? new Date(row.lastSignInAt) : null)}</dd>
         <dt>Sign-in methods</dt>
         <dd>{methods ?? "Loading…"}</dd>
+        <dt>WhatsApp</dt>
+        <dd>{whatsapp ?? "Loading…"}</dd>
       </dl>
 
       <div className="admin-field">

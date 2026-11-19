@@ -3,7 +3,7 @@ import { z } from "zod";
 import { hasTwoSignInMethods, type AccountAdmin, type PasskeyStore } from "@website/auth";
 import type { AuditEvent } from "@website/audit";
 import type { AuditChange, Invite, UserSummary } from "@website/db";
-import type { SqlAccountStore, SqlRoleStore } from "@website/db/sql";
+import type { SqlAccountStore, SqlMemberProfileStore, SqlRoleStore } from "@website/db/sql";
 import { RuleViolationError } from "@website/domain/shared";
 import { logSecurityEvent, type Logger } from "@website/observability";
 import {
@@ -25,6 +25,7 @@ export interface AccountDeps {
     "change" | "get" | "findByEmail" | "findByName" | "searchByPrefix" | "invite" | "cancelInvite"
   >;
   readonly roles: Pick<SqlRoleStore, "get">;
+  readonly memberProfiles: Pick<SqlMemberProfileStore, "findByUserId">;
   readonly passkeys: Pick<PasskeyStore, "listByUser">;
   readonly authAdmin: AccountAdmin;
   readonly logger: Logger;
@@ -277,11 +278,17 @@ export function createAccountActions(deps: AccountDeps) {
       if ((await deps.accounts.get(uid)) === null) {
         throw new RuleViolationError("This account does not exist.");
       }
-      const [methods, passkeys] = await Promise.all([
+      const [methods, passkeys, profile] = await Promise.all([
         deps.authAdmin.signInMethods(uid),
         deps.passkeys.listByUser(uid),
+        deps.memberProfiles.findByUserId(uid),
       ]);
-      return { ...methods, passkeys: passkeys.length };
+      // Only whether the number is verified, never the number (that needs members.pii).
+      return {
+        ...methods,
+        passkeys: passkeys.length,
+        whatsappVerified: Boolean(profile?.whatsappVerifiedAt),
+      };
     },
   });
 

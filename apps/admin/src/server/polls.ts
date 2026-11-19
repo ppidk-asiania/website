@@ -57,10 +57,18 @@ const MAX_BODY = 64 * 1024;
 const reply = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
+export interface IncomingMessage {
+  readonly id: string;
+  readonly from: string;
+  readonly fromMe: boolean;
+  readonly text: string;
+}
+
 export function createWahaWebhookRoute(deps: {
   readonly secret: string | undefined;
   readonly record: (provider: string, eventId: string, now: Date) => Promise<boolean>;
   readonly surveys: Pick<SqlSurveyStore, "vote">;
+  readonly onMessage?: (message: IncomingMessage) => Promise<void>;
   readonly now: () => Date;
 }) {
   return async (request: Request): Promise<Response> => {
@@ -75,12 +83,26 @@ export function createWahaWebhookRoute(deps: {
     }
     let body: {
       event?: unknown;
-      payload?: { vote?: Record<string, unknown>; poll?: Record<string, unknown> };
+      payload?: {
+        vote?: Record<string, unknown>;
+        poll?: Record<string, unknown>;
+        id?: unknown;
+        from?: unknown;
+        fromMe?: unknown;
+        body?: unknown;
+      };
     };
     try {
       body = JSON.parse(new TextDecoder().decode(bytes)) as typeof body;
     } catch {
       return reply({ error: "invalid_input" }, 400);
+    }
+    if (body.event === "message") {
+      const { id, from, fromMe, body: text } = body.payload ?? {};
+      if (typeof id === "string" && typeof from === "string" && typeof text === "string") {
+        await deps.onMessage?.({ id, from, fromMe: fromMe === true, text });
+      }
+      return reply({ ok: true });
     }
     if (body.event !== "poll.vote") return reply({ ok: true });
     const voteId = body.payload?.vote?.["id"];

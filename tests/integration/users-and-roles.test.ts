@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountAdmin } from "@website/auth";
-import { createSqlAccountStore, createSqlRoleStore, createSqlUserStore } from "@website/db/sql";
+import {
+  createSqlAccountStore,
+  createSqlMemberProfileStore,
+  createSqlRoleStore,
+  createSqlUserStore,
+} from "@website/db/sql";
 import { createMemoryPasskeyStore } from "@website/db/memory";
 import { createLogger } from "@website/observability";
 import {
@@ -32,6 +37,7 @@ let logLines: string[];
 let invitesSent: { email: string; roleName: string }[];
 let deps: {
   accounts: ReturnType<typeof createSqlAccountStore>;
+  memberProfiles: ReturnType<typeof createSqlMemberProfileStore>;
   roles: ReturnType<typeof createSqlRoleStore>;
   passkeys: ReturnType<typeof createMemoryPasskeyStore>;
   authAdmin: AccountAdmin;
@@ -73,6 +79,7 @@ beforeEach(() => {
   invitesSent = [];
   deps = {
     accounts: createSqlAccountStore(db),
+    memberProfiles: createSqlMemberProfileStore(db),
     roles: createSqlRoleStore(db),
     passkeys: createMemoryPasskeyStore(),
     authAdmin,
@@ -742,8 +749,17 @@ describe("Role Manager → Add New People: give a role, or invite by e-mail", ()
     const details = createAccountActions(deps).personDetails;
     expect(await details(...as("boss"))({ uid: "ana" })).toEqual({
       ok: true,
-      data: { providers: ["google.com"], mfaFactors: 1, passkeys: 0 },
+      data: { providers: ["google.com"], mfaFactors: 1, passkeys: 0, whatsappVerified: false },
     });
+    fake.docs.set("memberProfiles/ana", {
+      fullName: "Ana",
+      whatsappNumber: "+6281234567890",
+      whatsappVerifiedAt: new Date("2026-11-16T05:00:00Z"),
+    });
+    expect(await details(...as("boss"))({ uid: "ana" })).toMatchObject({
+      data: { whatsappVerified: true },
+    });
+    fake.docs.delete("memberProfiles/ana");
     fake.docs.set("roles/jp_reader", {
       name: "JP reader",
       permissions: ["users.read"],

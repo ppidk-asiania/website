@@ -83,7 +83,32 @@ first), the options frozen on the survey (label → stars), the same delivery ru
 de-duplicated per vote, choice and time, so a changed vote counts and a retry does not) and are
 stored by the poll's message id. The Email page shows asked / answered / average / 1-5 counts
 per source for the last 12 months. [OWNER] WAHA dashboard → webhook URL
-`https://<admin domain>/webhooks/waha`, event `poll.vote`, HMAC key = `WAHA_WEBHOOK_SECRET`.
+`https://<admin domain>/webhooks/waha`, events `poll.vote` and `message`, HMAC key = `WAHA_WEBHOOK_SECRET`.
+
+## Linking a WhatsApp number by message (step 10.4)
+
+The member opens `/account/profile` → **Link my WhatsApp**: the website makes a code (8 characters
+without look-alikes `I L O 0 1`, 30 minutes, single use; a new code cancels the old one; stored as
+`whatsappLinkCodes/{HMAC(code)}` with `SUBSCRIBER_HASH_SECRET`, the same value on web and admin;
+never in clear, deleted by cron `expire`) and shows a `wa.me`
+link and QR with the text `/asiania CODE` to the bot number (`WAHA_BOT_NUMBER`, web).
+
+`POST /webhooks/waha` also takes the `message` event (`src/server/whatsapp-link.ts`). Only a text
+starting with `/asiania ` from a private chat counts: the SENDER's number is saved on the profile
+with `whatsappVerifiedAt` (`linkWhatsapp` in `packages/db/src/sql/member-profiles.ts`, audited with
+the number redacted). A LID sender is resolved through WAHA first
+(`GET /api/{session}/lids/{lid}`, `wahaResolveLid`); an unresolved LID, a group, our own message
+and any other text are ignored. The reply (Indonesian, then English; sent through the messenger
+so `MESSAGING_MODE=log` only records it) never repeats the code.
+
+Rules: the webhook is processed ONLY when `WAHA_WEBHOOK_SECRET` is set and the HMAC matches
+(otherwise anyone could fake a sender); a number already verified on another account is refused;
+the code is used up even when refused; a replayed event is answered once (`webhookEvents`).
+Typing a number by hand on the profile keeps working, clears `whatsappVerifiedAt`, and messages
+still go to an unverified number. The profile and the Role Manager person popup show "verified" /
+"not verified" (the popup never shows the number). [OWNER] WAHA dashboard → webhook events =
+`poll.vote` + `message`; set `WAHA_BOT_NUMBER` on the website.
+Tests: `tests/security/whatsapp-webhook.test.ts`, `tests/integration/whatsapp-link.test.ts`.
 
 ## WhatsApp chatbot (C4)
 
@@ -123,5 +148,6 @@ inside the free 24-hour window; anything proactive stays on WAHA).
 
 `MESSAGING_MODE` (`log` | `live`), `MESSAGING_TEST_RECIPIENTS` (comma-separated e-mails and/or
 E.164 numbers), `RESEND_API_KEY`, `EMAIL_FROM_TRANSACTIONAL`, `WAHA_BASE_URL`, `WAHA_API_KEY`,
-`WAHA_SESSION` (default `default`), `WAHA_WEBHOOK_SECRET` (poll votes) — see `docs/environment.md`. Without a Resend key
+`WAHA_SESSION` (default `default`), `WAHA_WEBHOOK_SECRET` (poll votes and link messages),
+`WAHA_BOT_NUMBER` (web: the bot's number for the link) — see `docs/environment.md`. Without a Resend key
 or sender, live sends fail with `not_configured` (visible on the Email page).

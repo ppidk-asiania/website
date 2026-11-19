@@ -147,6 +147,8 @@ export interface MemberProfile extends EntityMeta, Omit<MemberProfileInput, "con
   readonly consent: { readonly privacyPolicyVersion: string; readonly consentedAt: Date };
   readonly chapterId: string | null;
   readonly graduation: Graduation;
+  /** Set when the member linked this number by messaging the bot; typing a number clears it. */
+  readonly whatsappVerifiedAt: Date | null;
 }
 
 export interface Graduation {
@@ -157,7 +159,7 @@ export const NOT_GRADUATED: Graduation = { on: null, markedBy: null };
 
 export type ProfileField = Exclude<
   keyof MemberProfile,
-  keyof EntityMeta | "userId" | "consent" | "chapterId" | "graduation"
+  keyof EntityMeta | "userId" | "consent" | "chapterId" | "graduation" | "whatsappVerifiedAt"
 >;
 export const PROFILE_FIELD_CLASS = {
   fullName: "basic",
@@ -268,6 +270,8 @@ export function ownProfile(
     },
     chapterId: current?.chapterId ?? null,
     graduation: current?.graduation ?? NOT_GRADUATED,
+    whatsappVerifiedAt:
+      current?.whatsappNumber === input.whatsappNumber ? current.whatsappVerifiedAt : null,
     id: owner.userId,
     version: (current?.version ?? 0) + 1,
     createdAt: current?.createdAt ?? now,

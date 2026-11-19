@@ -11,6 +11,7 @@ import { ownProfile } from "@/server/profile-wiring";
 import { getSignedInUser } from "@/server/session";
 import { GraduationForm } from "./graduation-form";
 import { ProfileForm, type ProfileFormValues } from "./profile-form";
+import { WhatsappLink } from "./whatsapp-link";
 
 export const metadata: Metadata = { title: "Member profile", robots: { index: false } };
 
@@ -70,6 +71,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
       )}
       {profile && (
         <>
+          <h2>{t.whatsappTitle}</h2>
+          <WhatsappLink t={t} verified={profile.whatsappVerifiedAt !== null} />
           <h2>{t.graduation}</h2>
           <p>
             {

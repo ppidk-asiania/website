@@ -13,6 +13,7 @@ import {
   publicUrlsEnv,
   resendEnv,
   sessionEnv,
+  wahaEnv,
 } from "@website/config/env";
 
 const webEnvSchema = baseEnv
@@ -22,6 +23,7 @@ const webEnvSchema = baseEnv
   .extend(sessionEnv.shape)
   .extend(captchaEnv.partial().shape)
   .extend(messagingEnv.shape)
+  .extend(wahaEnv.pick({ WAHA_BOT_NUMBER: true }).shape)
   .extend(resendEnv.partial().shape)
   .extend(newsletterEnv.partial().shape)
   .extend(fieldEncryptionEnv.shape)

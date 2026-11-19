@@ -4,6 +4,7 @@ import type { AuditEvent, Snapshot } from "@website/audit";
 import {
   guardedChanges,
   profileAuditSnapshots,
+  WHATSAPP_LINK_TTL_MS,
   type GuardedChanges,
   type MemberProfile,
   type MemberProfileRepository,
@@ -21,6 +22,7 @@ function toProfile(data: Record<string, unknown>): MemberProfile {
     consentedAt,
     graduatedOn,
     graduationMarkedBy,
+    whatsappVerifiedAt,
     chapterId,
     createdAt,
     updatedAt,
@@ -33,7 +35,13 @@ function toProfile(data: Record<string, unknown>): MemberProfile {
   return {
     ...(fields as Omit<
       MemberProfile,
-      "consent" | "graduation" | "chapterId" | "createdAt" | "updatedAt" | "deletedAt"
+      | "consent"
+      | "graduation"
+      | "chapterId"
+      | "whatsappVerifiedAt"
+      | "createdAt"
+      | "updatedAt"
+      | "deletedAt"
     >),
     chapterId: (chapterId as string | null | undefined) ?? null,
     consent: {
@@ -44,6 +52,7 @@ function toProfile(data: Record<string, unknown>): MemberProfile {
       on: (graduatedOn as string | null | undefined) ?? null,
       markedBy: (graduationMarkedBy as string | null | undefined) ?? null,
     },
+    whatsappVerifiedAt: toDate(whatsappVerifiedAt),
     createdAt: toDate(createdAt) as Date,
     updatedAt: toDate(updatedAt) as Date,
     deletedAt: toDate(deletedAt),
@@ -101,6 +110,7 @@ export function createSqlMemberProfileStore(db: Database) {
   const profiles = db.collection("memberProfiles");
   const users = db.collection("users");
   const chapters = db.collection("chapters");
+  const codes = db.collection("whatsappLinkCodes");
   const auditLog = createSqlAuditWriter(db);
 
   const chapterOf = async (tx: Transaction, countryCode: string) => {
@@ -158,6 +168,77 @@ export function createSqlMemberProfileStore(db: Database) {
 
   return {
     ...repository,
+
+    /** A new code replaces the member's old one. Null when the member has no profile. */
+    issueWhatsappCode(uid: string, codeHash: string, now: Date): Promise<Date | null> {
+      return db.runTransaction(async (tx) => {
+        const [profile, old] = await Promise.all([
+          tx.get(profiles.doc(safeId.parse(uid))),
+          tx.get(codes.where("uid", "==", uid)),
+        ]);
+        if (!profile.exists) return null;
+        for (const doc of old.docs) tx.delete(doc.ref);
+        const expiresAt = new Date(now.getTime() + WHATSAPP_LINK_TTL_MS);
+        tx.create(codes.doc(safeId.parse(codeHash)), { uid, createdAt: now, expiresAt });
+        return expiresAt;
+      });
+    },
+
+    /** Uses the code (single use, also when refused) and verifies `number` on its owner's profile. */
+    linkWhatsapp(
+      codeHash: string,
+      number: string,
+      now: Date,
+    ): Promise<{ ok: true; uid: string } | { ok: false; reason: "invalid" | "taken" }> {
+      const codeRef = codes.doc(safeId.parse(codeHash));
+      return db.runTransaction(async (tx) => {
+        const code = await tx.get(codeRef);
+        if (!code.exists) return { ok: false, reason: "invalid" } as const;
+        const uid = String(code.get("uid"));
+        const [stored, sameNumber] = await Promise.all([
+          tx.get(profiles.doc(safeId.parse(uid))),
+          tx.get(profiles.where("whatsappNumber", "==", number)),
+        ]);
+        const valid = (toDate(code.get("expiresAt")) as Date) > now && stored.exists;
+        const taken = sameNumber.docs.some(
+          (doc) => doc.id !== uid && Boolean(doc.get("whatsappVerifiedAt")),
+        );
+        if (!valid || taken) {
+          tx.delete(codeRef);
+          return { ok: false, reason: valid ? "taken" : "invalid" } as const;
+        }
+        const current = toProfile(stored.data() as Record<string, unknown>);
+        const next: MemberProfile = {
+          ...current,
+          whatsappNumber: number,
+          whatsappVerifiedAt: now,
+          version: current.version + 1,
+          updatedAt: now,
+        };
+        const log = await auditLog.begin(tx);
+        tx.delete(codeRef);
+        tx.set(profiles.doc(uid), toDoc(next));
+        const snapshots = profileAuditSnapshots(
+          { whatsappNumber: current.whatsappNumber },
+          { whatsappNumber: number },
+        );
+        log.append(
+          memberAudit(
+            uid,
+            now,
+          )({
+            action: "UPDATE",
+            title: current.fullName,
+            resourceId: uid,
+            before: { ...snapshots.before, whatsappVerified: current.whatsappVerifiedAt !== null },
+            after: { ...snapshots.after, whatsappVerified: true },
+            versionBefore: current.version,
+            versionAfter: next.version,
+          }),
+        );
+        return { ok: true, uid } as const;
+      });
+    },
 
     setGraduation(
       uid: string,

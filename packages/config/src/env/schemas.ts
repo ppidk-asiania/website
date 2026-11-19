@@ -80,6 +80,11 @@ export const wahaEnv = z.object({
   WAHA_API_KEY: z.string().min(1).optional(),
   WAHA_SESSION: z.string().min(1).default("default"),
   WAHA_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // The bot's own number: members message it to link their WhatsApp (wa.me link on the profile page).
+  WAHA_BOT_NUMBER: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "E.164, e.g. +6281234567890")
+    .optional(),
 });
 
 export const shortLinkEnv = z.object({

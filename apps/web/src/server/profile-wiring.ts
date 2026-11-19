@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
 import {
@@ -7,12 +7,14 @@ import {
   createSqlSignatureStore,
   createSqlUniversityStore,
 } from "@website/db/sql";
-import { isProfileComplete } from "@website/domain/members";
+import { isProfileComplete, WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
+import { keyedHash } from "@website/security";
 import { webDb, webStorage } from "./db";
 import { getWebEnv } from "./env";
 import { createOwnProfile, type ProfileOwner } from "./profile";
 import { createOwnSignature } from "./signature";
 import { createUniversityPicker, type UniversityChoice } from "./universities";
+import { createWhatsappLink } from "./whatsapp-link";
 
 const memberProfiles = lazyEnv(() => createSqlMemberProfileStore(webDb()));
 const universities = lazyEnv(() => createSqlUniversityStore(webDb()));
@@ -24,6 +26,22 @@ export const ownProfile = lazyEnv(() =>
     now: () => new Date(),
   }),
 );
+
+export const whatsappLink = lazyEnv(() => {
+  const env = getWebEnv();
+  return createWhatsappLink({
+    profiles: memberProfiles(),
+    hash: (code) => {
+      if (!env.SUBSCRIBER_HASH_SECRET) {
+        throw new Error("SUBSCRIBER_HASH_SECRET is required to link WhatsApp numbers.");
+      }
+      return keyedHash(WHATSAPP_LINK_PURPOSE, code, env.SUBSCRIBER_HASH_SECRET);
+    },
+    randomInt,
+    botNumber: env.WAHA_BOT_NUMBER ?? null,
+    now: () => new Date(),
+  });
+});
 
 export const ownSignature = lazyEnv(() =>
   createOwnSignature({

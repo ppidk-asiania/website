@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { campusChoices, ownProfile, universityPicker } from "@/server/profile-wiring";
+import { campusChoices, ownProfile, universityPicker, whatsappLink } from "@/server/profile-wiring";
 import { getSignedInUser } from "@/server/session";
 
 export async function saveProfileAction(input: unknown) {
@@ -21,4 +21,8 @@ export async function proposeCampusAction(input: unknown) {
 
 export async function setGraduationAction(input: unknown) {
   return ownProfile().setGraduation(await getSignedInUser(), input);
+}
+
+export async function linkWhatsappAction() {
+  return whatsappLink().issue(await getSignedInUser());
 }

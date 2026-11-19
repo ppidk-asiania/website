@@ -1,4 +1,5 @@
 import "server-only";
+import { numberFromChatId } from "@website/domain/members";
 import type { Message, MessageChannel } from "@website/domain/messaging";
 
 export interface WahaConfig {
@@ -69,6 +70,25 @@ export function wahaPoll(config: WahaConfig | null, fetchImpl: typeof fetch = fe
       return id ? { ok: true, messageId: id } : { ok: false, error: "waha_no_id" };
     } catch {
       return { ok: false, error: "waha_unreachable" };
+    }
+  };
+}
+
+/** WhatsApp may hide a sender behind a LID; WAHA maps it back to the phone number (E.164) or null. */
+export function wahaResolveLid(config: WahaConfig | null, fetchImpl: typeof fetch = fetch) {
+  return async (lid: string): Promise<string | null> => {
+    if (!config) return null;
+    try {
+      const base = config.baseUrl.replace(/\/+$/, "");
+      const response = await fetchImpl(
+        `${base}/api/${encodeURIComponent(config.session)}/lids/${encodeURIComponent(lid)}`,
+        { signal: AbortSignal.timeout(10_000), headers: { "X-Api-Key": config.apiKey } },
+      );
+      if (!response.ok) return null;
+      const body = (await response.json().catch(() => ({}))) as { pn?: unknown };
+      return typeof body.pn === "string" ? numberFromChatId(body.pn) : null;
+    } catch {
+      return null;
     }
   };
 }

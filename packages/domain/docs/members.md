@@ -18,6 +18,7 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 | Detail Address Abroad        | `addressAbroad`           | line1, line2?, city, stateOrProvince?, postalCode?, countryCode                                  | restricted |
 | Detail Address in Indonesia  | `addressIndonesia`        | line1, line2? (kelurahan/kecamatan), city, province, postalCode? (5 digits)                      | restricted |
 | WhatsApp Number              | `whatsappNumber`          | E.164 (`+62…`), spaces/dashes stripped                                                           | restricted |
+| WhatsApp verified at         | `whatsappVerifiedAt`      | Set only by linking through the bot (below); typing another number clears it                     | —          |
 | Emergency Contact Number     | `emergencyContact`        | `phone` E.164 (required), `name`?, `relationship`?                                               | restricted |
 | Timezone                     | `timezone`                | IANA (`Asia/Tokyo`)                                                                              | basic      |
 | Email                        | `email`                   | Copied from the verified sign-in account; not typed by the user                                  | restricted |
@@ -65,6 +66,21 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 - Not built yet: the student card (KTM) upload on the website (the private `ktm` image preset
   exists; the web upload route comes with the documents phase).
 - Tests: `tests/integration/profile-graduation.test.ts`.
+
+## WhatsApp number linked by message (step 10.4)
+
+- Rules: `packages/domain/src/members/whatsapp-link.ts` (code alphabet and length, 30 minutes,
+  `/asiania CODE` parsing, chat id to E.164); `ownProfile` clears `whatsappVerifiedAt` when the
+  typed number differs from the stored one.
+- Database: `issueWhatsappCode` and `linkWhatsapp` in `packages/db/src/sql/member-profiles.ts`
+  (`whatsappLinkCodes/{HMAC(code)}`, `memberProfiles/{uid}.whatsappVerifiedAt`); the link is audited
+  (actor `member`, number redacted). A number verified on another account is refused.
+- Web: "Link my WhatsApp" on `/account/profile` (`apps/web/src/server/whatsapp-link.ts`); admin:
+  the `message` event of `/webhooks/waha` (`apps/admin/src/server/whatsapp-link.ts`, see
+  `apps/admin/docs/messaging.md`). The Role Manager popup shows verified / not verified only.
+- Not built: staff typing someone else's number (`profile.update_any`; no staff profile editor
+  exists). The PPIDK import of `phone_wa_verified_at` is finished in step 16.4.
+- Tests: `tests/security/whatsapp-webhook.test.ts`, `tests/integration/whatsapp-link.test.ts`.
 
 ## Import from PPIDK (block J)
 

@@ -48,7 +48,9 @@ import {
 import { createLetterFileRoute, createLetterPdf, type LetterContext } from "./letter-pdf";
 import { createMessageActions } from "./messaging";
 import { createNotices } from "./notices";
-import { wahaChannel, wahaPoll } from "./whatsapp";
+import { wahaChannel, wahaPoll, wahaResolveLid } from "./whatsapp";
+import { createWhatsappLinking } from "./whatsapp-link";
+import { WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
 import { createPolls, createWahaWebhookRoute } from "./polls";
 import { cloudApiReply, createChatbot, createWhatsappWebhook } from "./chatbot";
 import { geminiCampusMatcher } from "./gemini";
@@ -444,15 +446,36 @@ export const polls = lazyEnv(() => {
   });
 });
 
-export const wahaWebhook = lazyEnv(() =>
-  createWahaWebhookRoute({
-    secret: getAdminEnv().WAHA_WEBHOOK_SECRET,
-    record: (provider, eventId, now) =>
-      createSqlWebhookEventStore(adminDb()).record(provider, eventId, now),
+export const wahaWebhook = lazyEnv(() => {
+  const env = getAdminEnv();
+  const record = (provider: string, eventId: string, now: Date) =>
+    createSqlWebhookEventStore(adminDb()).record(provider, eventId, now);
+  return createWahaWebhookRoute({
+    secret: env.WAHA_WEBHOOK_SECRET,
+    record,
     surveys: adminStores().surveys,
+    onMessage: createWhatsappLinking({
+      record,
+      profiles: adminStores().memberProfiles,
+      hash: (code) => {
+        if (!env.SUBSCRIBER_HASH_SECRET) {
+          throw new Error("SUBSCRIBER_HASH_SECRET is required to link WhatsApp numbers.");
+        }
+        return keyedHash(WHATSAPP_LINK_PURPOSE, code, env.SUBSCRIBER_HASH_SECRET);
+      },
+      resolveLid: wahaResolveLid(
+        env.WAHA_BASE_URL && env.WAHA_API_KEY
+          ? { baseUrl: env.WAHA_BASE_URL, apiKey: env.WAHA_API_KEY, session: env.WAHA_SESSION }
+          : null,
+      ),
+      reply: (to, text, key) =>
+        messenger().send({ channel: "whatsapp", to, subject: "", text, html: "" }, key),
+      logError: (message, fields) => adminStores().logger.error(message, fields),
+      now: () => new Date(),
+    }),
     now: () => new Date(),
-  }),
-);
+  });
+});
 
 const userDirectoryStore = lazyEnv(() => createSqlUserStore(adminDb()));
 

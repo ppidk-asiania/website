@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountAdmin } from "@website/auth";
 import {
   createSqlAccountStore,
+  createSqlMemberProfileStore,
   createSqlAppointmentStore,
   createSqlOrgUnitStore,
   createSqlRoleStore,
@@ -290,6 +291,7 @@ describe("appointments → roles (B7)", () => {
     const ana = await createSqlAccountStore(fake.db as unknown as Db).get("ana");
     await createAccountActions({
       accounts: createSqlAccountStore(fake.db as unknown as Db),
+      memberProfiles: createSqlMemberProfileStore(fake.db as unknown as Db),
       roles: createSqlRoleStore(fake.db as unknown as Db),
       passkeys: createMemoryPasskeyStore(),
       sendInvite: () => Promise.resolve("logged"),
@@ -349,6 +351,7 @@ describe("appointments → roles (B7)", () => {
     const ana = await accounts.get("ana");
     const users = createAccountActions({
       accounts,
+      memberProfiles: createSqlMemberProfileStore(fake.db as unknown as Db),
       roles: createSqlRoleStore(fake.db as unknown as Db),
       passkeys: createMemoryPasskeyStore(),
       sendInvite: () => Promise.resolve("logged"),
