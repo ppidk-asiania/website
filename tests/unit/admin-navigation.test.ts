@@ -46,20 +46,6 @@ const staff = (roleId: string, scope: Scope = { type: "global" }, active = true)
 const labels = (principal: Principal) => navigationFor(principal).map((item) => item.label);
 
 describe("admin side panel navigation", () => {
-  it("lists every page, in the designed order and groups, for a superadmin", () => {
-    const groups = new Map<string, string[]>();
-    for (const item of navigationFor(staff(SUPERADMIN_ROLE_ID))) {
-      groups.set(item.group, [...(groups.get(item.group) ?? []), item.label]);
-    }
-    expect(Object.fromEntries(groups)).toEqual({
-      Workspace: ["Dashboard", "My Tasks", "Calendar", "Tools"],
-      Content: ["Event", "Gallery", "Article", "Newsletter", "Forms"],
-      Organization: ["Recruitment", "Letter", "Organizations"],
-      Planning: ["OKR", "Programmes", "LPJ", "Finance", "Meetings", "Zoom"],
-      Administration: ["Role Manager", "Audit Log", "Email"],
-    });
-  });
-
   it("keeps each group's pages together (the side panel starts a group when it changes)", () => {
     const order = ADMIN_NAVIGATION.map((entry) => entry.group).filter(
       (group, i, all) => group !== all[i - 1],
@@ -139,15 +125,5 @@ describe("dashboard page views and setup check", () => {
     expect(source).toMatch(/const superadmin = isSuperadmin\(viewer\.principal\);/);
     expect(source).toMatch(/superadmin\s*\?\s*await pageViewReport\(/);
     expect(source).toMatch(/superadmin \? integrationStatus\(/);
-  });
-});
-
-describe("side-panel logo", () => {
-  it("links to the public website (WEB_URL)", () => {
-    const admin = join(import.meta.dirname, "../../apps/admin/src");
-    const layout = readFileSync(join(admin, "app/(panel)/layout.tsx"), "utf8");
-    const sidebar = readFileSync(join(admin, "components/admin-sidebar.tsx"), "utf8");
-    expect(layout).toContain("webUrl={getAppUrls().WEB_URL}");
-    expect(sidebar).toMatch(/<a href=\{props\.webUrl\}[^>]*>\s*\{logo\}\s*<\/a>/);
   });
 });

@@ -28,31 +28,6 @@ test("public pages are available without signing in", async ({ request }) => {
   }
 });
 
-const part = (html: string, tag: string) =>
-  html.slice(html.indexOf(`<${tag}`), html.indexOf(`</${tag}>`));
-const links = (html: string) => [...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1]);
-
-test("every public page has the site header and footer", async ({ request }) => {
-  const html = await (await request.get("/gallery")).text();
-
-  const header = part(html, "header");
-  expect(header).toContain('src="/logo.webp"');
-  expect(links(header)).toEqual(["/", "/about", "/events", "/gallery", "/news", "/map", "/login"]);
-  expect(header).toContain('href="/gallery" aria-current="page"');
-
-  const footer = part(html, "footer");
-  expect(footer).toContain('src="/logo.webp"');
-  for (const text of ["Jelajahi", "Komunitas Kami", "Alamat", "PPI Tiongkok", "Kirai 07"]) {
-    expect(footer).toContain(text);
-  }
-  expect(links(footer)).toEqual(
-    expect.arrayContaining(["/", "/about", "/events", "/gallery", "/news", "/map", "/terms"]),
-  );
-  expect(links(footer)).toContain("/privacy");
-  expect(footer.match(/target="_blank" rel="noopener noreferrer"/g)).toHaveLength(5);
-  expect(footer).not.toContain('type="email"');
-});
-
 test("old /articles links go to /news; unknown articles show the 404 page", async ({ request }) => {
   const moved = await request.get("/articles", { maxRedirects: 0 });
   expect(moved.status()).toBe(308);

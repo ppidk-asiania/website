@@ -86,7 +86,6 @@ router.push("/things"); router.refresh();
   theme class: big title, fields, then **Back** (`outline`, `chevronLeft`) and the action at the
   bottom right (`ConfirmDialog` does this for confirmations). Every popup is centred on the page;
   `className="admin-modal--side"` only makes it a cream surface.
-  A test (`tests/unit/design-tokens.test.ts`) fails if a popup rule moves it off centre.
 - **Form popups** are built like Article Settings: pass `asForm` (no `className`, `width` or
   `hideClose`) and `Modal` makes the body and footer one `<form>` on the cream surface, 548px
   wide, without the X. Each field is `.admin-field` with a `<label htmlFor>` above the control
@@ -94,7 +93,6 @@ router.push("/things"); router.refresh();
   `.admin-modal__footer-row`: **Back** (`outline`, `chevronLeft`) and one
   `type="submit" variant="primary"` button with an icon. Give the submit button the work in
   `onClick`, or, for a form read with `FormData`, pass `onSubmit` to `Modal` (no inner `<form>`).
-  Test "admin form modals" checks every popup that has fields.
 - **Fields.** Put each control in `.admin-field` with a label and a `FieldError` last. Declare
   the rules on the control with HTML attributes — `required`, `type` (`email`, `url`, `number`),
   `minLength`, `min`/`max`, `pattern` + `title` (the text shown) — mirroring the domain schema.
@@ -124,11 +122,11 @@ router.push("/things"); router.refresh();
 - **Table height.** Put a table in `<Card className="admin-list-card">` (`ListCard` does this):
   the card fills the rest of the screen height, and grows with the page when its rows need more
   room. No fixed heights or blank rows; the CSS is "A page with a table fills the screen height"
-  in `globals.css` (test: `tests/unit/design-tokens.test.ts`, "admin tables").
+  in `globals.css`.
 - **Table width.** Cell text wraps onto the next line between words, and the line under a title
   (`.admin-table__sub`: links, e-mails) breaks anywhere, so a table is never wider than its card
   and never scrolls sideways. Do not add `white-space: nowrap`, ellipsis or a `min-width` to
-  table rules (same test).
+  table rules.
 - **Header.** Every page starts with `.admin-page-header`: a `<div>` with the `h1`
   (`admin-page-header__title`, "Section > Page" for sub-pages) and the `p` description, then
   `.admin-page-header__actions` on the right, on one line (it never wraps; the title block
@@ -140,14 +138,12 @@ router.push("/things"); router.refresh();
   buttons (`size="icon"`); there is no `success` colour. Popup footers use the default size.
   Dropdowns are `Select` with `className="admin-select"`; the Audit Log pills
   (`admin-audit-pick`) and `StatusMenu` share the same field colours, border, size and text
-  (only the pager keeps its compact look). Test: `tests/unit/design-tokens.test.ts`, "admin pages share one header".
+  (only the pager keeps its compact look).
 - **Control height.** Buttons (every size), fields, dropdowns (`Select`), the URL slug box and
   the search box are one height: `--admin-control-height` in `globals.css` (34 px, 40 px under
-  768 px). Do not set a control's height elsewhere (test "admin controls" in
-  `tests/unit/design-tokens.test.ts`). Icon buttons, the editor toolbar and the pagination bar
+  768 px). Do not set a control's height elsewhere. Icon buttons, the editor toolbar and the pagination bar
   keep their own compact sizes.
-- **Motion and overflow** (`globals.css`, section "Motion"; tests "admin motion and overflow" in
-  `tests/unit/design-tokens.test.ts`):
+- **Motion and overflow** (`globals.css`, section "Motion"):
   - Page change: React's `<ViewTransition>` wraps `<main>` (`admin-sidebar.tsx`), so a
     navigation crossfades the old page into the new one; the side panel stays still. Anything
     that runs as a transition (e.g. `router.refresh()` after saving) fades the same way. No
@@ -163,21 +159,19 @@ router.push("/things"); router.refresh();
     anywhere.
 - **Publish** buttons and menu items show the minimal line globe with the word (`icon="globeSimple"`,
   label "Publish"), in forms, bulk bars, row menus and the Newsletter publish dialog.
-- **No emoji.** Use `Icon` (`ui/icon.tsx`) or words instead (test "admin text" in
-  `tests/unit/design-tokens.test.ts`).
+- **No emoji.** Use `Icon` (`ui/icon.tsx`) or words instead.
 - **Tabs.** Every tab row is `Tabs` (`ui/list-controls.tsx`). It scrolls sideways with no
   scrollbar (touch, trackpad, or mouse drag; a drag does not select a tab), its tabs stay inside
-  its height, and its end fades into the background (`.admin-tabs`, test "admin tabs"). Page CSS
+  its height, and its end fades into the background (`.admin-tabs`). Page CSS
   may change gaps and margins, not the row's overflow. Hover changes only a tab's colour (only the
   active tab is bold), so tabs never change width on hover.
 - **Scrollbar.** Every scrollbar (page, side panel, popups, menus, tables, code blocks) is a slim
-  rounded thumb on a transparent track (`*::-webkit-scrollbar` in `globals.css`, test "admin
-  scrollbar"); the tab row has none (see Tabs). Only the page reserves its gutter
+  rounded thumb on a transparent track (`*::-webkit-scrollbar` in `globals.css`); the tab row has none (see Tabs). Only the page reserves its gutter
   (`html:has(.admin-dark-page)`, `scrollbar-gutter: stable`), so content keeps its width when a page
   becomes long enough to scroll. Cream menus and dropdowns (`.admin-row-menu__panel`) use a dark
   thumb instead, because the light one does not show on cream.
 - **Phone cards** (up to 767px). Every `DataTable` row becomes a cream card; the CSS is the block
-  between `Mobile list cards: begin/end` in `globals.css` (test "admin tables on a phone").
+  between `Mobile list cards: begin/end` in `globals.css`.
   `DataTable` puts `data-card` on each cell (`cardRoles` in `list-model.ts`, by column key: `check`
   / `expand` lead, `aksi` / `actions` / `edit` / `open` / `revert` are the action row, the first
   other column is the title, the rest are detail lines) and `data-label` (the header text) so a

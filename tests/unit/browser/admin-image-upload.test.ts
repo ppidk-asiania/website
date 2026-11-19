@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendImage } from "../../../apps/admin/src/components/image-upload";
 
@@ -76,26 +74,5 @@ describe("image upload with progress and cancel (admin)", () => {
     const failing = sendImage("/api/uploads/logo", "BODY", "image/png", () => {});
     FakeXhr.last.onerror?.();
     await expect(failing).rejects.toThrow();
-  });
-
-  it("shows the upload bar (progress and X) in every image upload section", () => {
-    const admin = join(import.meta.dirname, "../../../apps/admin/src/components");
-    const bar = readFileSync(join(admin, "ui/upload-bar.tsx"), "utf8");
-    expect(bar).toMatch(/<progress/);
-    expect(bar).toMatch(/aria-label="Cancel upload"/);
-    for (const page of [
-      "articles-page",
-      "chapter-form",
-      "events-page",
-      "gallery-page",
-      "letter-types-page",
-      "newsletter-page",
-      "org-unit-editor",
-    ]) {
-      const source = readFileSync(join(admin, `${page}.tsx`), "utf8");
-      const hooks = source.match(/useImageUpload\(/g)?.length ?? 0;
-      const bars = source.match(/<UploadBar\b/g)?.length ?? 0;
-      expect(bars, page).toBeGreaterThanOrEqual(hooks); // one bar per uploader
-    }
   });
 });

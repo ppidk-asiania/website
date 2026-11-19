@@ -32,8 +32,7 @@ scroll step, then slides; the photo fades (ease-in-out) to the next country's on
 that country's text is fully in view. The page scrolls on past the section after the last
 country; the invisible side arrows scroll the page one country back or forward. Each entry names its photo by `mapNo`
 (`public/home/{mapNo}.png`, the same files as the chapter logos), not by its position in the
-slider — the slider order (Selandia Baru, Australia, Malaysia, Singapura, …) is not the map order
-(`tests/unit/ppi-slider.test.ts`).
+slider — the slider order (Selandia Baru, Australia, Malaysia, Singapura, …) is not the map order.
 
 **News**: `/news` lists visible news as cards, newest first, filtered by the category pills
 (Semua · Umum · Akademik · Komunitas · Pengumuman · Internasional, over the news `category`
