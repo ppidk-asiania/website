@@ -79,6 +79,11 @@ LPJ desks (`notices.lpj`, key `lpj:{id}:{status}:{version}:{uid}`): programme fi
 PICs with the due date; submitted → holders of `lpj.review_secretariat` and
 `lpj.review_treasurer`; both reviews in → holders of `lpj.approve`; returned (with the note) or
 approved → the PICs. Finance desks: see the finance rows above.
+Programmes (`notices.program`, key `program:{id}:{status}:{version}:{uid}`): proposed → holders
+of `programs.approve` covering the unit; approved, or returned to draft (with the note) → the
+proposer and the PICs. Plan revisions (`notices.programRevision`, key
+`programRevision:{id}:{status}:{uid}`): requested → the same approvers; approved or rejected →
+the requester. Both are sent after the commit; a failure is logged and never undoes the decision.
 
 ## Satisfaction polls (J3)
 

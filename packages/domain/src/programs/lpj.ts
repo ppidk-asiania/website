@@ -83,11 +83,15 @@ export function addDaysUtc(from: Date, days: number): string {
   return day.toISOString().slice(0, 10);
 }
 
+// ISO days compare as text; a period without an end date caps nothing.
+const minDay = (day: string, cap: string | null) => (cap && cap < day ? cap : day);
+
 export function openLpj(
   program: Program,
   unitName: string,
   deadlineDays: number,
   now: Date,
+  periodEnd: string | null = null,
 ): LpjFields {
   if (program.status !== "finished") refuse("The LPJ opens when the programme is finished.");
   return {
@@ -114,7 +118,7 @@ export function openLpj(
       startedAt: program.startedAt,
       finishedAt: program.finishedAt as Date,
     },
-    dueOn: addDaysUtc(now, deadlineDays),
+    dueOn: minDay(addDaysUtc(now, deadlineDays), periodEnd),
     status: "draft",
     realization: "",
     obstacles: "",
@@ -160,6 +164,7 @@ export function signLpj(lpj: LpjReport, desk: LpjDesk, uid: string, now: Date): 
   if (lpj.status !== "submitted") refuse("Only a submitted LPJ can be reviewed.");
   if (lpj[desk]) refuse("This desk has already signed.");
   if (uid === lpj.submittedBy) refuse("The submitter cannot review their own LPJ.");
+  if (lpj.pics.includes(uid)) refuse("A PIC of the programme cannot sign any desk of its LPJ.");
   if (LPJ_DESKS.some((d) => d !== desk && lpj[d]?.uid === uid)) {
     refuse("One person cannot hold two desks of the same LPJ.");
   }

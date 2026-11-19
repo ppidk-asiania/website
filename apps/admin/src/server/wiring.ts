@@ -629,6 +629,8 @@ export const programActions = lazyEnv(() =>
     },
     findUserId: async (email) => (await adminStores().accounts.findByEmail(email))?.uid ?? null,
     afterLpj: (lpj) => notices().lpj(lpj),
+    afterStep: (program) => notices().program(program),
+    afterRevision: (revision, program) => notices().programRevision(revision, program),
     now: () => new Date(),
     uuid: randomUUID,
   }),
@@ -881,6 +883,7 @@ async function activePeriod(): Promise<{ id: string; name: string } | null> {
 export const deadlineReminders = lazyEnv(() =>
   createDeadlineReminders({
     applications: adminStores().applications,
+    checkedIn: (week) => adminStores().programs.checkedIn(week),
     programs: async () => {
       const period = await activePeriod();
       return period ? adminStores().programs.listForPeriod(period.id) : [];

@@ -32,6 +32,7 @@ const officer = staff("officer", ["programs.read"]);
 let fake: ReturnType<typeof fakeDb>;
 let uuids = 0;
 const opened: string[] = [];
+const told: string[] = [];
 const db = () => fake.db as unknown as Db;
 const store = () => createSqlProgramStore(db());
 const actions = () =>
@@ -45,6 +46,14 @@ const actions = () =>
       Promise.resolve({ "pic@example.org": "pic", "rina@example.org": "rina" }[email] ?? null),
     afterLpj: (lpj) => {
       opened.push(lpj.id);
+      return Promise.resolve();
+    },
+    afterStep: (program) => {
+      told.push(`${program.status}${program.reviewNote ? "+note" : ""}`);
+      return Promise.resolve();
+    },
+    afterRevision: (revision, program) => {
+      told.push(`${revision.status}:${program.name}`);
       return Promise.resolve();
     },
     now: () => clock,
@@ -93,6 +102,7 @@ beforeEach(() => {
   fake = fakeDb();
   uuids = 0;
   opened.length = 0;
+  told.length = 0;
   clock = new Date("2026-11-04T03:00:00Z");
   fake.docs.set("periods/p1", { status: "active", deletedAt: null });
   fake.docs.set("periods/p0", { status: "archived", deletedAt: null });
@@ -274,6 +284,7 @@ describe("running a programme: the PIC rule", () => {
       actions().returnToProposal(...as(sekjen))({ id, version, note: "Budget?" }),
     );
     expect(back.status).toBe("draft");
+    expect(told).toEqual(["proposed", "draft+note"]);
     expect((await store().get(id))?.reviewNote).toBe("Budget?");
     const again = await ok<Step>(actions().submit(...as(director))({ id, version: back.version }));
     const approvedStep = await ok<Step>(
@@ -289,6 +300,7 @@ describe("running a programme: the PIC rule", () => {
       actions().cancel(...as(sekjen))({ id, version: approvedStep.version, note: "No venue" }),
     );
     expect(cancelled.status).toBe("cancelled");
+    expect(told).toEqual(["proposed", "draft+note", "proposed", "approved"]);
     const edit = await actions().save(...as(director))({
       id,
       version: cancelled.version,
@@ -381,6 +393,7 @@ describe("the approved plan changes only through a decided revision", () => {
       actions().decideRevision(...as(sekjen))({ id: revisionId, verdict: "approved" }),
     );
     expect(done.status).toBe("approved");
+    expect(told.slice(-2)).toEqual(["pending:Webinar series", "approved:Webinar series 2"]);
     expect(await store().get(id)).toMatchObject({
       name: "Webinar series 2",
       keyResultIds: ["kr1", "kr2"],

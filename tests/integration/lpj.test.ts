@@ -44,6 +44,8 @@ const programActions = () =>
       steps.push(lpj);
       return Promise.resolve();
     },
+    afterStep: () => Promise.resolve(),
+    afterRevision: () => Promise.resolve(),
     now: () => clock,
     uuid: () => `m${(uuids += 1)}`,
   });
@@ -155,6 +157,17 @@ describe("finishing a programme opens its LPJ in the same transaction", () => {
     ).rejects.toThrow();
   });
 
+  it("the due date never passes the end of the period", async () => {
+    fake.docs.set("periods/p1", {
+      status: "active",
+      lpjDeadlineDays: 21,
+      endsOn: "2026-11-10",
+      deletedAt: null,
+    });
+    const { id } = await finished();
+    expect((await createSqlLpjStore(db()).get(id))?.dueOn).toBe("2026-11-10");
+  });
+
   it("refuses a stale version, a missing or deleted programme, and a non-PIC", async () => {
     const store = createSqlProgramStore(db());
     await expect(store.finish("ghost", 1, (p) => p, vi.fn(), vi.fn(), clock)).rejects.toThrow(
@@ -228,6 +241,28 @@ describe("LPJ desks: separation of duties", () => {
       dueOn: "2026-12-31",
     });
     expect(extend).toMatchObject({ ok: false, error: "refused" });
+  });
+
+  it("no PIC of the programme signs any desk, even holding its permission", async () => {
+    const { id } = await finished();
+    let v = await submittedLpj(id);
+    const picAtDesks = staff("pic2", [
+      "lpj.review_secretariat",
+      "lpj.review_treasurer",
+      "lpj.approve",
+    ]);
+    const refused = { ok: false, issues: [expect.stringContaining("PIC")] };
+    expect(
+      await lpjActions().reviewSecretariat(...as(picAtDesks))({ id, version: v }),
+    ).toMatchObject(refused);
+    expect(await lpjActions().reviewTreasurer(...as(picAtDesks))({ id, version: v })).toMatchObject(
+      refused,
+    );
+    v = (await ok(lpjActions().reviewSecretariat(...as(sekre))({ id, version: v }))).version;
+    v = (await ok(lpjActions().reviewTreasurer(...as(bendahara))({ id, version: v }))).version;
+    expect(await lpjActions().approve(...as(picAtDesks))({ id, version: v })).toMatchObject(
+      refused,
+    );
   });
 
   it("any desk may return it with a note; return clears every desk", async () => {

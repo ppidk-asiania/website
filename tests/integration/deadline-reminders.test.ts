@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSqlApplicationStore } from "@website/db/sql";
+import { createSqlApplicationStore, createSqlProgramStore } from "@website/db/sql";
 import type { LpjReport, Program } from "@website/domain/programs";
 import { createDeadlineReminders } from "../../apps/admin/src/server/deadline-reminders";
 import { fakeDb } from "../support/fake-db";
@@ -42,6 +42,7 @@ describe("deadline reminders (M6)", () => {
   const sent: string[] = [];
   const reminders = createDeadlineReminders({
     applications: createSqlApplicationStore(fake.db as unknown as Db),
+    checkedIn: createSqlProgramStore(fake.db as unknown as Db).checkedIn,
     programs: () => Promise.resolve([program]),
     lpj: () =>
       Promise.resolve([
@@ -71,5 +72,56 @@ describe("deadline reminders (M6)", () => {
       "reminder:lpj-overdue:l-late:2026-11-01:pic1",
     ]);
     expect(await reminders()).toEqual({ messages: 0 });
+  });
+
+  describe("weekly check-in (Thursday, UTC)", () => {
+    const run = (id: string, status: string) =>
+      ({ id, name: id, pics: [`${id}-pic`], status, milestones: [] }) as unknown as Program;
+    const week = (programs: Program[], at: string) => {
+      const keys: string[] = [];
+      const remind = createDeadlineReminders({
+        applications: { interviewsBetween: () => Promise.resolve([]) },
+        checkedIn: createSqlProgramStore(fake.db as unknown as Db).checkedIn,
+        programs: () => Promise.resolve(programs),
+        lpj: () => Promise.resolve([]),
+        contacts: () => Promise.resolve(new Map()),
+        send: (_message, key) => (keys.push(key), Promise.resolve("sent" as const)),
+        adminUrl: "https://admin.example.org",
+        now: () => new Date(at),
+      });
+      return remind().then(() => keys);
+    };
+    fake.docs.set("programCheckins/done_2026-11-09", {
+      programId: "done",
+      weekStart: "2026-11-09",
+    });
+    fake.docs.set("programCheckins/late_2026-11-02", {
+      programId: "late",
+      weekStart: "2026-11-02",
+    });
+    const programs = [
+      run("missing", "running"),
+      run("done", "running"),
+      run("late", "running"),
+      run("approved", "approved"),
+      run("finished", "finished"),
+      run("cancelled", "cancelled"),
+    ];
+
+    it("reminds the PICs of running programmes without a check-in this week, on Thursday only", async () => {
+      expect(await week(programs, "2026-11-12T23:30:00Z")).toEqual([
+        "reminder:checkin:missing:2026-11-09:missing-pic",
+        "reminder:checkin:late:2026-11-09:late-pic",
+      ]);
+      for (const day of ["09", "10", "11", "13", "14", "15"]) {
+        expect(await week(programs, `2026-11-${day}T12:00:00Z`)).toEqual([]);
+      }
+    });
+
+    it("a new week asks again", async () => {
+      expect(await week(programs, "2026-11-19T01:00:00Z")).toContain(
+        "reminder:checkin:done:2026-11-16:done-pic",
+      );
+    });
   });
 });

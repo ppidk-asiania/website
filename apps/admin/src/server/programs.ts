@@ -25,6 +25,7 @@ import {
   withdrawProgram,
   type LpjReport,
   type Program,
+  type ProgramRevision,
 } from "@website/domain/programs";
 import { RuleViolationError } from "@website/domain/shared";
 import { can, type Principal, type ResourceContext } from "@website/permissions";
@@ -47,6 +48,8 @@ export interface ProgramDeps {
   readonly unitPath: (orgUnitId: string) => Promise<readonly string[] | null>;
   readonly findUserId: (email: string) => Promise<string | null>;
   readonly afterLpj: (lpj: LpjReport) => Promise<void>;
+  readonly afterStep: (program: Program) => Promise<void>;
+  readonly afterRevision: (revision: ProgramRevision, program: Program) => Promise<void>;
   readonly now: () => Date;
   readonly uuid: () => string;
 }
@@ -210,7 +213,7 @@ export function createProgramActions(deps: ProgramDeps) {
     permission: "programs.approve" | "programs.edit" | "programs.read",
     input: S,
     decide: (program: Program, input: z.infer<S>, principal: Principal, now: Date) => Program,
-    options: { action?: AuditAction; author?: true } = {},
+    options: { action?: AuditAction; author?: true; tell?: true } = {},
   ) =>
     createGuardedAction({
       permission,
@@ -226,11 +229,12 @@ export function createProgramActions(deps: ProgramDeps) {
           programAudit(audit, options.action ?? "UPDATE"),
           now,
         );
+        if (options.tell) await deps.afterStep(saved);
         return { version: saved.version, status: saved.status, progress: saved.progressPercent };
       },
     });
 
-  const submit = step("programs.edit", Ref, (p) => submitProgram(p));
+  const submit = step("programs.edit", Ref, (p) => submitProgram(p), { tell: true });
   // The author acts on their own proposal, whether or not they are a PIC or unit editor.
   const withdraw = step(
     "programs.read",
@@ -247,10 +251,15 @@ export function createProgramActions(deps: ProgramDeps) {
     },
     { action: "DELETE", author: true },
   );
-  const approve = step("programs.approve", Ref, (p, _i, principal, now) =>
-    approveProgram(p, principal.userId, now),
+  const approve = step(
+    "programs.approve",
+    Ref,
+    (p, _i, principal, now) => approveProgram(p, principal.userId, now),
+    { tell: true },
   );
-  const returnToProposal = step("programs.approve", WithNote, (p, i) => returnProgram(p, i.note));
+  const returnToProposal = step("programs.approve", WithNote, (p, i) => returnProgram(p, i.note), {
+    tell: true,
+  });
   const cancel = step("programs.approve", WithNote, (p, i, _principal, now) =>
     cancelProgram(p, i.note, now),
   );
@@ -314,6 +323,7 @@ export function createProgramActions(deps: ProgramDeps) {
         revisionAudit(audit, "CREATE"),
         deps.now(),
       );
+      await deps.afterRevision(saved, program);
       return { id: saved.id };
     },
   });
@@ -325,7 +335,7 @@ export function createProgramActions(deps: ProgramDeps) {
       orgUnitPath: (await deps.programs.getRevision(id))?.orgUnitPath ?? [],
     }),
     handler: async ({ id, verdict }, principal, audit) => {
-      const { revision } = await deps.programs.decideRevision(
+      const { revision, program } = await deps.programs.decideRevision(
         id,
         verdict,
         principal.userId,
@@ -333,6 +343,7 @@ export function createProgramActions(deps: ProgramDeps) {
         revisionAudit(audit, "UPDATE"),
         deps.now(),
       );
+      await deps.afterRevision(revision, program);
       return { status: revision.status };
     },
   });

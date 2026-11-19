@@ -140,14 +140,15 @@ draft ──→ submitted ──┬─ secretariat review ─┐
   (one LPJ per programme; a second `create` fails the transaction) with a **frozen plan**
   (name, goal, background, unit name, dates, budgets, PICs, progress, milestones with their
   final state, started/finished) and `dueOn` = the finish day (UTC) + `period.lpjDeadlineDays`
-  (14 when the period has none). The plan is a copy: nothing later changes it.
+  (14 when the period has none), **never later than the period's end date** (`endsOn`). The plan
+  is a copy: nothing later changes it. Extending the due date later is not capped.
 - **PICs write and submit** (`canManageProgram`): realization, participants, money spent per
   currency (`realized`, `null` = not filled in, `[]` = nothing spent), obstacles,
   recommendations. Completeness is checked at submit, not at save.
 - **Three desks** (named extras of the `lpj` page): `lpj.review_secretariat` (the Secretariat
   bureau, global — not a directorate secretary, who writes LPJs), `lpj.review_treasurer` and
   `lpj.approve`. The two reviews come in any order; the approval needs both. **Three different
-  people**, and **the submitter never signs** any desk. The treasurer refuses an LPJ without
+  people**, and **neither the submitter nor any PIC of the programme signs** any desk. The treasurer refuses an LPJ without
   money spent.
 - **Return** (any desk holder, with a note) clears all three desks and counts the revision
   round; the PICs edit and submit again.
@@ -159,7 +160,14 @@ draft ──→ submitted ──┬─ secretariat review ─┐
   date — a desk that has not signed prints "Belum diperiksa / not yet reviewed".
 - **Notices** (J2, `notices.lpj`, `apps/admin/docs/messaging.md`): opened → PICs (with the due
   date); submitted → both review desks; both reviews in → the approval desk; returned /
-  approved → PICs.
+  approved → PICs. The LPJ sheet prints the approval desk under the period's desk title
+  (`deskTitle`, step 10.1).
+- **Programme notices** (13.2, `notices.program`, `notices.programRevision`): proposed → approvers
+  of the unit; approved / returned → proposer and PICs; revision requested → approvers; revision
+  decided → the requester.
+- **Weekly check-in reminder**: part of `deadline-reminders`; on Thursday (UTC) the PICs of
+  running programmes without a check-in for the current UTC week get one message. Finished and
+  cancelled programmes are never reminded of check-ins.
 - **Deadline reminders** (M6, cron `deadline-reminders`, `apps/admin/docs/cron.md`): PICs get
   one reminder per due date for open milestones and draft/returned LPJs due within 3 days, and
   one when a draft/returned LPJ is past due. Applicants get one the day before their interview.

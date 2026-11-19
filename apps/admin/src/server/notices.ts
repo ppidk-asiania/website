@@ -4,7 +4,7 @@ import { desksOf, type Letter, type LetterType } from "@website/domain/documents
 import type { FinanceRequest } from "@website/domain/finance";
 import { messageTo, type Messenger, type SurveySource } from "@website/domain/messaging";
 import type { ProofReview } from "@website/domain/members";
-import type { LpjReport } from "@website/domain/programs";
+import type { LpjReport, Program, ProgramRevision } from "@website/domain/programs";
 import type { Application, ApplicationStatus } from "@website/domain/recruitment";
 import type { PagePermission } from "@website/permissions";
 
@@ -193,6 +193,56 @@ export function createNotices(deps: NoticeDeps) {
       }
     });
 
+  const program = (saved: Program) =>
+    safely("program", saved.id, async () => {
+      const link = `${deps.adminUrl}/programs/${saved.id}`;
+      const subject = `Program: ${saved.name}`;
+      const key = (uid: string) => `program:${saved.id}:${saved.status}:${saved.version}:${uid}`;
+      const team = [...new Set([saved.createdBy, ...saved.pics])];
+      const to = (uids: readonly string[], id: string, en: string, note = "") =>
+        tell(uids, { subject, text: `${both(id, en)}${note}\n\n${link}` }, key);
+      if (saved.status === "proposed") {
+        await to(
+          await deps.contacts.holders("programs.approve", { orgUnitPath: saved.orgUnitPath }),
+          "Program baru menunggu persetujuan.",
+          "A programme waits for your approval.",
+        );
+      } else if (saved.status === "approved") {
+        await to(team, "Programmu disetujui.", "Your programme is approved.");
+      } else if (saved.status === "draft" && saved.reviewNote) {
+        await to(
+          team,
+          "Programmu dikembalikan untuk diperbaiki.",
+          "Your programme was returned for changes.",
+          `\n\n${saved.reviewNote}`,
+        );
+      }
+    });
+
+  const programRevision = (saved: ProgramRevision, of: Pick<Program, "name">) =>
+    safely("programRevision", saved.id, async () => {
+      const link = `${deps.adminUrl}/programs/${saved.programId}`;
+      const subject = `Revisi program / Programme revision: ${of.name}`;
+      const key = (uid: string) => `programRevision:${saved.id}:${saved.status}:${uid}`;
+      const to = (uids: readonly string[], id: string, en: string) =>
+        tell(uids, { subject, text: `${both(id, en)}\n\n${link}` }, key);
+      if (saved.status === "pending") {
+        await to(
+          await deps.contacts.holders("programs.approve", { orgUnitPath: saved.orgUnitPath }),
+          "Revisi rencana program menunggu keputusan.",
+          "A programme plan revision waits for your decision.",
+        );
+      } else {
+        const verdict =
+          saved.status === "approved" ? ["disetujui", "approved"] : ["ditolak", "rejected"];
+        await to(
+          [saved.requestedBy],
+          `Revisi rencana programmu ${verdict[0]}.`,
+          `Your plan revision was ${verdict[1]}.`,
+        );
+      }
+    });
+
   const finance = (saved: FinanceRequest) =>
     safely("finance", saved.id, async () => {
       const link = `${deps.adminUrl}/finance`;
@@ -246,7 +296,7 @@ export function createNotices(deps: NoticeDeps) {
       }
     });
 
-  return { application, proof, letter, lpj, finance };
+  return { application, proof, letter, lpj, program, programRevision, finance };
 }
 
 export type Notices = ReturnType<typeof createNotices>;

@@ -659,6 +659,7 @@ export function createSqlProgramStore(db: Database) {
           (unit.get("name") as string | undefined) ?? "",
           typeof days === "number" ? days : DEFAULT_LPJ_DEADLINE_DAYS,
           now,
+          (period.get("endsOn") as string | undefined) ?? null,
         );
         const lpj: LpjReport = {
           ...fields,
@@ -683,6 +684,12 @@ export function createSqlProgramStore(db: Database) {
         log.append(auditLpj(null, lpjSnapshot(lpj), null, lpj));
         return { program, lpj };
       });
+    },
+
+    /** Ids of the programmes that have a check-in for the given UTC week. */
+    async checkedIn(weekStart: string): Promise<string[]> {
+      const snapshot = await checkins.where("weekStart", "==", weekStart).get();
+      return snapshot.docs.map((doc) => doc.data()["programId"] as string);
     },
 
     async listCheckins(programId: string): Promise<Checkin[]> {

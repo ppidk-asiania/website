@@ -1,7 +1,13 @@
 import "server-only";
-import type { SqlApplicationStore } from "@website/db/sql";
+import type { SqlApplicationStore, SqlProgramStore } from "@website/db/sql";
 import { messageTo, type Contact, type Messenger } from "@website/domain/messaging";
-import { addDaysUtc, isOverdue, type LpjReport, type Program } from "@website/domain/programs";
+import {
+  addDaysUtc,
+  isOverdue,
+  weekStartUtc,
+  type LpjReport,
+  type Program,
+} from "@website/domain/programs";
 
 export const REMINDER_DAYS = 3;
 
@@ -17,6 +23,7 @@ interface Reminder {
 
 export function createDeadlineReminders(deps: {
   applications: Pick<SqlApplicationStore, "interviewsBetween">;
+  checkedIn: SqlProgramStore["checkedIn"];
   programs: () => Promise<Program[]>;
   lpj: () => Promise<LpjReport[]>;
   contacts: (uids: readonly string[]) => Promise<Map<string, Contact>>;
@@ -30,13 +37,16 @@ export function createDeadlineReminders(deps: {
     const tomorrow = addDaysUtc(now, 1);
     const last = addDaysUtc(now, REMINDER_DAYS);
     const soon = (day: string | null): day is string => day !== null && day >= today && day <= last;
-    const [interviews, programs, lpjs] = await Promise.all([
+    const thursday = now.getUTCDay() === 4;
+    const week = weekStartUtc(now);
+    const [interviews, programs, lpjs, checkedIn] = await Promise.all([
       deps.applications.interviewsBetween(
         new Date(`${tomorrow}T00:00:00Z`),
         new Date(`${addDaysUtc(now, 2)}T00:00:00Z`),
       ),
       deps.programs(),
       deps.lpj(),
+      thursday ? deps.checkedIn(week) : Promise.resolve([]),
     ]);
 
     const reminders: Reminder[] = [
@@ -64,6 +74,17 @@ export function createDeadlineReminders(deps: {
               ),
             })),
         ),
+      ...(thursday ? programs : [])
+        .filter((p) => p.status === "running" && !checkedIn.includes(p.id))
+        .map((p) => ({
+          key: `reminder:checkin:${p.id}:${week}`,
+          uids: p.pics,
+          subject: `Check-in pekanan / Weekly check-in: ${p.name}`,
+          text: both(
+            `Belum ada check-in pekan ini untuk "${p.name}".\n${deps.adminUrl}/programs/${p.id}`,
+            `No check-in yet this week for "${p.name}".`,
+          ),
+        })),
       ...lpjs
         .filter((l) => l.status === "draft" || l.status === "returned")
         .flatMap((l) => {

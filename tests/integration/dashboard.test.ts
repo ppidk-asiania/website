@@ -112,6 +112,7 @@ const lpjOf = (id: string, extra: object) =>
     id,
     status: "submitted",
     submittedBy: "x",
+    pics: [],
     realized: {},
     secretariat: null,
     treasurer: null,

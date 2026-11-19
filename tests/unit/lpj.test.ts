@@ -104,6 +104,8 @@ describe("opening the LPJ (E4)", () => {
       finishedAt: now,
     });
     expect(() => openLpj(program({ status: "running" }), "", 14, now)).toThrow("finished");
+    expect(openLpj(program(), "", 14, now, "2026-11-10").dueOn).toBe("2026-11-10");
+    expect(openLpj(program(), "", 14, now, "2027-06-30").dueOn).toBe("2026-11-18");
     expect(addDaysUtc(new Date("2026-12-25T23:00:00Z"), 14)).toBe("2027-01-08");
   });
 
@@ -151,6 +153,10 @@ describe("separation of duties: three desks, three people, never the submitter",
 
   it("refuses the submitter, a second desk for the same person and a desk signed twice", () => {
     expect(() => signLpj(submitted(), "secretariat", "pic", now)).toThrow("submitter");
+    const withPics = { ...submitted(), pics: ["pic", "pic2"] };
+    for (const desk of ["secretariat", "treasurer", "approval"] as const) {
+      expect(() => signLpj(withPics, desk, "pic2", now)).toThrow("PIC");
+    }
     const once = signLpj(submitted(), "secretariat", "sekre", now);
     expect(() => signLpj(once, "treasurer", "sekre", now)).toThrow("two desks");
     expect(() => signLpj(once, "secretariat", "other", now)).toThrow("already signed");

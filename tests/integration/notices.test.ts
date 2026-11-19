@@ -3,7 +3,7 @@ import { createSqlContactReader, createSqlMessageLog } from "@website/db/sql";
 import type { Letter } from "@website/domain/documents";
 import type { FinanceRequest } from "@website/domain/finance";
 import { createMessenger, deliveryDecision, messageTo } from "@website/domain/messaging";
-import type { LpjReport } from "@website/domain/programs";
+import type { LpjReport, Program, ProgramRevision } from "@website/domain/programs";
 import type { Application } from "@website/domain/recruitment";
 import { normalizePermissions } from "@website/permissions";
 import { createNotices } from "../../apps/admin/src/server/notices";
@@ -322,6 +322,79 @@ describe("notification sources (J2)", () => {
     expect(await run({ status: "returned", version: 7 })).toEqual(["lpj:pr1:returned:7:pic"]);
     expect(await run({ status: "approved", version: 8 })).toEqual(["lpj:pr1:approved:8:pic"]);
     expect(polled).toEqual(["lpj:pr1:pic"]);
+  });
+
+  describe("programmes (13.2)", () => {
+    const desks = { "programs.approve": ["sekjen"] } as Record<string, string[]>;
+    const contacts = {
+      contacts: (uids: readonly string[]) =>
+        Promise.resolve(new Map(uids.map((uid) => [uid, { email: `${uid}@x.org`, phone: null }]))),
+      holders: (permission: string) => Promise.resolve(desks[permission] ?? []),
+    };
+    const program = (fields: Partial<Program>) =>
+      ({
+        id: "pr1",
+        name: "Webinar",
+        orgUnitPath: ["media"],
+        pics: ["pic", "ari"],
+        createdBy: "ari",
+        status: "proposed",
+        reviewNote: null,
+        version: 2,
+        ...fields,
+      }) as Program;
+    const revision = (fields: Partial<ProgramRevision>) =>
+      ({
+        id: "rv1",
+        programId: "pr1",
+        orgUnitPath: ["media"],
+        requestedBy: "pic",
+        status: "pending",
+        ...fields,
+      }) as ProgramRevision;
+    const keys = async (work: Promise<void>) => {
+      sent.length = 0;
+      await work;
+      return sent.map((s) => s.key);
+    };
+
+    it("proposed → approvers; approved or returned → proposer and PICs, each once", async () => {
+      const n = notices(contacts);
+      expect(await keys(n.program(program({})))).toEqual(["program:pr1:proposed:2:sekjen"]);
+      expect(await keys(n.program(program({ status: "approved", version: 3 })))).toEqual([
+        "program:pr1:approved:3:ari",
+        "program:pr1:approved:3:pic",
+      ]);
+      expect(
+        await keys(n.program(program({ status: "draft", version: 4, reviewNote: "Add a budget" }))),
+      ).toEqual(["program:pr1:draft:4:ari", "program:pr1:draft:4:pic"]);
+      expect(sent[0]?.text).toContain("Add a budget");
+      expect(await keys(n.program(program({ status: "draft" })))).toEqual([]);
+      expect(await keys(n.program(program({ status: "running" })))).toEqual([]);
+    });
+
+    it("revision requested → approvers; decided → the requester", async () => {
+      const n = notices(contacts);
+      expect(await keys(n.programRevision(revision({}), program({})))).toEqual([
+        "programRevision:rv1:pending:sekjen",
+      ]);
+      expect(await keys(n.programRevision(revision({ status: "approved" }), program({})))).toEqual([
+        "programRevision:rv1:approved:pic",
+      ]);
+      expect(await keys(n.programRevision(revision({ status: "rejected" }), program({})))).toEqual([
+        "programRevision:rv1:rejected:pic",
+      ]);
+    });
+
+    it("a failed lookup is logged and never thrown", async () => {
+      const broken = {
+        contacts: () => Promise.reject(new Error("db down")),
+        holders: () => Promise.reject(new Error("db down")),
+      };
+      await notices(broken).program(program({}));
+      await notices(broken).programRevision(revision({}), program({}));
+      expect(logError).toHaveBeenCalledTimes(2);
+    });
   });
 
   const finance = (fields: Partial<FinanceRequest>) =>
