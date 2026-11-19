@@ -52,6 +52,7 @@ export interface PpidkProgramPlan {
 }
 
 const PROGRAM_STATUS: Readonly<Record<string, ProgramStatus>> = {
+  draf: "draft",
   usulan: "proposed",
   disetujui: "approved",
   berjalan: "running",
@@ -288,8 +289,7 @@ export function mapPpidkPrograms(
         periodId: id("period", r["period_id"]),
         orgUnitId: id("unit", r["org_unit_id"]),
         orgUnitPath: path,
-        objectiveId: objective ? id("objective", objective) : null,
-        keyResultId: objective ? id("keyresult", r["key_result_id"]) : null,
+        keyResultIds: objective ? [id("keyresult", r["key_result_id"])] : [],
         name: r["name"] as string,
         goal: r["goal"] ?? "",
         description: [r["background"], extras.join("\n")]

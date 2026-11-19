@@ -57,7 +57,7 @@ export default async function AdminProgramsPage({
               units: editable.map((u) => ({ id: u.id, name: u.name })),
               keyResults: objectives.flatMap((o) =>
                 o.keyResults.map((kr) => ({
-                  value: `${o.id}:${kr.id}`,
+                  value: kr.id,
                   label: `${o.title} → ${kr.title}`,
                 })),
               ),

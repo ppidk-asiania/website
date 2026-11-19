@@ -15,6 +15,21 @@ const run = async (name: Name, input: unknown) =>
 export async function saveProgramAction(input: unknown) {
   return run("save", input);
 }
+export async function submitProgramAction(input: unknown) {
+  return run("submit", input);
+}
+export async function withdrawProgramAction(input: unknown) {
+  return run("withdraw", input);
+}
+export async function deleteProgramAction(input: unknown) {
+  return run("remove", input);
+}
+export async function requestRevisionAction(input: unknown) {
+  return run("requestRevision", input);
+}
+export async function decideRevisionAction(input: unknown) {
+  return run("decideRevision", input);
+}
 export async function approveProgramAction(input: unknown) {
   return run("approve", input);
 }

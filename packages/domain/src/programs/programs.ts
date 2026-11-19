@@ -3,6 +3,7 @@ import { safeId, safeText } from "@website/security/validation";
 import { RuleViolationError, type EntityMeta, type Money } from "../shared";
 
 export const PROGRAM_STATUSES = [
+  "draft",
   "proposed",
   "approved",
   "running",
@@ -18,6 +19,10 @@ export const isUnderway = (status: ProgramStatus): boolean =>
   status === "approved" || status === "running";
 export const isClosed = (status: ProgramStatus): boolean =>
   status === "finished" || status === "cancelled";
+
+export const MAX_MILESTONES = 50;
+export const MAX_PICS = 10;
+export const MAX_PROGRAM_KEY_RESULTS = 10;
 
 const plainDate = z.iso.date();
 
@@ -49,28 +54,45 @@ export const BudgetsSchema = z
     "One line per currency: add the amounts of the same currency together.",
   );
 
+const nameField = safeText(200).pipe(z.string().min(3, "Enter the programme name."));
+const goalField = safeText(2000, { multiline: true, allowEmpty: true });
+const keyResultIdsField = z
+  .array(safeId)
+  .max(MAX_PROGRAM_KEY_RESULTS, `At most ${MAX_PROGRAM_KEY_RESULTS} key results.`)
+  .refine((ids) => new Set(ids).size === ids.length, "Choose each key result once.");
+const endNotBeforeStart = (p: { plannedStart: string | null; plannedEnd: string | null }) =>
+  !p.plannedStart || !p.plannedEnd || p.plannedStart <= p.plannedEnd;
+
 export const ProgramInputSchema = z
   .object({
-    name: safeText(200).pipe(z.string().min(3, "Enter the programme name.")),
-    goal: safeText(2000, { multiline: true, allowEmpty: true }).default(""),
+    name: nameField,
+    goal: goalField.default(""),
     description: safeText(4000, { multiline: true, allowEmpty: true }).default(""),
     orgUnitId: safeId,
-    objectiveId: safeId.nullable().default(null),
-    keyResultId: safeId.nullable().default(null),
+    keyResultIds: keyResultIdsField.default([]),
     plannedStart: plainDate.nullable().default(null),
     plannedEnd: plainDate.nullable().default(null),
     budgets: BudgetsSchema.default([]),
   })
   .strict()
-  .refine((p) => (p.objectiveId === null) === (p.keyResultId === null), {
-    message: "Choose the key result, or none.",
-    path: ["keyResultId"],
-  })
-  .refine((p) => !p.plannedStart || !p.plannedEnd || p.plannedStart <= p.plannedEnd, {
-    message: "The end is before the start.",
-    path: ["plannedEnd"],
-  });
+  .refine(endNotBeforeStart, { message: "The end is before the start.", path: ["plannedEnd"] });
 export type ProgramInput = z.infer<typeof ProgramInputSchema>;
+
+/** The locked plan fields a revision may change (same rules as the plan form). */
+export const RevisionChangesSchema = z
+  .object({
+    name: nameField,
+    orgUnitId: safeId,
+    goal: goalField,
+    plannedStart: plainDate.nullable(),
+    plannedEnd: plainDate.nullable(),
+    budgets: BudgetsSchema,
+    keyResultIds: keyResultIdsField,
+  })
+  .partial()
+  .strict()
+  .refine((changes) => Object.keys(changes).length > 0, "Change at least one field.");
+export type RevisionChanges = z.infer<typeof RevisionChangesSchema>;
 
 export const MilestoneInputSchema = z
   .object({
@@ -106,8 +128,7 @@ export interface Program extends EntityMeta {
   readonly periodId: string;
   readonly orgUnitId: string;
   readonly orgUnitPath: readonly string[];
-  readonly objectiveId: string | null;
-  readonly keyResultId: string | null;
+  readonly keyResultIds: readonly string[];
   readonly name: string;
   readonly goal: string;
   readonly description: string;
@@ -128,9 +149,6 @@ export interface Program extends EntityMeta {
   readonly cancelReason: string | null;
   readonly createdBy: string;
 }
-
-export const MAX_MILESTONES = 50;
-export const MAX_PICS = 10;
 
 const refuse = (message: string): never => {
   throw new RuleViolationError(message);
@@ -156,8 +174,42 @@ export function withProgress(program: Program, milestones: readonly Milestone[])
   return { ...program, milestones: ordered, progressPercent: progressPercent(ordered) };
 }
 
-export function assertPlanEditable(program: Program): void {
+/** After approval these are locked: they change only through a decided revision. */
+export const CORE_FIELDS = [
+  "name",
+  "orgUnitId",
+  "goal",
+  "plannedStart",
+  "plannedEnd",
+  "budgets",
+  "keyResultIds",
+] as const satisfies ReadonlyArray<keyof ProgramInput>;
+
+export function assertPlanEditable(program: Program, plan: ProgramInput): void {
   assertOpen(program);
+  if (
+    isUnderway(program.status) &&
+    CORE_FIELDS.some((field) => JSON.stringify(program[field]) !== JSON.stringify(plan[field]))
+  ) {
+    refuse("The approved plan is locked: ask for a revision.");
+  }
+}
+
+export function submitProgram(program: Program): Program {
+  assertStatus(program, ["draft"], "Only drafts can be submitted.");
+  return { ...program, status: "proposed", reviewNote: null };
+}
+
+export function withdrawProgram(program: Program, uid: string): Program {
+  assertStatus(program, ["proposed"], "Only a proposal that is not decided can be withdrawn.");
+  if (program.createdBy !== uid) refuse("Only the person who proposed it can withdraw it.");
+  return { ...program, status: "draft" };
+}
+
+/** Only the author's own draft or undecided proposal; an approved programme is cancelled. */
+export function assertDeletable(program: Program, uid: string): void {
+  assertStatus(program, ["draft", "proposed"], "An approved programme is cancelled, not deleted.");
+  if (program.createdBy !== uid) refuse("Only the person who created it can delete it.");
 }
 
 export function approveProgram(program: Program, uid: string, now: Date): Program {
@@ -167,19 +219,9 @@ export function approveProgram(program: Program, uid: string, now: Date): Progra
 }
 
 export function returnProgram(program: Program, note: string): Program {
-  assertStatus(
-    program,
-    ["proposed", "approved"],
-    "Only proposals or approved programmes can be returned.",
-  );
+  assertStatus(program, ["proposed"], "Only proposals can be returned.");
   if (!note.trim()) refuse("Say what must be fixed.");
-  return {
-    ...program,
-    status: "proposed",
-    reviewNote: note.trim(),
-    approvedBy: null,
-    approvedAt: null,
-  };
+  return { ...program, status: "draft", reviewNote: note.trim() };
 }
 
 export function startProgram(program: Program, now: Date): Program {

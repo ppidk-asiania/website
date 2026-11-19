@@ -244,8 +244,11 @@ router.push("/things"); router.refresh();
   `packages/domain/docs/programs.md`.
 - **Programmes** (`/programs`, `src/components/programs-page.tsx`; one programme at
   `/programs/[id]`, `program-page.tsx`): list per period, the plan form (budget lines typed as
-  "JPY 50000", PICs by e-mail), workflow buttons the viewer may use, milestones (tick = done),
-  health and weekly check-ins. **LPJ** (`/lpj`, `/lpj/[id]`, `src/components/lpj-page.tsx`): the
+  "JPY 50000", PICs by e-mail, several key results as checkboxes), workflow buttons the viewer may
+  use (Submit, Withdraw, Delete for a draft or the author's proposal), plan revisions once approved
+  (Edit details / Request revision, Approve and Reject for another approver), milestones (tick =
+  done), health and weekly check-ins. A listed PIC opens the page without `programs.read`. The OKR
+  page lists the programmes under every key result they serve. **LPJ** (`/lpj`, `/lpj/[id]`, `src/components/lpj-page.tsx`): the
   period's LPJs (overdue in red), one LPJ with the frozen plan, the PICs' form, the desks and the
   PDF link (`/api/lpj/[id]/pdf`). The dashboard warns when nobody holds the LPJ secretariat desk.
   **Report card** (`/programs/report?period=`, server-rendered): OKR achievement, programme

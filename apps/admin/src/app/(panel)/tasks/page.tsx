@@ -13,7 +13,7 @@ export default async function MyTasksPage() {
   const { principal } = viewer;
   const period = await adminReads.activePeriod();
   const [mine, shared, units] = await Promise.all([
-    tasks().mine(principal.userId),
+    tasks().mine(principal.userId, principal),
     adminReads.sharedBoards(principal.userId),
     period ? adminReads.listOrgUnits(period.id) : Promise.resolve([]),
   ]);

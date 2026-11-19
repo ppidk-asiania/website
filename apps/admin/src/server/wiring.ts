@@ -596,6 +596,7 @@ export const dashboard = lazyEnv(() =>
     lpj: (periodId) => adminStores().lpj.listForPeriod(periodId),
     zoom: (from) =>
       adminStores().zoom.listBetween(from, new Date(from.getTime() + 365 * 86_400_000)),
+    revisions: (periodId) => adminStores().programs.listPendingRevisions(periodId),
     myTasks: (uid) => tasks().mine(uid),
     now: () => new Date(),
   }),
@@ -879,6 +880,7 @@ export const tasks = lazyEnv(() =>
     actionItemsOfPeriod: (id) => adminStores().actionItems.listForPeriod(id),
     incoming: (id) => adminStores().incoming.list(id, 300),
     programs: (id) => adminStores().programs.listForPeriod(id),
+    pendingRevisions: (id) => adminStores().programs.listPendingRevisions(id),
     unitsOf: async (uid) =>
       (await adminStores().appointments.activeForUser(uid)).map((a) => a.orgUnitId),
     unitPath: async (id) => {
@@ -979,6 +981,7 @@ export const adminReads = {
   listPrograms: (periodId: string) => adminStores().programs.listForPeriod(periodId),
   getProgram: (id: string) => adminStores().programs.get(id),
   listCheckins: (programId: string) => adminStores().programs.listCheckins(programId),
+  listProgramRevisions: (programId: string) => adminStores().programs.listRevisions(programId),
   listLpj: (periodId: string) => adminStores().lpj.listForPeriod(periodId),
   getLpj: (id: string) => adminStores().lpj.get(id),
   periodReportCard: (periodId: string) => adminStores().periodReport.card(periodId, new Date()),

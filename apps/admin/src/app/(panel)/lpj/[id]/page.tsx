@@ -19,7 +19,11 @@ export default async function LpjRoute({ params }: { params: Promise<{ id: strin
   if (!safeId.safeParse(id).success || !canAccessAdmin(principal)) notFound();
   const lpj = await adminReads.getLpj(id);
   const scope = { orgUnitPath: lpj?.orgUnitPath ?? [] };
-  if (!lpj || !(can(principal, "lpj.read", scope) || can(principal, "programs.read", scope))) {
+  const isPic = lpj?.pics.includes(principal.userId) ?? false;
+  if (
+    !lpj ||
+    !(isPic || can(principal, "lpj.read", scope) || can(principal, "programs.read", scope))
+  ) {
     notFound();
   }
   const uids = [...lpj.plan.pics, lpj.submittedBy, ...LPJ_DESKS.map((d) => lpj[d]?.uid)];

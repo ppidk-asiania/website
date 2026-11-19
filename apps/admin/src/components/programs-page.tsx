@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { PeriodStatus } from "@website/domain/organizations";
 import type { HealthStatus, ProgramStatus } from "@website/domain/programs";
-import { saveProgramAction } from "@/app/(panel)/programs/actions";
+import { requestRevisionAction, saveProgramAction } from "@/app/(panel)/programs/actions";
 import {
   budgetText,
   ChoiceField,
@@ -62,115 +62,186 @@ export interface PlanValues {
   goal: string;
   description: string;
   orgUnitId: string;
-  objectiveId: string | null;
-  keyResultId: string | null;
+  keyResultIds: string[];
   plannedStart: string | null;
   plannedEnd: string | null;
   budgets: Array<{ amountMinor: number; currency: string }>;
   picEmails: string[];
 }
 
+/** The plan fields that are locked once the programme is approved. */
+const CORE = [
+  "name",
+  "orgUnitId",
+  "goal",
+  "plannedStart",
+  "plannedEnd",
+  "budgets",
+  "keyResultIds",
+] as const;
+
+const readPlan = (form: FormData) => ({
+  name: text(form, "name"),
+  goal: text(form, "goal"),
+  description: text(form, "description"),
+  orgUnitId: text(form, "orgUnitId"),
+  keyResultIds: form.getAll("keyResultIds").map(String),
+  plannedStart: text(form, "plannedStart") || null,
+  plannedEnd: text(form, "plannedEnd") || null,
+  budgets: parseBudgets(text(form, "budgets")),
+});
+
+/**
+ * `plan`: every field. `locked` (approved programme): background and PICs only.
+ * `revision`: the locked fields, sent as a request that someone else decides.
+ */
 export function PlanForm({
   open,
   onClose,
   periodId,
   options,
   current,
+  mode = "plan",
 }: {
   open: boolean;
   onClose: () => void;
   periodId: string;
   options: PlanOptions;
   current: PlanValues | null;
+  mode?: "plan" | "locked" | "revision";
 }) {
+  const core = mode !== "locked";
+  const free = mode !== "revision";
   return (
     <FormModal
       open={open}
-      title={current ? "Edit programme" : "Add New Programme"}
+      title={
+        mode === "revision"
+          ? "Request a plan revision"
+          : mode === "locked"
+            ? "Edit details"
+            : current
+              ? "Edit programme"
+              : "Add New Programme"
+      }
+      submitLabel={mode === "revision" ? "Send request" : "Save"}
       onClose={onClose}
       onSubmit={(form) => {
-        const [objectiveId = "", keyResultId = ""] = text(form, "keyResult").split(":");
+        const typed = readPlan(form);
+        if (mode === "revision" && current) {
+          const changes = Object.fromEntries(
+            CORE.filter((k) =>
+              k === "budgets"
+                ? budgetText(typed.budgets) !== budgetText(current.budgets)
+                : JSON.stringify(typed[k]) !== JSON.stringify(current[k]),
+            ).map((k) => [k, typed[k]]),
+          );
+          return requestRevisionAction({ id: current.id, changes, reason: text(form, "reason") });
+        }
+        const plan =
+          mode === "locked" && current
+            ? {
+                ...Object.fromEntries(CORE.map((k) => [k, current[k]])),
+                description: typed.description,
+              }
+            : typed;
         return saveProgramAction({
           ...(current ? { id: current.id } : {}),
           version: current?.version ?? null,
           periodId,
-          plan: {
-            name: text(form, "name"),
-            goal: text(form, "goal"),
-            description: text(form, "description"),
-            orgUnitId: text(form, "orgUnitId"),
-            objectiveId: objectiveId || null,
-            keyResultId: keyResultId || null,
-            plannedStart: text(form, "plannedStart") || null,
-            plannedEnd: text(form, "plannedEnd") || null,
-            budgets: parseBudgets(text(form, "budgets")),
-          },
+          plan,
           picEmails: text(form, "pics")
             .split(/[\s,]+/)
             .filter(Boolean),
         });
       }}
     >
-      <Field
-        label="Name"
-        name="name"
-        required
-        minLength={3}
-        maxLength={200}
-        defaultValue={current?.name ?? ""}
-      />
-      <ChoiceField
-        label="Unit"
-        name="orgUnitId"
-        defaultValue={current?.orgUnitId ?? options.units[0]?.id ?? ""}
-        options={options.units.map((u) => ({ value: u.id, label: u.name }))}
-      />
-      <ChoiceField
-        label="Key result"
-        name="keyResult"
-        defaultValue={current?.objectiveId ? `${current.objectiveId}:${current.keyResultId}` : ""}
-        options={[{ value: "", label: "None yet" }, ...options.keyResults]}
-      />
-      <Field
-        label="Goal"
-        name="goal"
-        rows={2}
-        maxLength={2000}
-        defaultValue={current?.goal ?? ""}
-      />
-      <Field
-        label="Background"
-        name="description"
-        rows={3}
-        maxLength={4000}
-        defaultValue={current?.description ?? ""}
-      />
-      <Field
-        label="Planned start"
-        name="plannedStart"
-        type="date"
-        defaultValue={current?.plannedStart ?? ""}
-      />
-      <Field
-        label="Planned end"
-        name="plannedEnd"
-        type="date"
-        defaultValue={current?.plannedEnd ?? ""}
-      />
-      <Field
-        label="Budget"
-        name="budgets"
-        rows={3}
-        hint="One line per currency, e.g. JPY 50000 (never converted)"
-        defaultValue={budgetText(current?.budgets ?? [])}
-      />
-      <Field
-        label="PICs (account e-mails)"
-        name="pics"
-        rows={2}
-        hint="Needed before approval; PICs run the programme"
-        defaultValue={(current?.picEmails ?? []).join("\n")}
-      />
+      {core ? (
+        <>
+          <Field
+            label="Name"
+            name="name"
+            required
+            minLength={3}
+            maxLength={200}
+            defaultValue={current?.name ?? ""}
+          />
+          <ChoiceField
+            label="Unit"
+            name="orgUnitId"
+            defaultValue={current?.orgUnitId ?? options.units[0]?.id ?? ""}
+            options={options.units.map((u) => ({ value: u.id, label: u.name }))}
+          />
+          <div className="admin-field">
+            <span className="admin-field__label">Key results (up to 10)</span>
+            {options.keyResults.length === 0 ? <p>No key results in this period yet.</p> : null}
+            {options.keyResults.map((k) => (
+              <label key={k.value} className="admin-check-label">
+                <input
+                  type="checkbox"
+                  name="keyResultIds"
+                  value={k.value}
+                  defaultChecked={current?.keyResultIds.includes(k.value) ?? false}
+                />
+                {k.label}
+              </label>
+            ))}
+          </div>
+          <Field
+            label="Goal"
+            name="goal"
+            rows={2}
+            maxLength={2000}
+            defaultValue={current?.goal ?? ""}
+          />
+          <Field
+            label="Planned start"
+            name="plannedStart"
+            type="date"
+            defaultValue={current?.plannedStart ?? ""}
+          />
+          <Field
+            label="Planned end"
+            name="plannedEnd"
+            type="date"
+            defaultValue={current?.plannedEnd ?? ""}
+          />
+          <Field
+            label="Budget"
+            name="budgets"
+            rows={3}
+            hint="One line per currency, e.g. JPY 50000 (never converted)"
+            defaultValue={budgetText(current?.budgets ?? [])}
+          />
+        </>
+      ) : null}
+      {free ? (
+        <>
+          <Field
+            label="Background"
+            name="description"
+            rows={3}
+            maxLength={4000}
+            defaultValue={current?.description ?? ""}
+          />
+          <Field
+            label="PICs (account e-mails)"
+            name="pics"
+            rows={2}
+            hint="Needed before approval; PICs run the programme"
+            defaultValue={(current?.picEmails ?? []).join("\n")}
+          />
+        </>
+      ) : (
+        <Field
+          label="Why must the plan change?"
+          name="reason"
+          rows={3}
+          required
+          maxLength={1000}
+          hint="Someone with programme approval decides; you cannot decide your own request."
+        />
+      )}
     </FormModal>
   );
 }

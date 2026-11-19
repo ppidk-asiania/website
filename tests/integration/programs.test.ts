@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createSqlProgramStore } from "@website/db/sql";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
-import { canManageProgram, createProgramActions } from "../../apps/admin/src/server/programs";
+import {
+  canManageProgram,
+  canOpenProgram,
+  createProgramActions,
+} from "../../apps/admin/src/server/programs";
 import { fakeDb } from "../support/fake-db";
 
 type Db = Parameters<typeof createSqlProgramStore>[0];
@@ -64,7 +68,7 @@ async function ok<T>(result: Promise<{ ok: boolean; data?: T }>): Promise<T> {
 }
 type Step = { version: number; status: string; progress: number };
 
-async function proposal(extra: Record<string, unknown> = {}) {
+async function draft(extra: Record<string, unknown> = {}) {
   return ok<{ id: string; version: number }>(
     actions().save(...as(director))({
       version: null,
@@ -73,6 +77,16 @@ async function proposal(extra: Record<string, unknown> = {}) {
       picEmails: ["PIC@example.org"],
     }),
   );
+}
+async function proposal(extra: Record<string, unknown> = {}) {
+  const { id, version } = await draft(extra);
+  const sent = await ok<Step>(actions().submit(...as(director))({ id, version }));
+  return { id, version: sent.version };
+}
+async function approved(extra: Record<string, unknown> = {}) {
+  const { id, version } = await proposal(extra);
+  const step = await ok<Step>(actions().approve(...as(sekjen))({ id, version }));
+  return { id, version: step.version };
 }
 
 beforeEach(() => {
@@ -87,19 +101,20 @@ beforeEach(() => {
   fake.docs.set("objectives/o1", {
     periodId: "p1",
     deletedAt: null,
-    keyResults: [{ id: "kr1" }],
+    keyResults: [{ id: "kr1" }, { id: "kr2" }],
   });
+  fake.docs.set("objectives/o0", { periodId: "p0", deletedAt: null, keyResults: [{ id: "old" }] });
 });
 
 describe("programme plans (E2)", () => {
-  it("a unit proposes with PICs (by e-mail), budgets per currency and a key result", async () => {
-    const { id } = await proposal({ objectiveId: "o1", keyResultId: "kr1" });
+  it("a unit drafts with PICs (by e-mail), budgets per currency and several key results", async () => {
+    const { id } = await draft({ keyResultIds: ["kr1", "kr2"] });
     const saved = await store().get(id);
     expect(saved).toMatchObject({
-      status: "proposed",
+      status: "draft",
       pics: ["pic"],
       orgUnitPath: ["dirs", "media"],
-      keyResultId: "kr1",
+      keyResultIds: ["kr1", "kr2"],
       progressPercent: 0,
       createdBy: "dir",
       budgets: plan.budgets,
@@ -115,17 +130,14 @@ describe("programme plans (E2)", () => {
       picEmails: ["ghost@example.org"],
     });
     expect(unknown).toMatchObject({ ok: false, issues: ["No account uses ghost@example.org."] });
-    for (const link of [
-      { objectiveId: "o1", keyResultId: "nope" },
-      { objectiveId: "ghost", keyResultId: "kr1" },
-    ]) {
+    for (const link of [{ keyResultIds: ["kr1", "nope"] }, { keyResultIds: ["old"] }]) {
       const result = await actions().save(...as(director))({
         version: null,
         periodId: "p1",
         plan: { ...plan, ...link },
         picEmails: [],
       });
-      expect(result).toMatchObject({ ok: false, issues: ["Choose a key result of this period."] });
+      expect(result).toMatchObject({ ok: false, issues: ["Choose key results of this period."] });
     }
     fake.docs.set("orgUnits/old", { periodId: "p0", path: [], deletedAt: null });
     const archived = await actions().save(...as(staff("x", ["programs.edit"])))({
@@ -163,7 +175,7 @@ describe("programme plans (E2)", () => {
         picEmails: ["pic@example.org", "rina@example.org", "pic@example.org"],
       }),
     );
-    expect(edited.version).toBe(2);
+    expect(edited.version).toBe(3);
     expect((await store().get(id))?.pics).toEqual(["pic", "rina"]);
     const unknownUnit = await actions().save(...as(director))({
       version: null,
@@ -177,8 +189,8 @@ describe("programme plans (E2)", () => {
 
 describe("running a programme: the PIC rule", () => {
   it("the PIC (no edit role) runs it; another reader cannot; the unit director can", async () => {
-    const { id } = await proposal();
-    let v = (await ok<Step>(actions().approve(...as(sekjen))({ id, version: 1 }))).version;
+    const { id, version } = await approved();
+    let v = version;
     const intruder = await actions().saveMilestone(...as(officer))({
       id,
       version: v,
@@ -255,17 +267,26 @@ describe("running a programme: the PIC rule", () => {
   });
 
   it("approve, return with a note and cancel need programs.approve", async () => {
-    const { id } = await proposal();
-    const self = await actions().approve(...as(director))({ id, version: 1 });
+    const { id, version } = await proposal();
+    const self = await actions().approve(...as(director))({ id, version });
     expect(self).toMatchObject({ ok: false, error: "forbidden" });
-    const approved = await ok<Step>(actions().approve(...as(sekjen))({ id, version: 1 }));
     const back = await ok<Step>(
-      actions().returnToProposal(...as(sekjen))({ id, version: approved.version, note: "Budget?" }),
+      actions().returnToProposal(...as(sekjen))({ id, version, note: "Budget?" }),
     );
-    expect(back.status).toBe("proposed");
-    expect((await store().get(id))?.approvedBy).toBeNull();
+    expect(back.status).toBe("draft");
+    expect((await store().get(id))?.reviewNote).toBe("Budget?");
+    const again = await ok<Step>(actions().submit(...as(director))({ id, version: back.version }));
+    const approvedStep = await ok<Step>(
+      actions().approve(...as(sekjen))({ id, version: again.version }),
+    );
+    const refused = await actions().returnToProposal(...as(sekjen))({
+      id,
+      version: approvedStep.version,
+      note: "Too late",
+    });
+    expect(refused).toMatchObject({ ok: false, issues: ["Only proposals can be returned."] });
     const cancelled = await ok<Step>(
-      actions().cancel(...as(sekjen))({ id, version: back.version, note: "No venue" }),
+      actions().cancel(...as(sekjen))({ id, version: approvedStep.version, note: "No venue" }),
     );
     expect(cancelled.status).toBe("cancelled");
     const edit = await actions().save(...as(director))({
@@ -279,12 +300,207 @@ describe("running a programme: the PIC rule", () => {
   });
 });
 
+describe("draft, withdraw and delete (the author)", () => {
+  const author = staff("dir", ["programs.read"]);
+  it("the proposer withdraws an undecided proposal; the author deletes a draft or proposal", async () => {
+    const { id, version } = await proposal();
+    const notAuthor = await actions().withdraw(...as(pic))({ id, version });
+    expect(notAuthor).toMatchObject({ ok: false, error: "refused" });
+    const withdrawn = await ok<Step>(actions().withdraw(...as(author))({ id, version }));
+    expect(withdrawn.status).toBe("draft");
+    const stranger = await actions().remove(...as(staff("x", ["programs.read"])))({
+      id,
+      version: withdrawn.version,
+    });
+    expect(stranger).toMatchObject({ ok: false, error: "refused" });
+    await ok(actions().remove(...as(author))({ id, version: withdrawn.version }));
+    expect((await store().get(id))?.deletedAt).toEqual(clock);
+    expect(await store().listForPeriod("p1")).toEqual([]);
+  });
+
+  it("an approved programme is never deleted and a draft is never approved", async () => {
+    const { id, version } = await approved();
+    const gone = await actions().remove(...as(author))({ id, version });
+    expect(gone).toMatchObject({ ok: false, error: "refused" });
+    const other = await draft();
+    const early = await actions().approve(...as(sekjen))({ id: other.id, version: other.version });
+    expect(early).toMatchObject({ ok: false, issues: ["Only proposals can be approved."] });
+  });
+});
+
+describe("the approved plan changes only through a decided revision", () => {
+  const changes = { name: "Webinar series 2", keyResultIds: ["kr1", "kr2"] };
+  const request = async (id: string, extra: Record<string, unknown> = {}) =>
+    ok<{ id: string }>(
+      actions().requestRevision(...as(pic))({ id, changes, reason: "New sponsor", ...extra }),
+    );
+  const audits = (type: string) =>
+    [...fake.docs.values()].filter((e) => (e as { resourceType?: string }).resourceType === type);
+
+  it("the locked plan is refused on save, but PICs and the background stay free", async () => {
+    const { id, version } = await approved();
+    const locked = await actions().save(...as(director))({
+      id,
+      version,
+      periodId: "p1",
+      plan: { ...plan, name: "Renamed" },
+      picEmails: ["pic@example.org"],
+    });
+    expect(locked).toMatchObject({ ok: false, error: "refused" });
+    const free = await ok<{ version: number }>(
+      actions().save(...as(director))({
+        id,
+        version,
+        periodId: "p1",
+        plan: { ...plan, description: "Background" },
+        picEmails: ["pic@example.org", "rina@example.org"],
+      }),
+    );
+    expect(free.version).toBe(version + 1);
+    expect(await store().get(id)).toMatchObject({ pics: ["pic", "rina"], name: plan.name });
+  });
+
+  it("a PIC requests, another approver decides: plan and audit change in one transaction", async () => {
+    const { id, version } = await approved();
+    const { id: revisionId } = await request(id);
+    expect(await store().get(id)).toMatchObject({ name: plan.name, keyResultIds: [] });
+    expect(await store().listPendingRevisions("p1")).toHaveLength(1);
+
+    const second = await actions().requestRevision(...as(pic))({ id, changes, reason: "Again" });
+    expect(second).toMatchObject({
+      ok: false,
+      issues: ["This programme already has a revision waiting."],
+    });
+    const nobody = await actions().decideRevision(...as(pic))({
+      id: revisionId,
+      verdict: "approved",
+    });
+    expect(nobody).toMatchObject({ ok: false, error: "forbidden" });
+
+    const done = await ok<{ status: string }>(
+      actions().decideRevision(...as(sekjen))({ id: revisionId, verdict: "approved" }),
+    );
+    expect(done.status).toBe("approved");
+    expect(await store().get(id)).toMatchObject({
+      name: "Webinar series 2",
+      keyResultIds: ["kr1", "kr2"],
+      status: "approved",
+      version: version + 1,
+      pics: ["pic"],
+    });
+    expect(await store().getRevision(revisionId)).toMatchObject({
+      status: "approved",
+      decidedBy: "sekjen",
+      requestedBy: "pic",
+      reason: "New sponsor",
+    });
+    expect(audits("programRevision")).toHaveLength(2);
+    const last = audits("program")[audits("program").length - 1];
+    expect(last).toMatchObject({ action: "UPDATE", title: "Webinar series 2" });
+    await request(id, { changes: { goal: "More" } });
+  });
+
+  it("the requester never decides their own revision, not even with programs.approve", async () => {
+    const { id } = await approved();
+    const { id: revisionId } = await request(id);
+    const own = await actions().decideRevision(...as(pic))({ id: revisionId, verdict: "rejected" });
+    expect(own).toMatchObject({ ok: false, error: "forbidden" });
+    const sameDesk = staff("pic", ["programs.read", "programs.approve"]);
+    const refused = await actions().decideRevision(...as(sameDesk))({
+      id: revisionId,
+      verdict: "approved",
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      issues: ["Someone else must decide your revision."],
+    });
+    expect((await store().getRevision(revisionId))?.status).toBe("pending");
+  });
+
+  it("a rejected revision is kept, changes nothing and frees the slot", async () => {
+    const { id, version } = await approved();
+    const { id: revisionId } = await request(id);
+    await ok(actions().decideRevision(...as(sekjen))({ id: revisionId, verdict: "rejected" }));
+    expect(await store().get(id)).toMatchObject({ name: plan.name, version });
+    expect((await store().listRevisions(id)).map((r) => r.status)).toEqual(["rejected"]);
+    const again = await request(id);
+    expect((await store().listRevisions(id)).map((r) => r.id)).toContain(again.id);
+    const twice = await actions().decideRevision(...as(sekjen))({
+      id: revisionId,
+      verdict: "approved",
+    });
+    expect(twice).toMatchObject({ ok: false, issues: ["This revision is already decided."] });
+  });
+
+  it("only approved or running programmes take a revision; it is checked like a plan", async () => {
+    const early = await proposal();
+    const notYet = await actions().requestRevision(...as(pic))({
+      id: early.id,
+      changes,
+      reason: "x",
+    });
+    expect(notYet).toMatchObject({ ok: false, error: "refused" });
+    const { id } = await approved();
+    const bad = await actions().requestRevision(...as(pic))({
+      id,
+      changes: { keyResultIds: ["old"] },
+      reason: "x",
+    });
+    expect(bad).toMatchObject({ ok: false, issues: ["Choose key results of this period."] });
+    const noReason = await actions().requestRevision(...as(pic))({ id, changes, reason: " " });
+    expect(noReason).toMatchObject({ ok: false, error: "invalid_input" });
+    const empty = await actions().requestRevision(...as(pic))({ id, changes: {}, reason: "x" });
+    expect(empty).toMatchObject({ ok: false, error: "invalid_input" });
+    const stranger = await actions().requestRevision(...as(officer))({ id, changes, reason: "x" });
+    expect(stranger).toMatchObject({ ok: false, error: "refused" });
+    const moved = await actions().requestRevision(...as(pic))({
+      id,
+      changes: { orgUnitId: "edu" },
+      reason: "x",
+    });
+    expect(moved).toMatchObject({
+      ok: false,
+      issues: ["You can only plan programmes of your own unit."],
+    });
+  });
+
+  it("an approval after the programme was closed is refused; rejecting still works", async () => {
+    const { id, version } = await approved();
+    const { id: revisionId } = await request(id);
+    await ok(actions().cancel(...as(sekjen))({ id, version, note: "Stopped" }));
+    const late = await actions().decideRevision(...as(sekjen))({
+      id: revisionId,
+      verdict: "approved",
+    });
+    expect(late).toMatchObject({ ok: false, error: "refused" });
+    await ok(actions().decideRevision(...as(sekjen))({ id: revisionId, verdict: "rejected" }));
+    const missing = await actions().decideRevision(...as(sekjen))({
+      id: "ghost",
+      verdict: "approved",
+    });
+    expect(missing).toMatchObject({ ok: false, error: "refused" });
+  });
+});
+
+describe("opening a programme: the PIC page gate", () => {
+  const program = { pics: ["pic"], orgUnitPath: ["dirs", "media"] };
+  it("permission in scope OR listed PIC; inactive and outsiders never", () => {
+    expect(canOpenProgram(staff("nobody", ["okr.read"]), program)).toBe(false);
+    expect(canOpenProgram(staff("pic", ["okr.read"]), program)).toBe(true);
+    expect(canOpenProgram(officer, program)).toBe(true);
+    expect(
+      canOpenProgram(staff("o", ["programs.read"], { type: "orgUnit", orgUnitId: "edu" }), program),
+    ).toBe(false);
+    expect(canOpenProgram({ ...pic, active: false }, program)).toBe(false);
+  });
+});
+
 describe("weekly check-in: one per programme per UTC week", () => {
   it("a second check-in in the same week updates it; the next week is a new one", async () => {
-    const { id } = await proposal();
+    const { id, version } = await proposal();
     const early = await actions().checkIn(...as(pic))({ id, achievements: "Planned" });
     expect(early).toMatchObject({ ok: false, error: "refused" });
-    await ok(actions().approve(...as(sekjen))({ id, version: 1 }));
+    await ok(actions().approve(...as(sekjen))({ id, version }));
 
     const first = await ok<{ id: string; weekStart: string }>(
       actions().checkIn(...as(pic))({ id, achievements: "Booked the venue" }),

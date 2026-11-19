@@ -1,6 +1,12 @@
 import "server-only";
 import { authorizeRequest, reviewRequest, type FinanceRequest } from "@website/domain/finance";
-import { LPJ_DESK_PERMISSIONS, LPJ_DESKS, signLpj, type LpjReport } from "@website/domain/programs";
+import {
+  LPJ_DESK_PERMISSIONS,
+  LPJ_DESKS,
+  signLpj,
+  type LpjReport,
+  type ProgramRevision,
+} from "@website/domain/programs";
 import type { Task } from "@website/domain/tasks";
 import type { ZoomRequest } from "@website/domain/zoom";
 import { can, canInSomeScope, type PagePermission, type Principal } from "@website/permissions";
@@ -18,6 +24,7 @@ interface QueueSources {
   finance: FinanceRequest[];
   lpj: LpjReport[];
   zoom: ZoomRequest[];
+  revisions: ProgramRevision[];
 }
 type Waiting<K extends keyof QueueSources> = (
   item: QueueSources[K][number],
@@ -70,6 +77,13 @@ export const DASHBOARD_QUEUES = [
     }),
   ),
   queue({
+    label: "Programme plan revisions to decide",
+    href: "/programs",
+    permission: "programs.approve",
+    source: "revisions",
+    waiting: (r, uid) => r.requestedBy !== uid,
+  }),
+  queue({
     label: "Zoom bookings to approve",
     href: "/zoom",
     permission: "zoom.approve",
@@ -85,6 +99,7 @@ export function createDashboard(deps: {
   finance: (periodId: string) => Promise<FinanceRequest[]>;
   lpj: (periodId: string) => Promise<LpjReport[]>;
   zoom: (from: Date) => Promise<ZoomRequest[]>;
+  revisions: (periodId: string) => Promise<ProgramRevision[]>;
   myTasks: (uid: string) => Promise<Task[]>;
   now: () => Date;
 }) {
@@ -97,15 +112,16 @@ export function createDashboard(deps: {
     const queues = DASHBOARD_QUEUES.filter((q) => canInSomeScope(principal, q.permission));
     const uses = (source: keyof QueueSources) => queues.some((q) => q.source === source);
     const period = await deps.activePeriod();
-    const [graduated, secretariat, finance, lpj, zoom, tasks] = await Promise.all([
+    const [graduated, secretariat, finance, lpj, zoom, revisions, tasks] = await Promise.all([
       can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
       watchesLpj ? deps.lpjSecretariatHolders() : null,
       period && uses("finance") ? deps.finance(period.id) : [],
       period && uses("lpj") ? deps.lpj(period.id) : [],
       uses("zoom") ? deps.zoom(now) : [],
+      period && uses("revisions") ? deps.revisions(period.id) : [],
       deps.myTasks(principal.userId),
     ]);
-    const sources: QueueSources = { finance, lpj, zoom };
+    const sources: QueueSources = { finance, lpj, zoom, revisions };
     return {
       queues: queues
         .map((q) => ({

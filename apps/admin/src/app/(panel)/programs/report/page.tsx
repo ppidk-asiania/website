@@ -75,7 +75,7 @@ export default async function ReportCardPage({
       <Card>
         <CardHeader
           title="Programmes"
-          subtitle="Completion = finished ÷ approved, running and finished (proposals and cancelled left out)."
+          subtitle="Completion = finished ÷ approved, running and finished (drafts, proposals and cancelled left out)."
         />
         <CardBody>
           <p>

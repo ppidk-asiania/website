@@ -229,6 +229,7 @@ export const DISPOSITION_STATUS_LABELS = {
 } as const satisfies Record<DispositionStatus, Label>;
 
 export const PROGRAM_STATUS_LABELS = {
+  draft: { id: "Draf", en: "Draft" },
   proposed: { id: "Usulan", en: "Proposed" },
   approved: { id: "Disetujui", en: "Approved" },
   running: { id: "Berjalan", en: "Running" },

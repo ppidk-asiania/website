@@ -3,16 +3,17 @@ import { z } from "zod";
 import type { SqlTaskShareStore } from "@website/db/sql";
 import type { IncomingLetter } from "@website/domain/documents";
 import type { ActionItem } from "@website/domain/meetings";
-import type { Program } from "@website/domain/programs";
+import type { Program, ProgramRevision } from "@website/domain/programs";
 import {
   actionTasks,
   dispositionTasks,
   milestoneTasks,
+  revisionTasks,
   sortTasks,
   type Task,
 } from "@website/domain/tasks";
 import { RuleViolationError } from "@website/domain/shared";
-import { can, type Principal } from "@website/permissions";
+import { can, canInSomeScope, type Principal } from "@website/permissions";
 import { safeId } from "@website/security/validation";
 import { createGuardedAction } from "./guarded-action";
 
@@ -22,6 +23,7 @@ export interface TaskDeps {
   readonly actionItemsOfPeriod: (periodId: string) => Promise<ActionItem[]>;
   readonly incoming: (periodId: string) => Promise<IncomingLetter[]>;
   readonly programs: (periodId: string) => Promise<Program[]>;
+  readonly pendingRevisions: (periodId: string) => Promise<ProgramRevision[]>;
   readonly unitsOf: (uid: string) => Promise<string[]>;
   readonly unitPath: (orgUnitId: string) => Promise<readonly string[] | null>;
   readonly shares: Pick<SqlTaskShareStore, "has" | "set">;
@@ -42,13 +44,16 @@ export function createTasks(deps: TaskDeps) {
     return map;
   };
 
-  async function mine(uid: string): Promise<Task[]> {
+  /** With the viewer's principal, approvers also get the plan revisions waiting for them. */
+  async function mine(uid: string, principal?: Principal): Promise<Task[]> {
     const period = await deps.activePeriod();
-    const [items, letters, programs, units] = await Promise.all([
+    const approver = principal && canInSomeScope(principal, "programs.approve") ? principal : null;
+    const [items, letters, programs, units, revisions] = await Promise.all([
       deps.actionItemsOf(uid),
       period ? deps.incoming(period.id) : Promise.resolve([]),
       period ? deps.programs(period.id) : Promise.resolve([]),
       deps.unitsOf(uid),
+      period && approver ? deps.pendingRevisions(period.id) : Promise.resolve([]),
     ]);
     const unitPaths = await paths(
       letters.flatMap((l) => l.dispositions.flatMap((d) => (d.toOrgUnitId ? [d.toOrgUnitId] : []))),
@@ -64,6 +69,13 @@ export function createTasks(deps: TaskDeps) {
       ...milestoneTasks(
         programs.filter((p) => p.pics.includes(uid)),
         today(),
+      ),
+      ...revisionTasks(
+        revisions.filter((r) =>
+          can(approver as Principal, "programs.approve", { orgUnitPath: r.orgUnitPath }),
+        ),
+        programs,
+        uid,
       ),
     ]);
   }

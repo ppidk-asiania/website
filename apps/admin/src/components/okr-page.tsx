@@ -31,6 +31,7 @@ interface KeyResultItem {
   direction: KeyResultDirection;
   sort: number;
   percent: number;
+  programs: Array<{ id: string; name: string }>;
 }
 interface ObjectiveItem {
   id: string;
@@ -123,6 +124,17 @@ export function OkrPage({ period, periods, objectives, units }: Props) {
             {measure(kr)}
             {kr.direction === "down" ? " · lower is better" : ""}
           </div>
+          {kr.programs.length > 0 ? (
+            <div className="admin-table__sub">
+              Programmes:{" "}
+              {kr.programs.map((p, i) => (
+                <span key={p.id}>
+                  {i > 0 ? ", " : ""}
+                  <a href={`/programs/${p.id}`}>{p.name}</a>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ),
     },

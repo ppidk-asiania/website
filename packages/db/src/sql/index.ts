@@ -220,6 +220,7 @@ export {
   type ObjectiveAudit,
   type ObjectiveFields,
   type ProgramAudit,
+  type RevisionAudit,
   type ProgramFields,
   type SqlObjectiveStore,
   type SqlProgramStore,

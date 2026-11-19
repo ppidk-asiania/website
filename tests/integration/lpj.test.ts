@@ -78,7 +78,8 @@ async function finished() {
       picEmails: ["pic@example.org", "pic2@example.org"],
     }),
   );
-  let v = (await ok(programActions().approve(...as(sekjen))({ id, version: 1 }))).version;
+  let v = (await ok(programActions().submit(...as(director))({ id, version: 1 }))).version;
+  v = (await ok(programActions().approve(...as(sekjen))({ id, version: v }))).version;
   v = (await ok(programActions().saveMilestone(...as(pic))({ id, version: v, title: "Hold it" })))
     .version;
   v = (await ok(programActions().start(...as(pic))({ id, version: v }))).version;
@@ -384,8 +385,12 @@ describe("period report card, computed on request (E5)", () => {
         picEmails: ["pic@example.org"],
       }),
     );
-    const rv = (await ok(programActions().approve(...as(sekjen))({ id: running.id, version: 1 })))
-      .version;
+    const sent = (
+      await ok(programActions().submit(...as(director))({ id: running.id, version: 1 }))
+    ).version;
+    const rv = (
+      await ok(programActions().approve(...as(sekjen))({ id: running.id, version: sent }))
+    ).version;
     await ok(
       programActions().health(...as(pic))({
         id: running.id,
@@ -430,7 +435,7 @@ describe("period report card, computed on request (E5)", () => {
     const card = await createSqlPeriodReport(db()).card("p1", new Date("2026-12-01T00:00:00Z"));
     expect(JSON.stringify([...fake.docs.keys()])).toBe(before);
     expect(card.programmes).toMatchObject({
-      counts: { proposed: 1, approved: 1, running: 0, finished: 2, cancelled: 0 },
+      counts: { draft: 1, proposed: 0, approved: 1, running: 0, finished: 2, cancelled: 0 },
       total: 4,
       troubled: 1,
       completionPercent: 67,

@@ -9,6 +9,7 @@ import {
 const jpy = (amountMinor: number) => ({ amountMinor, currency: "JPY" });
 const idr = (amountMinor: number) => ({ amountMinor, currency: "IDR" });
 const counts = (c: Partial<Record<string, number>>) => ({
+  draft: 0,
   proposed: 0,
   approved: 0,
   running: 0,
@@ -47,6 +48,7 @@ describe("period report card (E5)", () => {
 
   it("completion counts only programmes that were approved", () => {
     expect(completionPercent(counts({}))).toBe(0);
+    expect(completionPercent(counts({ draft: 7, proposed: 2, finished: 1 }))).toBe(100);
     expect(completionPercent(counts({ proposed: 9, cancelled: 3, running: 1, finished: 3 }))).toBe(
       75,
     );

@@ -7,13 +7,17 @@ import {
   approveProgramAction,
   cancelProgramAction,
   checkInAction,
+  decideRevisionAction,
   deleteMilestoneAction,
+  deleteProgramAction,
   finishProgramAction,
   markMilestoneAction,
   returnProgramAction,
   saveMilestoneAction,
   setHealthAction,
   startProgramAction,
+  submitProgramAction,
+  withdrawProgramAction,
 } from "@/app/(panel)/programs/actions";
 import { actionMessage } from "@/components/action-message";
 import {
@@ -56,7 +60,7 @@ interface Props {
     status: ProgramStatus;
     progress: number;
     unitName: string;
-    keyResult: string | null;
+    keyResults: string[];
     planned: string;
     budgets: string[];
     pics: string[];
@@ -74,18 +78,40 @@ interface Props {
     blockers: string;
     nextPlan: string;
   }>;
-  can: { approve: boolean; manage: boolean; checkIn: boolean };
+  revisions: Array<{
+    id: string;
+    status: "pending" | "approved" | "rejected";
+    reason: string;
+    requestedBy: string;
+    changes: string[];
+    decidable: boolean;
+  }>;
+  can: {
+    approve: boolean;
+    manage: boolean;
+    checkIn: boolean;
+    plan: boolean;
+    revise: boolean;
+    author: boolean;
+  };
 }
 
 type Dialog =
-  "plan" | "return" | "cancel" | "health" | "checkin" | { milestone: MilestoneItem | null };
+  | "plan"
+  | "revision"
+  | "return"
+  | "cancel"
+  | "health"
+  | "checkin"
+  | { milestone: MilestoneItem | null };
 
-export function ProgramPage({ program, plan, options, checkins, can }: Props) {
+export function ProgramPage({ program, plan, options, checkins, revisions, can }: Props) {
   const router = useRouter();
   const toast = useToastMessage();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const ref = { id: program.id, version: program.version };
   const { status } = program;
+  const underway = status === "approved" || status === "running";
 
   const run = async (action: Promise<ActionResult>, message: string) => {
     const result = await action;
@@ -170,9 +196,48 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
           </p>
         </div>
         <div className="admin-page-header__actions">
-          {options ? (
+          {can.plan ? (
             <Button variant="outline" size="sm" icon="edit" onClick={() => setDialog("plan")}>
-              Edit plan
+              {underway ? "Edit details" : "Edit plan"}
+            </Button>
+          ) : null}
+          {can.plan && status === "draft" ? (
+            <Button
+              size="sm"
+              icon="check"
+              onClick={() => run(submitProgramAction(ref), "Submitted for approval")}
+            >
+              Submit
+            </Button>
+          ) : null}
+          {can.author && status === "proposed" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon="undo"
+              onClick={() => run(withdrawProgramAction(ref), "Withdrawn: it is a draft again")}
+            >
+              Withdraw
+            </Button>
+          ) : null}
+          {can.author ? (
+            <Button
+              variant="danger"
+              size="sm"
+              icon="trash"
+              onClick={() =>
+                void deleteProgramAction(ref).then((result) => {
+                  if (!result.ok) return toast.show(actionMessage(result));
+                  router.push(`/programs?period=${program.periodId}`);
+                })
+              }
+            >
+              Delete
+            </Button>
+          ) : null}
+          {can.revise ? (
+            <Button variant="outline" size="sm" icon="edit" onClick={() => setDialog("revision")}>
+              Request revision
             </Button>
           ) : null}
           {can.approve && status === "proposed" ? (
@@ -184,7 +249,7 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
               Approve
             </Button>
           ) : null}
-          {can.approve && (status === "proposed" || status === "approved") ? (
+          {can.approve && status === "proposed" ? (
             <Button variant="outline" size="sm" icon="undo" onClick={() => setDialog("return")}>
               Return
             </Button>
@@ -233,7 +298,7 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
         <CardBody>
           {program.reviewNote ? <p>Returned: {program.reviewNote}</p> : null}
           {program.cancelReason ? <p>Cancelled: {program.cancelReason}</p> : null}
-          <p>Key result: {program.keyResult ?? "none"}</p>
+          <p>Key results: {program.keyResults.join(" · ") || "none yet"}</p>
           <p>Goal: {program.goal || "—"}</p>
           <p style={{ whiteSpace: "pre-line" }}>{program.description}</p>
           <p>Planned: {program.planned || "—"}</p>
@@ -241,6 +306,57 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
           <p>PICs: {program.pics.join(", ") || "none yet"}</p>
         </CardBody>
       </Card>
+
+      {revisions.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Plan revisions"
+            subtitle="The approved plan changes only through a decided revision."
+          />
+          <CardBody>
+            {revisions.map((r) => (
+              <div key={r.id} className="admin-field">
+                <div className="admin-table__title">
+                  <Badge tone={r.status === "rejected" ? "danger" : "neutral"}>{r.status}</Badge>{" "}
+                  {r.requestedBy}: {r.reason}
+                </div>
+                {r.changes.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+                {r.decidable && can.approve ? (
+                  <div className="admin-table__actions">
+                    <Button
+                      size="sm"
+                      icon="check"
+                      onClick={() =>
+                        run(
+                          decideRevisionAction({ id: r.id, verdict: "approved" }),
+                          "Revision approved",
+                        )
+                      }
+                    >
+                      Approve revision
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon="x"
+                      onClick={() =>
+                        run(
+                          decideRevisionAction({ id: r.id, verdict: "rejected" }),
+                          "Revision rejected",
+                        )
+                      }
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader
@@ -326,6 +442,17 @@ export function ProgramPage({ program, plan, options, checkins, can }: Props) {
           periodId={program.periodId}
           options={options}
           current={plan}
+          mode={underway ? "locked" : "plan"}
+        />
+      ) : null}
+      {options ? (
+        <PlanForm
+          open={dialog === "revision"}
+          onClose={() => setDialog(null)}
+          periodId={program.periodId}
+          options={options}
+          current={plan}
+          mode="revision"
         />
       ) : null}
       <FormModal

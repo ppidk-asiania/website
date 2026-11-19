@@ -1,12 +1,16 @@
+import { randomUUID } from "node:crypto";
 import type { Database, Query, Transaction } from "./store";
 import type { AuditEvent, Snapshot } from "@website/audit";
 import { orgUnitPath, type OrgUnit, type Period } from "@website/domain/organizations";
 import {
+  applyRevision,
   assertCanCheckIn,
+  assertCanRevise,
   assertOkrWritable,
   assertPlanEditable,
   addDaysUtc,
   checkinId,
+  decideRevision,
   DEFAULT_LPJ_DEADLINE_DAYS,
   openLpj,
   periodReportCard,
@@ -22,6 +26,8 @@ import {
   type Objective,
   type ObjectiveInput,
   type PeriodReportCard,
+  type ProgramRevision,
+  type RevisionChanges,
   type Program,
   type ProgramInput,
   type ProgramStatus,
@@ -202,8 +208,10 @@ export const toProgram = (id: string, data: Record<string, unknown>): Program =>
     periodId: data["periodId"] as string,
     orgUnitId: data["orgUnitId"] as string,
     orgUnitPath: data["orgUnitPath"] as string[],
-    objectiveId: data["objectiveId"] as string | null,
-    keyResultId: data["keyResultId"] as string | null,
+    // Older rows hold one `keyResultId`.
+    keyResultIds:
+      (data["keyResultIds"] as string[] | undefined) ??
+      (data["keyResultId"] ? [data["keyResultId"] as string] : []),
     name: data["name"] as string,
     goal: data["goal"] as string,
     description: data["description"] as string,
@@ -233,7 +241,7 @@ export const toProgram = (id: string, data: Record<string, unknown>): Program =>
 export function programSnapshot(p: ProgramFields): Snapshot {
   return {
     orgUnitId: p.orgUnitId,
-    keyResultId: p.keyResultId,
+    keyResultIds: [...p.keyResultIds],
     name: p.name,
     goal: p.goal,
     description: p.description,
@@ -258,7 +266,6 @@ export function programSnapshot(p: ProgramFields): Snapshot {
 const stored = (p: Program) => ({
   periodId: p.periodId,
   orgUnitPath: p.orgUnitPath,
-  objectiveId: p.objectiveId,
   budgets: p.budgets,
   pics: p.pics,
   milestones: p.milestones,
@@ -271,25 +278,64 @@ const stored = (p: Program) => ({
   createdBy: p.createdBy,
 });
 
-async function checkKeyResult(
+async function checkKeyResults(
   db: Database,
   tx: Transaction,
-  input: Pick<ProgramInput, "objectiveId" | "keyResultId">,
+  keyResultIds: readonly string[],
   periodId: string,
 ) {
-  if (input.objectiveId === null) return;
-  const snapshot = await tx.get(db.collection("objectives").doc(safeId.parse(input.objectiveId)));
-  const objective = snapshot.data() as
-    { periodId: string; deletedAt: unknown; keyResults: Array<{ id: string }> } | undefined;
-  if (
-    !objective ||
-    objective.deletedAt ||
-    objective.periodId !== periodId ||
-    !objective.keyResults.some((kr) => kr.id === input.keyResultId)
-  ) {
-    throw new RuleViolationError("Choose a key result of this period.");
+  if (keyResultIds.length === 0) return;
+  const found = await tx.get(
+    db.collection("objectives").where("periodId", "==", periodId).where("deletedAt", "==", null),
+  );
+  const known = new Set(
+    found.docs.flatMap((d) => (d.data()["keyResults"] as Array<{ id: string }>).map((k) => k.id)),
+  );
+  if (!keyResultIds.every((id) => known.has(id))) {
+    throw new RuleViolationError("Choose key results of this period.");
   }
 }
+
+export type RevisionAudit = (
+  before: Snapshot | null,
+  after: Snapshot,
+  program: Program,
+  revision: ProgramRevision,
+) => AuditEvent;
+
+const toRevision = (id: string, data: Record<string, unknown>): ProgramRevision => ({
+  id,
+  programId: data["programId"] as string,
+  periodId: data["periodId"] as string,
+  orgUnitPath: data["orgUnitPath"] as string[],
+  changes: data["changes"] as RevisionChanges,
+  reason: data["reason"] as string,
+  requestedBy: data["requestedBy"] as string,
+  status: data["status"] as ProgramRevision["status"],
+  decidedBy: data["decidedBy"] as string | null,
+  decidedAt: toDate(data["decidedAt"]),
+  createdAt: toDate(data["createdAt"]) as Date,
+  updatedAt: toDate(data["updatedAt"]) as Date,
+});
+
+const revisionSnapshot = (r: ProgramRevision): Snapshot => ({
+  status: r.status,
+  reason: r.reason,
+  changes: Object.keys(r.changes),
+  requestedBy: r.requestedBy,
+  decidedBy: r.decidedBy,
+});
+
+const revisionStored = (r: ProgramRevision) => ({
+  ...revisionSnapshot(r),
+  changes: r.changes,
+  programId: r.programId,
+  periodId: r.periodId,
+  orgUnitPath: r.orgUnitPath,
+  decidedAt: r.decidedAt,
+  createdAt: r.createdAt,
+  updatedAt: r.updatedAt,
+});
 
 const toCheckin = (id: string, data: Record<string, unknown>): Checkin => ({
   id,
@@ -319,6 +365,7 @@ export function createSqlProgramStore(db: Database) {
     fixed: stored,
   });
   const checkins = db.collection("programCheckins");
+  const revisions = db.collection("programRevisions");
   const audit = createSqlAuditWriter(db);
   return {
     get: store.get,
@@ -346,13 +393,13 @@ export function createSqlProgramStore(db: Database) {
         async (_current, tx) => {
           await readWritablePeriod(db, tx, periodId);
           const path = await readUnitPath(db, tx, input.orgUnitId, periodId);
-          await checkKeyResult(db, tx, input, periodId);
+          await checkKeyResults(db, tx, input.keyResultIds, periodId);
           return {
             ...input,
             periodId,
             orgUnitPath: path,
             pics: [...pics],
-            status: "proposed",
+            status: "draft",
             progressPercent: 0,
             milestones: [],
             health: null,
@@ -385,9 +432,9 @@ export function createSqlProgramStore(db: Database) {
         version,
         async (current, tx) => {
           const program = current as Program;
-          assertPlanEditable(program);
+          assertPlanEditable(program, input);
           const path = await readUnitPath(db, tx, input.orgUnitId, program.periodId);
-          await checkKeyResult(db, tx, input, program.periodId);
+          await checkKeyResults(db, tx, input.keyResultIds, program.periodId);
           return { ...program, ...input, orgUnitPath: path, pics: [...pics] };
         },
         auditFor,
@@ -403,6 +450,135 @@ export function createSqlProgramStore(db: Database) {
       now: Date,
     ): Promise<Program> {
       return store.write(id, version, (current) => step(current as Program), auditFor, now);
+    },
+
+    /** One open revision per programme; the request is checked like a new plan. */
+    requestRevision(
+      programId: string,
+      changes: RevisionChanges,
+      reason: string,
+      requestedBy: string,
+      auditFor: RevisionAudit,
+      now: Date,
+    ): Promise<ProgramRevision> {
+      const programRef = store.docs.doc(safeId.parse(programId));
+      return db.runTransaction(async (tx) => {
+        const [programDoc, open] = await Promise.all([
+          tx.get(programRef),
+          tx.get(
+            revisions.where("programId", "==", programRef.id).where("status", "==", "pending"),
+          ),
+        ]);
+        if (!programDoc.exists) throw new RuleViolationError("This item does not exist.");
+        const program = store.read(programRef.id, programDoc.data());
+        if (program.deletedAt) throw new RuleViolationError("This item is in the trash.");
+        assertCanRevise(program);
+        if (!open.empty) {
+          throw new RuleViolationError("This programme already has a revision waiting.");
+        }
+        const revised = applyRevision(program, changes);
+        await readUnitPath(db, tx, revised.orgUnitId, program.periodId);
+        await checkKeyResults(db, tx, revised.keyResultIds, program.periodId);
+        const revision: ProgramRevision = {
+          id: randomUUID(),
+          programId: program.id,
+          periodId: program.periodId,
+          orgUnitPath: program.orgUnitPath,
+          changes,
+          reason,
+          requestedBy,
+          status: "pending",
+          decidedBy: null,
+          decidedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const log = await audit.begin(tx);
+        tx.create(revisions.doc(revision.id), revisionStored(revision));
+        log.append(auditFor(null, revisionSnapshot(revision), program, revision));
+        return revision;
+      });
+    },
+
+    /** Approving rewrites the plan, the revision and the audit entries in one transaction. */
+    decideRevision(
+      id: string,
+      verdict: "approved" | "rejected",
+      uid: string,
+      auditProgram: ProgramAudit,
+      auditRevision: RevisionAudit,
+      now: Date,
+    ): Promise<{ revision: ProgramRevision; program: Program }> {
+      const ref = revisions.doc(safeId.parse(id));
+      return db.runTransaction(async (tx) => {
+        const revisionDoc = await tx.get(ref);
+        if (!revisionDoc.exists) throw new RuleViolationError("This item does not exist.");
+        const pending = toRevision(ref.id, revisionDoc.data() as Record<string, unknown>);
+        const programRef = store.docs.doc(pending.programId);
+        const programDoc = await tx.get(programRef);
+        if (!programDoc.exists) throw new RuleViolationError("This item does not exist.");
+        const current = store.read(programRef.id, programDoc.data());
+        const decided = decideRevision(pending, current, verdict, uid, now);
+        let program = current;
+        if (verdict === "approved") {
+          const path = await readUnitPath(db, tx, decided.program.orgUnitId, current.periodId);
+          await checkKeyResults(db, tx, decided.program.keyResultIds, current.periodId);
+          program = {
+            ...decided.program,
+            orgUnitPath: path,
+            version: current.version + 1,
+            updatedAt: now,
+          };
+        }
+        const log = await audit.begin(tx);
+        if (verdict === "approved") {
+          tx.set(programRef, {
+            ...programSnapshot(program),
+            ...stored(program),
+            version: program.version,
+            createdAt: program.createdAt,
+            updatedAt: now,
+            deletedAt: program.deletedAt,
+          });
+          log.append(
+            auditProgram(programSnapshot(current), programSnapshot(program), current, program),
+          );
+        }
+        tx.set(ref, revisionStored(decided.revision));
+        log.append(
+          auditRevision(
+            revisionSnapshot(pending),
+            revisionSnapshot(decided.revision),
+            program,
+            decided.revision,
+          ),
+        );
+        return { revision: decided.revision, program };
+      });
+    },
+
+    async getRevision(id: string): Promise<ProgramRevision | null> {
+      if (!safeId.safeParse(id).success) return null;
+      const snapshot = await revisions.doc(id).get();
+      return snapshot.exists ? toRevision(id, snapshot.data() as Record<string, unknown>) : null;
+    },
+
+    /** All revisions of a programme, newest first; rejected ones are kept. */
+    async listRevisions(programId: string): Promise<ProgramRevision[]> {
+      const snapshot = await revisions.where("programId", "==", programId).get();
+      return snapshot.docs
+        .map((doc) => toRevision(doc.id, doc.data()))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    },
+
+    async listPendingRevisions(periodId: string): Promise<ProgramRevision[]> {
+      const snapshot = await revisions
+        .where("periodId", "==", periodId)
+        .where("status", "==", "pending")
+        .get();
+      return snapshot.docs
+        .map((doc) => toRevision(doc.id, doc.data()))
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     },
 
     checkIn(

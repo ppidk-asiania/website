@@ -21,10 +21,15 @@ export default async function AdminOkrPage({
   const period =
     periods.find((p) => p.id === asked) ?? periods.find((p) => p.status === "active") ?? periods[0];
   if (!period) return <OkrPage period={null} periods={[]} objectives={[]} units={[]} />;
-  const [objectives, units] = await Promise.all([
+  const [objectives, units, programs] = await Promise.all([
     adminReads.listObjectives(period.id),
     adminReads.listOrgUnits(period.id),
+    adminReads.listPrograms(period.id),
   ]);
+  // Drafts are not proposed yet; only programmes the viewer may read are listed.
+  const readable = programs.filter(
+    (p) => p.status !== "draft" && can(principal, "programs.read", { orgUnitPath: p.orgUnitPath }),
+  );
   const writable = canChangePeriod(period.status);
   const unitName = new Map(units.map((u) => [u.id, u.name]));
   return (
@@ -59,6 +64,9 @@ export default async function AdminOkrPage({
           direction: kr.direction,
           sort: kr.sort,
           percent: keyResultPercent(kr),
+          programs: readable
+            .filter((p) => p.keyResultIds.includes(kr.id))
+            .map((p) => ({ id: p.id, name: p.name })),
         })),
       }))}
       units={

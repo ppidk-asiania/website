@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createSqlTaskShareStore } from "@website/db/sql";
 import type { IncomingLetter } from "@website/domain/documents";
 import type { ActionItem } from "@website/domain/meetings";
-import type { Program } from "@website/domain/programs";
+import type { Program, ProgramRevision } from "@website/domain/programs";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
 import { createTasks, visibleTask } from "../../apps/admin/src/server/tasks";
 import { fakeDb } from "../support/fake-db";
@@ -100,6 +100,30 @@ const programs = [
   },
 ] as unknown as Program[];
 
+const revisions = [
+  {
+    id: "r1",
+    programId: "pr1",
+    status: "pending",
+    requestedBy: "rina",
+    orgUnitPath: ["dirs", "media"],
+  },
+  {
+    id: "r2",
+    programId: "pr1",
+    status: "pending",
+    requestedBy: "sekjen",
+    orgUnitPath: ["dirs", "media"],
+  },
+  {
+    id: "r3",
+    programId: "pr1",
+    status: "rejected",
+    requestedBy: "x",
+    orgUnitPath: ["dirs", "media"],
+  },
+] as unknown as ProgramRevision[];
+
 let fake: ReturnType<typeof fakeDb>;
 let period: { id: string } | null;
 const tasks = () =>
@@ -117,6 +141,7 @@ const tasks = () =>
       ]),
     incoming: () => Promise.resolve(letters),
     programs: () => Promise.resolve(programs),
+    pendingRevisions: () => Promise.resolve(revisions),
     unitsOf: (uid) => Promise.resolve(uid === "rina" ? ["media"] : []),
     unitPath: (id) => Promise.resolve(paths[id] ?? null),
     shares: createSqlTaskShareStore(fake.db as unknown as Db),
@@ -127,6 +152,21 @@ const tasks = () =>
 beforeEach(() => {
   fake = fakeDb();
   period = { id: "p1" };
+});
+
+describe("My Tasks: plan revisions to decide", () => {
+  it("approvers get the pending revisions they did not ask for, in their scope", async () => {
+    const sekjen = staff("sekjen", ["programs.approve"]);
+    const revisionIds = async (uid: string, principal?: Principal) =>
+      (await tasks().mine(uid, principal)).filter((t) => t.kind === "revision").map((t) => t.id);
+    expect(await revisionIds("sekjen", sekjen)).toEqual(["revision:r1"]);
+    const unit = staff("sekjen", ["programs.approve"], { type: "orgUnit", orgUnitId: "other" });
+    expect(await revisionIds("sekjen", unit)).toEqual([]);
+    const task = (await tasks().mine("sekjen", sekjen)).find((t) => t.kind === "revision");
+    expect(task).toMatchObject({ kind: "revision", href: "/programs/pr1", page: "programs" });
+    expect(await revisionIds("rina")).toEqual([]);
+    expect(await revisionIds("rina", staff("rina", ["programs.read"]))).toEqual([]);
+  });
 });
 
 describe("My Tasks (G1)", () => {

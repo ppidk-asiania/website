@@ -1,12 +1,13 @@
 import type { IncomingLetter } from "../documents";
 import type { ActionItem } from "../meetings";
-import type { Program } from "../programs";
+import type { Program, ProgramRevision } from "../programs";
 
-export type TaskKind = "action" | "disposition" | "milestone";
+export type TaskKind = "action" | "disposition" | "milestone" | "revision";
 export const TASK_KIND_LABELS: Record<TaskKind, string> = {
   action: "Meeting follow-up",
   disposition: "Letter disposition",
   milestone: "Programme milestone",
+  revision: "Plan revision to decide",
 };
 
 export interface Task {
@@ -85,6 +86,35 @@ export function milestoneTasks(programs: readonly Program[], today: string): Tas
         page: "programs" as const,
       })),
     );
+}
+
+/** Pending plan revisions of programmes, for the approvers who did not ask for them. */
+export function revisionTasks(
+  revisions: readonly ProgramRevision[],
+  programs: readonly Program[],
+  uid: string,
+): Task[] {
+  return revisions
+    .filter((r) => r.status === "pending" && r.requestedBy !== uid)
+    .flatMap((r) => {
+      const program = programs.find((p) => p.id === r.programId);
+      return program
+        ? [
+            {
+              id: `revision:${r.id}`,
+              kind: "revision" as const,
+              title: `Decide the revision of ${program.name}`,
+              source: program.name,
+              due: null,
+              done: false,
+              overdue: false,
+              href: `/programs/${program.id}`,
+              orgUnitPath: r.orgUnitPath,
+              page: "programs" as const,
+            },
+          ]
+        : [];
+    });
 }
 
 export function sortTasks(tasks: readonly Task[]): Task[] {

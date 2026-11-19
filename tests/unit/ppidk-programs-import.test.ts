@@ -411,8 +411,7 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
     expect(webinar).toMatchObject({
       status: "finished",
       orgUnitPath: ["ppidk-unit-40", "ppidk-unit-41"],
-      objectiveId: "ppidk-objective-10",
-      keyResultId: "ppidk-keyresult-20",
+      keyResultIds: ["ppidk-keyresult-20"],
       pics: ["firebase-ana", "ppidk-2"],
       budgets: [{ amountMinor: 50000, currency: "JPY" }],
       progressPercent: 75,
@@ -442,8 +441,7 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
     expect(await s.programs.get("ppidk-program-32")).toMatchObject({
       status: "proposed",
       budgets: [],
-      objectiveId: null,
-      keyResultId: null,
+      keyResultIds: [],
       reviewNote: "Isi",
       health: null,
     });

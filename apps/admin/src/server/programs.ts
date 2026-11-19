@@ -1,9 +1,10 @@
 import "server-only";
 import { z } from "zod";
 import type { AuditAction } from "@website/audit";
-import type { LpjAudit, ProgramAudit, SqlProgramStore } from "@website/db/sql";
+import type { LpjAudit, ProgramAudit, RevisionAudit, SqlProgramStore } from "@website/db/sql";
 import {
   approveProgram,
+  assertDeletable,
   cancelProgram,
   CheckinInputSchema,
   completeMilestone,
@@ -14,10 +15,14 @@ import {
   ProgramInputSchema,
   removeMilestone,
   returnProgram,
+  RevisionChangesSchema,
+  RevisionReasonSchema,
   setHealth,
   startProgram,
+  submitProgram,
   upsertMilestone,
   weekStartUtc,
+  withdrawProgram,
   type LpjReport,
   type Program,
 } from "@website/domain/programs";
@@ -29,7 +34,15 @@ import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 export interface ProgramDeps {
   readonly programs: Pick<
     SqlProgramStore,
-    "get" | "create" | "update" | "transition" | "checkIn" | "finish"
+    | "get"
+    | "create"
+    | "update"
+    | "transition"
+    | "checkIn"
+    | "finish"
+    | "requestRevision"
+    | "decideRevision"
+    | "getRevision"
   >;
   readonly unitPath: (orgUnitId: string) => Promise<readonly string[] | null>;
   readonly findUserId: (email: string) => Promise<string | null>;
@@ -46,6 +59,18 @@ export function canManageProgram(
     principal.active &&
     (program.pics.includes(principal.userId) ||
       can(principal, "programs.edit", { orgUnitPath: program.orgUnitPath }))
+  );
+}
+
+/** Page gate: the permission in the programme's scope, or being listed as a PIC. */
+export function canOpenProgram(
+  principal: Principal,
+  program: Pick<Program, "pics" | "orgUnitPath">,
+): boolean {
+  return (
+    principal.active &&
+    (program.pics.includes(principal.userId) ||
+      can(principal, "programs.read", { orgUnitPath: program.orgUnitPath }))
   );
 }
 
@@ -69,6 +94,10 @@ const SaveMilestone = MilestoneInputSchema.extend({
 const MilestoneRef = Ref.extend({ milestoneId: safeId }).strict();
 const CompleteMilestone = MilestoneRef.extend({ done: z.boolean() }).strict();
 const SetHealth = HealthInputSchema.extend({ id: safeId, version }).strict();
+const RequestRevision = z
+  .object({ id: safeId, changes: RevisionChangesSchema, reason: RevisionReasonSchema })
+  .strict();
+const DecideRevision = z.object({ id: safeId, verdict: z.enum(["approved", "rejected"]) }).strict();
 const CheckIn = CheckinInputSchema.extend({ id: safeId }).strict();
 
 const programAudit =
@@ -84,6 +113,22 @@ const programAudit =
       after,
       versionBefore: current?.version ?? null,
       versionAfter: next.version,
+      revertible: false,
+    });
+
+const revisionAudit =
+  (audit: AuditBuilder, action: AuditAction): RevisionAudit =>
+  (before, after, program, revision) =>
+    audit({
+      module: "programs",
+      action,
+      resourceType: "programRevision",
+      resourceId: revision.id,
+      title: program.name,
+      before,
+      after,
+      versionBefore: null,
+      versionAfter: null,
       revertible: false,
     });
 
@@ -162,9 +207,10 @@ export function createProgramActions(deps: ProgramDeps) {
   });
 
   const step = <S extends z.ZodType<{ id: string; version: number }>>(
-    permission: "programs.approve" | "programs.read",
+    permission: "programs.approve" | "programs.edit" | "programs.read",
     input: S,
     decide: (program: Program, input: z.infer<S>, principal: Principal, now: Date) => Program,
+    options: { action?: AuditAction; author?: true } = {},
   ) =>
     createGuardedAction({
       permission,
@@ -176,14 +222,31 @@ export function createProgramActions(deps: ProgramDeps) {
         const saved = await deps.programs.transition(
           parsed.id,
           parsed.version,
-          permission === "programs.read" ? managed(principal, apply) : apply,
-          programAudit(audit, "UPDATE"),
+          permission === "programs.read" && !options.author ? managed(principal, apply) : apply,
+          programAudit(audit, options.action ?? "UPDATE"),
           now,
         );
         return { version: saved.version, status: saved.status, progress: saved.progressPercent };
       },
     });
 
+  const submit = step("programs.edit", Ref, (p) => submitProgram(p));
+  // The author acts on their own proposal, whether or not they are a PIC or unit editor.
+  const withdraw = step(
+    "programs.read",
+    Ref,
+    (p, _i, principal) => withdrawProgram(p, principal.userId),
+    { author: true },
+  );
+  const remove = step(
+    "programs.read",
+    Ref,
+    (p, _i, principal, now) => {
+      assertDeletable(p, principal.userId);
+      return { ...p, deletedAt: now };
+    },
+    { action: "DELETE", author: true },
+  );
   const approve = step("programs.approve", Ref, (p, _i, principal, now) =>
     approveProgram(p, principal.userId, now),
   );
@@ -228,6 +291,52 @@ export function createProgramActions(deps: ProgramDeps) {
     completeMilestone(p, i.milestoneId, i.done, principal.userId, now),
   );
 
+  const requestRevision = createGuardedAction({
+    permission: "programs.read",
+    input: RequestRevision,
+    resource: scopeOf,
+    handler: async ({ id, changes, reason }, principal, audit) => {
+      const program = await deps.programs.get(id);
+      if (!program || !canManageProgram(principal, program)) {
+        throw new RuleViolationError("Only the programme's PICs or its unit can do this.");
+      }
+      if (
+        changes.orgUnitId !== undefined &&
+        !can(principal, "programs.edit", await unitScope(changes.orgUnitId))
+      ) {
+        throw new RuleViolationError("You can only plan programmes of your own unit.");
+      }
+      const saved = await deps.programs.requestRevision(
+        id,
+        changes,
+        reason,
+        principal.userId,
+        revisionAudit(audit, "CREATE"),
+        deps.now(),
+      );
+      return { id: saved.id };
+    },
+  });
+
+  const decideRevision = createGuardedAction({
+    permission: "programs.approve",
+    input: DecideRevision,
+    resource: async ({ id }) => ({
+      orgUnitPath: (await deps.programs.getRevision(id))?.orgUnitPath ?? [],
+    }),
+    handler: async ({ id, verdict }, principal, audit) => {
+      const { revision } = await deps.programs.decideRevision(
+        id,
+        verdict,
+        principal.userId,
+        programAudit(audit, "UPDATE"),
+        revisionAudit(audit, "UPDATE"),
+        deps.now(),
+      );
+      return { status: revision.status };
+    },
+  });
+
   const checkIn = createGuardedAction({
     permission: "programs.read",
     input: CheckIn,
@@ -264,6 +373,11 @@ export function createProgramActions(deps: ProgramDeps) {
 
   return {
     save,
+    submit,
+    withdraw,
+    remove,
+    requestRevision,
+    decideRevision,
     approve,
     returnToProposal,
     cancel,

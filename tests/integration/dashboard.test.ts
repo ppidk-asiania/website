@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FinanceRequest } from "@website/domain/finance";
-import type { LpjReport } from "@website/domain/programs";
+import type { LpjReport, ProgramRevision } from "@website/domain/programs";
 import type { Task } from "@website/domain/tasks";
 import type { ZoomRequest } from "@website/domain/zoom";
 import { normalizePermissions, type Principal, type Scope } from "@website/permissions";
@@ -29,6 +29,7 @@ describe("admin dashboard: only what needs the viewer", () => {
     finance: () => Promise.resolve(finance),
     lpj: () => Promise.resolve(lpj),
     zoom: () => Promise.resolve(zoom),
+    revisions: () => Promise.resolve(revisions),
     myTasks: () => Promise.resolve(tasks),
     now: () => now,
   });
@@ -66,6 +67,7 @@ describe("admin dashboard: only what needs the viewer", () => {
       "lpj.review_treasurer",
       "lpj.approve",
       "zoom.approve",
+      "programs.approve",
     ];
     const counts = async (principal: Principal) =>
       (await dashboard(principal)).queues.map((q) => [q.label, q.count]);
@@ -76,6 +78,7 @@ describe("admin dashboard: only what needs the viewer", () => {
       ["LPJs to check (secretariat)", 1],
       ["LPJs to check (treasurer)", 1],
       ["LPJs to approve", 1],
+      ["Programme plan revisions to decide", 1],
       ["Zoom bookings to approve", 1],
     ]);
     expect(await counts(staff(desks, { type: "orgUnit", orgUnitId: "other" }))).toEqual([
@@ -90,6 +93,10 @@ describe("admin dashboard: only what needs the viewer", () => {
 });
 
 const now = new Date("2026-11-05T00:00:00Z");
+const revisions = [
+  { id: "r1", requestedBy: "x", orgUnitPath: ["dirs", "media"] },
+  { id: "r2", requestedBy: "u", orgUnitPath: ["dirs", "media"] },
+] as unknown as ProgramRevision[];
 const media = ["dirs", "media"];
 const other = ["other"];
 const finance = [
