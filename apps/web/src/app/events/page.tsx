@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { EventCards } from "@/components/event-cards";
 import { FieldIcon } from "@/components/site-field-icon";
 import { SitePager } from "@/components/site-pager";
+import { CardsSkeleton } from "@/components/site-skeleton";
 import { SubmitOnChangeSelect } from "@/components/submit-on-change-select";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { Localized } from "@/i18n/localized";
@@ -31,7 +32,7 @@ export default function EventsPage({ searchParams }: PageProps<"/events">) {
             </>
           )}
         />
-        <Suspense fallback={null}>
+        <Suspense fallback={<CardsSkeleton bar />}>
           <EventList searchParams={searchParams} />
         </Suspense>
       </div>

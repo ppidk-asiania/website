@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Highlights } from "@/components/highlights";
 import { NewsletterField } from "@/components/newsletter-field";
 import { PpiSlider } from "@/components/ppi-slider";
+import { HomeCardsSkeleton, LinesSkeleton } from "@/components/site-skeleton";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { Localized } from "@/i18n/localized";
 import { publicEvents } from "@/server/events";
@@ -142,13 +143,13 @@ export default function HomePage() {
           </div>
         )}
       />
-      <Suspense fallback={null}>
+      <Suspense fallback={<LinesSkeleton lines={3} />}>
         <Highlights />
       </Suspense>
-      <Suspense fallback={null}>
+      <Suspense fallback={<HomeCardsSkeleton />}>
         <LatestNews />
       </Suspense>
-      <Suspense fallback={null}>
+      <Suspense fallback={<HomeCardsSkeleton />}>
         <LatestEvents />
       </Suspense>
       <section className="home-blank" aria-hidden="true" />

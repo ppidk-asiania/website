@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
+import { LinesSkeleton } from "@/components/site-skeleton";
 import type { PublicChapter } from "@website/domain/organizations";
 import { DICTIONARIES, LANG_COOKIE, languageFrom, type Language } from "@/i18n/dictionaries";
 import { Localized } from "@/i18n/localized";
@@ -22,7 +23,7 @@ export default function MapPage() {
             </>
           )}
         />
-        <Suspense fallback={null}>
+        <Suspense fallback={<LinesSkeleton lines={8} />}>
           <LocalizedMapPage />
         </Suspense>
       </div>
