@@ -46,39 +46,54 @@ function api(answers: Array<{ status: number; body?: unknown } | "network">) {
 }
 
 describe("goppi.id adapter (primary)", () => {
-  it("creates with long_url, slug, title and archives by id", async () => {
+  it("checks the slug, creates with long_url, slug, title, archives and restores by id, reads clicks", async () => {
     const http = api([
+      { status: 200, body: { data: { available: false } } },
+      { status: 200, body: { data: { available: true } } },
       {
         status: 201,
         body: { data: { id: 42, slug: "kongres", short_url: "https://goppi.id/kongres" } },
       },
       { status: 200, body: {} },
+      { status: 200, body: {} },
+      { status: 200, body: { data: { total_clicks: 17, timeline: [{ clicks: 17 }] } } },
+      { status: 200, body: { data: { timeline: [{ clicks: 2 }, { clicks: 3 }] } } },
+      { status: 200, body: { data: {} } },
     ]);
     const goppi = goppiShortener(
       { baseUrl: "https://goppi.id/api/", apiKey: "g-key" },
       http.fetchImpl,
     );
-    expect(await goppi.available("kongres")).toBeNull();
+    expect(await goppi.available("a b&c")).toBe(false);
+    expect(await goppi.available("kongres")).toBe(true);
     expect(
       await goppi.create({ longUrl: "https://example.org/a", slug: "kongres", title: "Kongres" }),
     ).toEqual({ ref: "42", slug: "kongres", shortUrl: "https://goppi.id/kongres" });
     await goppi.archive("42");
-    expect(http.calls).toEqual([
-      {
-        url: "https://goppi.id/api/links",
-        method: "POST",
-        body: { long_url: "https://example.org/a", title: "Kongres", slug: "kongres" },
-        auth: "Bearer g-key",
-      },
-      {
-        url: "https://goppi.id/api/links/42/archive",
-        method: "PUT",
-        body: null,
-        auth: "Bearer g-key",
-      },
-    ]);
-    await expect(goppi.restore("42")).rejects.toMatchObject({ reason: "not_supported" });
+    await goppi.restore("42");
+    expect(await goppi.clicks("42")).toBe(17);
+    expect(await goppi.clicks("42")).toBe(5);
     expect(await goppi.clicks("42")).toBeNull();
+    const call = (url: string, method: string, body: unknown = null) => ({
+      url: `https://goppi.id/api${url}`,
+      method,
+      body,
+      auth: "Bearer g-key",
+    });
+    expect(http.calls).toEqual([
+      call("/links/check?slug=a%20b%26c", "GET"),
+      call("/links/check?slug=kongres", "GET"),
+      call("/links", "POST", {
+        long_url: "https://example.org/a",
+        title: "Kongres",
+        slug: "kongres",
+      }),
+      call("/links/42/archive", "PUT"),
+      call("/links/42/unarchive", "PUT"),
+      call("/links/42/analytics", "GET"),
+      call("/links/42/analytics", "GET"),
+      call("/links/42/analytics", "GET"),
+    ]);
   });
 
   it("maps answers: 409 taken, 4xx invalid, 5xx / network / no config unavailable", async () => {

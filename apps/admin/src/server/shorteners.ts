@@ -51,7 +51,10 @@ export function goppiShortener(
     config ? call(fetchImpl, `${base}${path}`, config.apiKey, method, body) : unconfigured();
   return {
     provider: "goppi",
-    available: () => Promise.resolve(null),
+    async available(slug) {
+      const data = await api(`/links/check?slug=${encodeURIComponent(slug)}`, "GET");
+      return data["available"] === true;
+    },
     async create(input): Promise<CreatedLink> {
       const data = await api("/links", "POST", {
         long_url: input.longUrl,
@@ -67,8 +70,22 @@ export function goppiShortener(
     async archive(ref) {
       await api(`/links/${encodeURIComponent(ref)}/archive`, "PUT");
     },
-    restore: () => Promise.reject(new ShortenerError("not_supported")),
-    clicks: () => Promise.resolve(null),
+    async restore(ref) {
+      await api(`/links/${encodeURIComponent(ref)}/unarchive`, "PUT");
+    },
+    async clicks(ref) {
+      const data = await api(`/links/${encodeURIComponent(ref)}/analytics`, "GET");
+      const total = data["total_clicks"] ?? data["clicks"];
+      if (typeof total === "number") return total;
+      // shortcut: the answer's exact shape is unconfirmed; a click timeline is summed, anything else is "not reported".
+      const timeline = data["timeline"];
+      return Array.isArray(timeline)
+        ? timeline.reduce((sum: number, day: unknown) => {
+            const n = (day as Json | null)?.["clicks"];
+            return sum + (typeof n === "number" ? n : 0);
+          }, 0)
+        : null;
+    },
   };
 }
 
