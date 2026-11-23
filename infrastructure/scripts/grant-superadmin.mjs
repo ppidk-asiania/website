@@ -1,78 +1,113 @@
 #!/usr/bin/env node
-import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 
 const { values } = parseArgs({
-  options: { email: { type: "string" }, apply: { type: "boolean", default: false } },
+  options: {
+    email: { type: "string", multiple: true },
+    apply: { type: "boolean", default: false },
+  },
 });
-if (!values.email) {
-  console.error("Usage: grant-superadmin.mjs --email <address> [--apply]");
+if (!values.email?.length) {
+  console.error("Usage: grant-superadmin.mjs --email <address> [--email <address>] [--apply]");
   process.exit(2);
 }
-const missing = [
-  "DATABASE_URL",
-  "FIREBASE_PROJECT_ID",
-  "FIREBASE_CLIENT_EMAIL",
-  "FIREBASE_PRIVATE_KEY",
-].filter((name) => !process.env[name]);
-if (missing.length > 0) {
-  console.error(`Missing environment variables: ${missing.join(", ")}`);
+if (!process.env.DATABASE_URL) {
+  console.error("Missing environment variables: DATABASE_URL");
   process.exit(2);
 }
 
-const require = createRequire(new URL("../../packages/auth/package.json", import.meta.url));
-const { cert, initializeApp } = require("firebase-admin/app");
-const { getAuth } = require("firebase-admin/auth");
-
-const app = initializeApp({
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  credential: cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  }),
-});
-const account = await getAuth(app).getUserByEmail(values.email);
+// The store's own imports leave out ".ts"; this lets plain `node` load them.
+await import("./ts-register.mjs");
 const { getDatabase } = await import("../../packages/db/src/sql/store.ts");
+const { createSqlAuditWriter } = await import("../../packages/db/src/sql/audit.ts");
 const db = getDatabase({ url: process.env.DATABASE_URL });
-const ref = db.collection("users").doc(account.uid);
+const users = db.collection("users");
+const audit = createSqlAuditWriter(db);
 
-const result = await db.runTransaction(async (tx) => {
-  const snapshot = await tx.get(ref);
-  if (!snapshot.exists) return "no-record";
-  const assignments = snapshot.get("roleAssignments") ?? [];
-  if (assignments.some((a) => a.roleId === "superadmin" && a.scope?.type === "global")) {
-    return "already";
-  }
-  if (values.apply) {
-    const roleAssignments = [
-      ...assignments,
-      {
-        roleId: "superadmin",
-        scope: { type: "global" },
-        periodId: null,
-        source: "manual",
-        revokedAt: null,
-        appointmentId: null,
-      },
-    ];
-    tx.update(ref, {
-      roleAssignments,
-      roleIds: [...new Set(roleAssignments.map((a) => a.roleId))],
-      version: (snapshot.get("version") ?? 0) + 1,
-      updatedAt: new Date(),
-    });
-  }
-  return values.apply ? "granted" : "would-grant";
+// Same rule as isActiveSuperadmin in packages/db/src/users.ts.
+const holdsSuperadmin = (assignments) =>
+  assignments.some(
+    (a) => a.roleId === "superadmin" && a.scope?.type === "global" && !a.revokedAt && !a.periodId,
+  );
+const snapshot = (status, assignments) => ({
+  status,
+  roleAssignments: assignments.map((a) => ({
+    roleId: a.roleId,
+    scope: a.scope,
+    periodId: a.periodId ?? null,
+    source: a.source ?? "manual",
+    revokedAt: a.revokedAt?.toDate().toISOString() ?? null,
+    appointmentId: a.appointmentId ?? null,
+  })),
 });
+
+async function grant(email) {
+  const found = await users.where("email", "==", email.trim().toLowerCase()).limit(1).get();
+  const doc = found.docs[0];
+  if (!doc) return { uid: "-", result: "no-record" };
+  const ref = users.doc(doc.id);
+  const result = await db.runTransaction(async (tx) => {
+    const current = (await tx.get(ref)).data();
+    const assignments = current.roleAssignments ?? [];
+    if (current.status !== "active") return "inactive";
+    if (holdsSuperadmin(assignments)) return "already";
+    if (!values.apply) return "would-grant";
+    const added = {
+      roleId: "superadmin",
+      scope: { type: "global" },
+      periodId: null,
+      source: "manual",
+      revokedAt: null,
+      appointmentId: null,
+    };
+    const next = [...assignments, added];
+    const version = current.version ?? 0;
+    const now = new Date();
+    const log = await audit.begin(tx);
+    tx.update(ref, {
+      roleAssignments: next,
+      roleIds: [...new Set(next.map((a) => a.roleId))],
+      version: version + 1,
+    });
+    log.append({
+      id: randomUUID(),
+      occurredAt: now,
+      actor: { type: "system", id: "grant-superadmin" },
+      action: "UPDATE",
+      module: "users",
+      title: current.email ?? doc.id,
+      resourceType: "user",
+      resourceId: doc.id,
+      operationId: randomUUID(),
+      before: snapshot(current.status, assignments),
+      after: snapshot(current.status, next),
+      versionBefore: version,
+      versionAfter: version + 1,
+      revertible: false,
+      revertOf: null,
+      request: { requestId: randomUUID() },
+      prevHash: null,
+      hash: null,
+    });
+    return "granted";
+  });
+  return { uid: doc.id, result };
+}
 
 const messages = {
-  "no-record": "No users/{uid} record yet: sign in on the web app once, then run this again.",
+  "no-record": "No account with this e-mail yet: sign in on the web app once, then run this again.",
+  inactive: "The account is inactive: reactivate it first. Nothing changed.",
   already: "Already a superadmin. Nothing changed.",
   "would-grant": "Dry run: would add superadmin (global). Re-run with --apply.",
-  granted: "Granted superadmin (global). Sign out and in again to use admin.",
+  granted:
+    "Granted superadmin (global), recorded in the audit log. Sign out and in again to use admin.",
 };
-console.log(`${values.email} (${account.uid}): ${messages[result]}`);
-if (result === "granted") console.log("Record this change in the team's change log.");
+let failed = false;
+for (const email of values.email) {
+  const { uid, result } = await grant(email);
+  console.log(`${email.trim().toLowerCase()} (${uid}): ${messages[result]}`);
+  if (result === "no-record" || result === "inactive") failed = true;
+}
 await db.close();
-process.exit(result === "no-record" ? 1 : 0);
+process.exit(failed ? 1 : 0);

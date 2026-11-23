@@ -194,25 +194,18 @@ describe("roles repository", () => {
 
 describe("grant-superadmin bootstrap script", () => {
   const script = "infrastructure/scripts/grant-superadmin.mjs";
-  const noFirebase = {
-    DATABASE_URL: "",
-    FIREBASE_PROJECT_ID: "",
-    FIREBASE_CLIENT_EMAIL: "",
-    FIREBASE_PRIVATE_KEY: "",
-  };
   const run = (args: string[]) =>
     spawnSync(process.execPath, [script, ...args], {
       encoding: "utf8",
-      env: { ...process.env, ...noFirebase },
+      env: { ...process.env, DATABASE_URL: "" },
     });
 
-  it("refuses to run without an e-mail or without the admin service account", () => {
+  it("refuses to run without an e-mail or without the database", () => {
     const noEmail = run([]);
     expect(noEmail.status).toBe(2);
     expect(noEmail.stderr).toContain("Usage");
-    const noCredentials = run(["--email", "a@example.org"]);
-    expect(noCredentials.status).toBe(2);
-    expect(noCredentials.stderr).toContain("DATABASE_URL");
-    expect(noCredentials.stderr).toContain("FIREBASE_PRIVATE_KEY");
+    const noDatabase = run(["--email", "a@example.org"]);
+    expect(noDatabase.status).toBe(2);
+    expect(noDatabase.stderr).toContain("DATABASE_URL");
   });
 });

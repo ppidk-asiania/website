@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDatabase, type Database } from "@website/db/sql";
 
@@ -166,5 +167,90 @@ describe.skipIf(!url)("MySQL document store", () => {
     return expect(db.collection("users").doc("bad").set({ n: Number.NaN })).rejects.toThrow(
       "finite",
     );
+  });
+});
+
+// Same file as the store test: both use the users table, and files run in parallel.
+describe.skipIf(!url)("grant-superadmin against MySQL", () => {
+  let db: Database;
+  const grant = (...args: string[]) =>
+    spawnSync(process.execPath, ["infrastructure/scripts/grant-superadmin.mjs", ...args], {
+      encoding: "utf8",
+      env: { ...process.env, DATABASE_URL: url },
+    });
+  const account = (uid: string, email: string, extra: Record<string, unknown> = {}) =>
+    db
+      .collection("users")
+      .doc(uid)
+      .set({
+        email,
+        status: "active",
+        roleAssignments: [{ roleId: "visitor", scope: { type: "global" }, source: "manual" }],
+        roleIds: ["visitor"],
+        version: 3,
+        ...extra,
+      });
+  const stored = async (uid: string) =>
+    (await db.collection("users").doc(uid).get()).data() as Record<string, unknown>;
+
+  beforeAll(async () => {
+    db = getDatabase({ url: url as string, connectionLimit: 2 });
+    const uids = ["gs-a", "gs-b", "gs-c", "gs-d"];
+    const batch = db.batch();
+    for (const uid of uids) batch.delete(db.collection("users").doc(uid));
+    const logs = await db.collection("auditLogs").where("resourceId", "in", uids).get();
+    for (const doc of logs.docs) batch.delete(doc.ref);
+    await batch.commit();
+  });
+  afterAll(() => db.close());
+
+  it("finds accounts by e-mail in the database, dry-runs, then grants once with an audit entry", async () => {
+    await account("gs-a", "a@example.org");
+    await account("gs-b", "b@example.org");
+    const dry = grant("--email", "A@Example.org", "--email", "b@example.org");
+    expect(dry.stderr).toBe("");
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain("a@example.org (gs-a): Dry run");
+    expect(dry.stdout).toContain("b@example.org (gs-b): Dry run");
+    expect((await stored("gs-a"))["roleIds"]).toEqual(["visitor"]);
+
+    const applied = grant("--email", "a@example.org", "--email", "b@example.org", "--apply");
+    expect(applied.status).toBe(0);
+    expect(applied.stdout).toContain("a@example.org (gs-a): Granted");
+    const after = await stored("gs-a");
+    expect(after["roleIds"]).toEqual(["visitor", "superadmin"]);
+    expect(after["version"]).toBe(4);
+    const audit = (await db.collection("auditLogs").where("resourceId", "==", "gs-a").get()).docs;
+    expect(audit.map((d) => d.data())).toEqual([
+      expect.objectContaining({
+        actor: { type: "system", id: "grant-superadmin" },
+        module: "users",
+        action: "UPDATE",
+        versionBefore: 3,
+        versionAfter: 4,
+      }),
+    ]);
+
+    const again = grant("--email", "a@example.org", "--apply");
+    expect(again.stdout).toContain("Already a superadmin");
+    expect((await stored("gs-a"))["version"]).toBe(4);
+  });
+
+  it("re-grants a revoked superadmin, and stops on an unknown or inactive account", async () => {
+    const revoked = {
+      roleId: "superadmin",
+      scope: { type: "global" },
+      source: "manual",
+      revokedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+    await account("gs-c", "c@example.org", { roleAssignments: [revoked], roleIds: ["superadmin"] });
+    expect(grant("--email", "c@example.org", "--apply").stdout).toContain("Granted");
+    await account("gs-d", "d@example.org", { status: "inactive" });
+    const inactive = grant("--email", "d@example.org", "--apply");
+    expect(inactive.status).toBe(1);
+    expect(inactive.stdout).toContain("inactive");
+    const unknown = grant("--email", "nobody@example.org");
+    expect(unknown.status).toBe(1);
+    expect(unknown.stdout).toContain("sign in on the web app once");
   });
 });
