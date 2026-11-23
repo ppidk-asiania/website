@@ -499,11 +499,14 @@ describe("who may answer (10.3)", () => {
     expect(
       responseTable(
         [v],
-        [{ ...response, name: "Ari", email: "a@b.co", profile: { campus: "UGM" } }],
+        [{ ...response, name: "Ari", email: "a@b.co", profile: { campus: "UGM" } }, response],
       ),
     ).toEqual({
       header: ["Submitted at (UTC)", "Version", "Name", "E-mail", "Profile: campus", "Name"],
-      rows: [["2026-10-01T01:00:00.000Z", "1", "Ari", "a@b.co", "UGM", "x"]],
+      rows: [
+        ["2026-10-01T01:00:00.000Z", "1", "Ari", "a@b.co", "UGM", "x"],
+        ["2026-10-01T01:00:00.000Z", "1", "", "", "", "x"],
+      ],
     });
   });
 });

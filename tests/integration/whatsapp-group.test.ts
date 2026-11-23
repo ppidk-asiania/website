@@ -302,7 +302,7 @@ describe("recruitment.waGroup", () => {
     const sent: Array<{ to: string | null; text: string }> = [];
     const actions = createRecruitmentActions({
       recruitments: createSqlRecruitmentStore(fake.db as unknown as Db),
-      send: (message) => Promise.resolve(sent.push(message) && ("logged" as const)),
+      send: (message) => (sent.push(message), Promise.resolve("logged" as const)),
       now: () => now,
     });
     const as = [() => Promise.resolve(committee), context] as const;
@@ -319,6 +319,9 @@ describe("recruitment.waGroup", () => {
     };
     const created = await actions.save(...as)({ ...form, version: null });
     if (!created.ok) throw new Error("expected saved");
+    expect(await actions.testWaGroup(...as)({ id: created.data.id })).toMatchObject({
+      issues: ["Save the WhatsApp group first."],
+    });
     const set = await actions.saveWaGroup(...as)({
       id: created.data.id,
       version: created.data.version,
@@ -373,7 +376,7 @@ function noticeSetup(over: { group?: Recruitment["waGroup"]; heads?: string[] } 
     key: string;
     to: string | null;
     text: string;
-    mentions?: readonly string[];
+    mentions?: readonly string[] | undefined;
   }> = [];
   const asked: string[] = [];
   const notice = createGroupNotice({
@@ -381,7 +384,7 @@ function noticeSetup(over: { group?: Recruitment["waGroup"]; heads?: string[] } 
       Promise.resolve({
         ...recruitment,
         ...(over.group !== undefined ? { waGroup: over.group } : {}),
-      } as Recruitment),
+      }),
     people: {
       applicant: () => Promise.resolve({ name: "Siti Rahma", campus: "Kyoto University" }),
       headNumbers: (_period, unit) => {
@@ -389,11 +392,10 @@ function noticeSetup(over: { group?: Recruitment["waGroup"]; heads?: string[] } 
         return Promise.resolve(unit === "finance" ? (over.heads ?? ["+6281111111111"]) : []);
       },
     },
-    send: (message, key) =>
-      Promise.resolve(
-        sent.push({ key, to: message.to, text: message.text, mentions: message.mentions }) &&
-          ("sent" as const),
-      ),
+    send: (message, key) => (
+      sent.push({ key, to: message.to, text: message.text, mentions: message.mentions }),
+      Promise.resolve("sent" as const)
+    ),
     webUrl: WEB,
   });
   return { notice, sent, asked };
@@ -451,7 +453,7 @@ describe("group notices", () => {
   it("is sent after the commit and never undoes it", async () => {
     const order: string[] = [];
     const committed = application();
-    const applying = (notifyGroup: () => Promise<void>) =>
+    const applying = (notifyGroup: () => Promise<void>, notifyBooked?: () => Promise<void>) =>
       createApplying({
         store: {
           submit: () => {
@@ -459,7 +461,10 @@ describe("group notices", () => {
             return Promise.resolve({ ok: true, application: committed });
           },
           cancelInterview: () => Promise.resolve({ ok: true, application: committed }),
+          bookInterview: () => Promise.resolve({ ok: true, application: committed }),
+          slots: () => Promise.resolve([{ id: "s1" }]),
         } as never,
+        ...(notifyBooked && { notifyBooked }),
         profileComplete: () => Promise.resolve(true),
         hasProof: () => Promise.resolve(true),
         storage: { save: () => Promise.resolve({ url: null }) },
@@ -486,6 +491,26 @@ describe("group notices", () => {
       { recruitmentId: "r1", choiceId: "finance" },
     );
     expect(cancelled).toMatchObject({ ok: true });
+    const book = (slotId: string, notifyBooked?: () => Promise<void>) =>
+      applying(() => {
+        order.push(`group:${slotId}`);
+        return Promise.resolve();
+      }, notifyBooked).bookInterview(
+        { uid: "siti" },
+        { recruitmentId: "r1", choiceId: "finance", slotId },
+      );
+    expect(await book("s1")).toMatchObject({ ok: true });
+    expect(await book("gone")).toMatchObject({ ok: true });
+    expect(await book("s1", () => Promise.reject(new Error("mail down")))).toMatchObject({
+      ok: true,
+    });
+    expect(order.filter((o) => o.startsWith("group:"))).toEqual(["group:s1", "group:s1"]);
+    expect(
+      await applying(() => Promise.resolve()).cancelInterview(
+        { uid: "siti" },
+        { recruitmentId: "r1" },
+      ),
+    ).toMatchObject({ ok: false });
   });
 });
 
@@ -525,6 +550,8 @@ describe("heads of a unit and its parent (verified numbers only)", () => {
       name: "Siti Rahma",
       campus: "Kyoto University",
     });
+    expect(await reader.applicant("head-dir")).toEqual({ name: "", campus: "" });
+    expect(await reader.applicant("ghost")).toBeNull();
   });
 });
 

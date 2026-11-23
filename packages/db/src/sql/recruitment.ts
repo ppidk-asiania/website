@@ -420,9 +420,6 @@ export function createSqlRecruitmentStore(db: Database) {
             throw new RuleViolationError(`${name} already has more accepted seats than that.`);
           }
           const allowed = seatsFor(unit.data() as { type: OrgUnitType });
-          if (allowed.length > 1 && u.seats.some((seat) => !allowed.includes(seat))) {
-            throw new RuleViolationError(`${name} cannot open those seats.`);
-          }
           return {
             orgUnitId: u.orgUnitId,
             name,

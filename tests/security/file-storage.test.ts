@@ -105,6 +105,8 @@ describe("files on the cPanel disk", () => {
   it("knows the content types it serves, and reports disk errors other than a missing file", async () => {
     expect(fileContentType("members/signatures/a.enc")).toBe("application/octet-stream");
     expect(fileContentType("a.webp")).toBe("image/webp");
+    expect(fileContentType("a.png")).toBe("image/png");
+    expect(fileContentType("a.jpg")).toBe("image/jpeg");
     await storage.save("folder/a.pdf", new Uint8Array([1]), { visibility: "private" });
     await expect(storage.read("folder")).rejects.toMatchObject({ code: "EISDIR" });
     const real = createDiskFileStorage({ root, baseUrl: "", secret });

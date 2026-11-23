@@ -32,6 +32,7 @@ const as = (principal: Principal) => [() => Promise.resolve(principal), context]
 
 let fake: ReturnType<typeof fakeDb>;
 let saved: Array<{ path: string; bytes: Uint8Array; options: unknown }>;
+let removed: string[];
 const db = () => fake.db as unknown as Db;
 const recruitmentActions = () =>
   createRecruitmentActions({
@@ -50,6 +51,7 @@ const applying = () =>
         saved.push({ path, bytes, options });
         return Promise.resolve({ url: null });
       }),
+      remove: (path: string) => (removed.push(path), Promise.resolve()),
     },
     now: () => clock,
     uuid: () => "abcdef12-0000-4000-8000-000000000000",
@@ -97,6 +99,7 @@ const auditEntries = () =>
 beforeEach(async () => {
   clock = new Date("2026-11-10T05:00:00Z");
   saved = [];
+  removed = [];
   fake = fakeDb();
   fake.docs.set("periods/p2026", { name: "2026/2027", status: "active", deletedAt: null });
   fake.docs.set("periods/p2025", { name: "2025/2026", status: "archived", deletedAt: null });
@@ -831,9 +834,10 @@ describe("recruitment switches (11.2)", () => {
     expect(await response.json()).toMatchObject({
       ok: false,
       error: "refused",
-      message: expect.stringContaining("2026-11-25"),
+      message: expect.stringContaining("2026-11-25") as string,
     });
     expect((await own()).answers).not.toHaveProperty("q_letter");
+    expect(removed).toEqual(saved.map((s) => s.path));
   });
 
   it("without a deadline the letter can follow at any time", async () => {

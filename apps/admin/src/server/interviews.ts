@@ -58,7 +58,6 @@ function messages(deps: NoticeDeps) {
     key: (uid: string) => string,
     text: (uid: string, zone: string) => string,
   ): Promise<number> => {
-    if (uids.length === 0) return 0;
     const contacts = await deps.contacts(uids);
     let sent = 0;
     for (const uid of uids) {

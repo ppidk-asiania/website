@@ -5,12 +5,7 @@ import {
   createSqlRecruitmentStore,
   createSqlRecruitmentWebStore,
 } from "@website/db/sql";
-import {
-  assessmentSummary,
-  DEFAULT_RUBRIC,
-  interviewScope,
-  visibleAssessments,
-} from "@website/domain/recruitment";
+import { assessmentSummary, DEFAULT_RUBRIC, interviewScope } from "@website/domain/recruitment";
 import type { ActiveSeat } from "@website/domain/organizations";
 import { utcToWallTime } from "@website/domain/shared";
 import { normalizePermissions, type Principal } from "@website/permissions";
@@ -700,7 +695,7 @@ describe("reminders 30 minutes before (cron meeting-reminders)", () => {
     await book("budi", "finance", b!.id);
     sent.length = 0;
     const remind = createInterviewReminders({
-      bookings: createSqlApplicationStore(db()).bookingsBetween,
+      bookings: (from, to) => createSqlApplicationStore(db()).bookingsBetween(from, to),
       contacts,
       send,
       webUrl: "https://web.example",
@@ -720,6 +715,42 @@ describe("reminders 30 minutes before (cron meeting-reminders)", () => {
     );
     expect(sent.find((m) => m.to === "ari@x.org")!.text).toContain("07:00");
     expect(await remind()).toEqual({ interviewMessages: 0 });
+  });
+});
+
+describe("reminder texts", () => {
+  it("give the address of an on-site time, escape HTML, fall back to the time's zone and skip inactive accounts", async () => {
+    const mails: unknown[] = [];
+    const remind = createInterviewReminders({
+      bookings: () =>
+        Promise.resolve([
+          {
+            application: { id: "r_ari", userId: "ari", recruitmentId: "r" },
+            slot: {
+              startsAt: new Date("2026-11-15T00:00:00Z"),
+              timeZone: "Asia/Tokyo",
+              interviewerUid: "gone",
+              mode: "onsite",
+              location: "Gedung <A> & B",
+              note: "",
+            },
+          },
+        ] as never),
+      contacts: () =>
+        Promise.resolve(new Map([["gone", { email: "g@x.org", phone: null, active: false }]])),
+      send: (message) => (mails.push(message), Promise.resolve("sent" as const)),
+      webUrl: "https://web.example",
+      adminUrl: "https://admin.example",
+      now: () => clock,
+    });
+    expect(await remind()).toEqual({ interviewMessages: 1 });
+    expect(mails).toEqual([
+      expect.objectContaining({
+        to: null,
+        text: expect.stringContaining("09:00") as string,
+        html: expect.stringContaining("Alamat / Address: Gedung &#60;A&#62; &#38; B") as string,
+      }),
+    ]);
   });
 });
 
@@ -744,18 +775,14 @@ describe("assessments (11.6): rubric, one per interviewer, visibility, locks", (
       note: "",
       version: applicationOf("ari")?.["version"] as number,
     });
-  const reads = () =>
+  const stored = () =>
+    [...fake.docs.keys()].filter((k) => k.startsWith("interviewAssessments/")).length;
+  const listed = (uid: string, review: boolean) =>
     createInterviewReads({
       applications: createSqlApplicationStore(db()),
       interviews: createSqlInterviewStore(db()),
       scope: scopeOf,
-    });
-  const stored = () =>
-    [...fake.docs.keys()].filter((k) => k.startsWith("interviewAssessments/")).length;
-  const listed = (uid: string, review: boolean) =>
-    createSqlApplicationStore(db())
-      .assessments(recruitmentId)
-      .then((all) => visibleAssessments(all, uid, review));
+    }).assessments(uid, recruitmentId, review);
 
   beforeEach(async () => {
     await interviews().createMine(...as(holder("head-fin")))(mine("finance"));
@@ -776,6 +803,12 @@ describe("assessments (11.6): rubric, one per interviewer, visibility, locks", (
     });
   });
 
+  it("saves even when the recruitment lost its title", async () => {
+    const row = fake.docs.get(`recruitments/${recruitmentId}`) as Record<string, unknown>;
+    fake.docs.set(`recruitments/${recruitmentId}`, { ...row, title: undefined });
+    expect(await assess(holder("head-fin"))).toMatchObject({ ok: true });
+  });
+
   it("is one per interviewer per interview; the owner updates it", async () => {
     await assess(holder("head-fin"));
     await assess(holder("head-fin"), { scores: scoresFor(2, 2, 2, 2, 2) });
@@ -793,6 +826,15 @@ describe("assessments (11.6): rubric, one per interviewer, visibility, locks", (
     expect(await assess(holder("member-fin"))).toMatchObject({ error: "forbidden" });
     expect(await assess(holder("head-fin"), { choiceId: "media" })).toMatchObject({
       error: "refused",
+    });
+    expect(await assess(holder("granted-media"))).toMatchObject({
+      issues: ["This applicant is not in your scope."],
+    });
+    expect(await assess(holder("head-fin"), { id: `${recruitmentId}_nobody` })).toMatchObject({
+      issues: ["This application does not exist."],
+    });
+    expect(await interviews().cancelSlot(...as(reviewer))({ id: "missing" })).toMatchObject({
+      issues: ["This interview time does not exist."],
     });
     expect(await assess(staff(["recruitment.offer"], "offer-1"))).toEqual({
       ok: false,
@@ -846,5 +888,138 @@ describe("assessments (11.6): rubric, one per interviewer, visibility, locks", (
       rubric: DEFAULT_RUBRIC,
     });
     expect(fake.docs.get(`recruitments/${recruitmentId}`)?.["interviewRubric"]).toBeUndefined();
+  });
+});
+
+describe("the stores on their own: older rows and missing records", () => {
+  const apps = () => createSqlApplicationStore(db());
+  const times = () => createSqlInterviewStore(db());
+  let audits = 0;
+  const audit = (() => ({ id: `audit-${++audits}` })) as never;
+  const appPath = (uid: string) => `applications/${recruitmentId}_${uid}`;
+
+  beforeEach(async () => {
+    await interviews().createPlan(...as(reviewer))({ recruitmentId, plan });
+    await inInterview("ari");
+  });
+
+  it("reads a booking from before step 11.5 as the first choice, and slots without a mode", async () => {
+    const row = fake.docs.get(appPath("ari")) as Record<string, unknown>;
+    const legacy = { slotId: "old", startsAt: clock, attendance: null, attendanceNote: null };
+    fake.docs.set(appPath("ari"), { ...row, interviews: undefined, interview: legacy });
+    expect((await apps().get(`${recruitmentId}_ari`))?.interviews).toEqual({ finance: legacy });
+    fake.docs.set(appPath("ari"), { ...row, interviews: undefined, interview: null });
+    expect((await apps().get(`${recruitmentId}_ari`))?.interviews).toEqual({});
+    const [a, b] = await slots();
+    const slot = (id: string, location: string) =>
+      fake.docs.set(`interviewSlots/${id}`, { ...slotOf(id), mode: undefined, location });
+    slot(a!.id, "");
+    slot(b!.id, "Gedung A, Tokyo");
+    expect((await times().get(a!.id))?.mode).toBe("online");
+    expect((await times().get(b!.id))?.mode).toBe("onsite");
+    expect(await times().get("../bad")).toBeNull();
+    expect(await times().get("missing")).toBeNull();
+  });
+
+  it("refuses missing or deleted times and applications; an unchanged time saves nothing", async () => {
+    const [a] = await slots();
+    expect(await times().update(a!.id, { startsAt: a!.startsAt }, audit)).toMatchObject({
+      changed: false,
+    });
+    expect(await times().cancel(a!.id, audit, clock)).toMatchObject({ applications: [] });
+    await expect(times().update(a!.id, {}, audit)).rejects.toThrow("does not exist");
+    await expect(times().update("missing", {}, audit)).rejects.toThrow("does not exist");
+    await expect(times().cancel("missing", audit, clock)).rejects.toThrow("does not exist");
+    const input = {
+      id: `${recruitmentId}_nobody`,
+      choiceId: "finance",
+      scores: {},
+      recommendation: "recommended",
+      note: "",
+      relation: "",
+    } as never;
+    await expect(apps().saveAssessment(input, "u", audit, clock)).rejects.toThrow("does not exist");
+    const mark = { attendance: "attended" as const, note: "", version: 1 };
+    const by = { uid: "u", review: true };
+    await expect(
+      apps().markAttendance(`${recruitmentId}_nobody`, "finance", mark, by, audit, clock),
+    ).rejects.toThrow("does not exist");
+  });
+
+  it("marks attendance against the current version, even when the recruitment lost its title", async () => {
+    const [a] = await slots();
+    await book("ari", "finance", a!.id);
+    const id = `${recruitmentId}_ari`;
+    const by = { uid: "u", review: true };
+    const mark = (version: number) => ({ attendance: "attended" as const, note: "", version });
+    await expect(apps().markAttendance(id, "finance", mark(0), by, audit, clock)).rejects.toThrow(
+      "version changed",
+    );
+    const row = fake.docs.get(`recruitments/${recruitmentId}`) as Record<string, unknown>;
+    fake.docs.set(`recruitments/${recruitmentId}`, { ...row, title: undefined });
+    const titles: string[] = [];
+    const log = ((...args: unknown[]) => (
+      titles.push(args[4] as string),
+      { id: "audit-t" }
+    )) as never;
+    const version = applicationOf("ari")?.["version"] as number;
+    await apps().markAttendance(id, "finance", mark(version), by, log, clock);
+    expect(titles).toEqual([""]);
+  });
+
+  it("a core unit opens its one seat, whatever seats were asked for", async () => {
+    fake.docs.set("orgUnits/treasury", {
+      periodId: "p2026",
+      name: "Bendahara",
+      type: "bendahara",
+      path: [],
+      deletedAt: null,
+    });
+    const saved = await createRecruitmentActions({
+      send: () => Promise.resolve("logged" as const),
+      recruitments: createSqlRecruitmentStore(db()),
+      now: () => clock,
+    }).save(...as(staff(["recruitment.edit"])))({
+      periodId: "p2026",
+      title: "Bendahara",
+      description: "",
+      opensAt: "2026-11-01T00:00:00.000Z",
+      closesAt: "2026-11-20T00:00:00.000Z",
+      maxChoices: 1,
+      offerDays: 3,
+      formId: "form1",
+      units: [{ orgUnitId: "treasury", quota: 1, portfolioRequired: false, seats: ["member"] }],
+      version: null,
+    });
+    if (!saved.ok) throw new Error(JSON.stringify(saved));
+    expect(fake.docs.get(`recruitments/${saved.data.id}`)?.["units"]).toMatchObject([
+      { orgUnitId: "treasury", seats: ["head"] },
+    ]);
+  });
+
+  it("lists unit paths, books under a unit without a path and cancels a booking whose time is gone", async () => {
+    fake.docs.set("orgUnits/bare", { periodId: "p2026", name: "Bare" });
+    expect(await web().unitPaths(["finance", "bare", "ghost", "finance"])).toEqual(
+      new Map([
+        ["finance", ["dir"]],
+        ["bare", []],
+      ]),
+    );
+    const [a] = await slots();
+    const unit = fake.docs.get("orgUnits/finance") as Record<string, unknown>;
+    fake.docs.set("orgUnits/finance", { ...unit, path: undefined });
+    expect(await book("ari", "finance", a!.id)).toMatchObject({ ok: true });
+    fake.docs.delete(`interviewSlots/${a!.id}`);
+    expect(await web().cancelInterview(recruitmentId, "ari", "finance", clock)).toMatchObject({
+      ok: true,
+    });
+    expect(await web().cancelInterview("missing", "ari", "finance", clock)).toEqual({
+      ok: false,
+      error: "closed",
+    });
+    expect(await web().cancelInterview(recruitmentId, "nobody", "finance", clock)).toEqual({
+      ok: false,
+      error: "locked",
+    });
   });
 });

@@ -83,6 +83,7 @@ const letter: Letter = {
   initialsBox: false,
   draftUrl: null,
   sheetNumberTemplate: null,
+  signedBy: [],
 };
 const context: LetterContext = {
   type,

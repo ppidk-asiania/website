@@ -57,7 +57,7 @@ describe("goppi.id adapter (primary)", () => {
       { status: 200, body: {} },
       { status: 200, body: {} },
       { status: 200, body: { data: { total_clicks: 17, timeline: [{ clicks: 17 }] } } },
-      { status: 200, body: { data: { timeline: [{ clicks: 2 }, { clicks: 3 }] } } },
+      { status: 200, body: { data: { timeline: [{ clicks: 2 }, { clicks: 3 }, null, {}] } } },
       { status: 200, body: { data: {} } },
     ]);
     const goppi = goppiShortener(

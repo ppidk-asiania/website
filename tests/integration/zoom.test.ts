@@ -42,7 +42,7 @@ let failCreate: boolean;
 let deleted: string[];
 let errors: string[];
 let closed: string[];
-let failClose: boolean;
+let failClose: number | null;
 let seatsOf: Record<string, ActiveSeat[]>;
 const store = () => createSqlZoomStore(fake.db as unknown as Db);
 const actions = (withClient = true) =>
@@ -59,7 +59,7 @@ const actions = (withClient = true) =>
             });
           },
           updateMeeting: (id, patch) => {
-            if (failClose) return Promise.reject(new ZoomApiError(500, "down"));
+            if (failClose) return Promise.reject(new ZoomApiError(failClose, "down"));
             closed.push(id);
             expect(patch).toEqual({ settings: { waiting_room: true, join_before_host: false } });
             return Promise.resolve();
@@ -107,7 +107,7 @@ beforeEach(() => {
   deleted = [];
   errors = [];
   closed = [];
-  failClose = false;
+  failClose = null;
   seatsOf = {};
   failCreate = false;
   clock = new Date("2026-11-05T00:00:00Z");
@@ -358,6 +358,7 @@ describe("zoom bookings (F1)", () => {
         client: null,
         shorten: () => Promise.resolve(""),
         unitOf: () => Promise.resolve(null),
+        seats: () => Promise.resolve([]),
         logError: () => undefined,
         now: () => clock,
       },
@@ -450,18 +451,22 @@ describe("zoom seats, chapters and the closing sweep (12.4)", () => {
     if (!first.ok || !later.ok) throw new Error("booked");
     expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
     clock = new Date("2026-11-11T00:00:00Z");
-    failClose = true;
+    failClose = 500;
     expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
     expect(errors).toContain("zoom close failed");
     const open = (await store().get(first.data.id)) as ZoomRequest;
     expect(open.closedAt).toBeNull();
-    failClose = false;
+    failClose = null;
     expect(await actions().retryRooms()).toMatchObject({ closed: 1 });
     expect(closed).toEqual([open.zoomMeetingId]);
     expect(((await store().get(first.data.id)) as ZoomRequest).closedAt).toEqual(clock);
     expect(await actions().retryRooms()).toMatchObject({ closed: 0 });
     expect(closed).toHaveLength(1);
     expect(((await store().get(later.data.id)) as ZoomRequest).closedAt).toBeNull();
+    clock = new Date("2026-11-21T00:00:00Z");
+    failClose = 404;
+    expect(await actions().retryRooms()).toMatchObject({ closed: 1 });
+    expect(((await store().get(later.data.id)) as ZoomRequest).closedAt).toEqual(clock);
   });
 });
 

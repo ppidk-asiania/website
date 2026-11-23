@@ -52,7 +52,7 @@ describe("deadline reminders (M6)", () => {
   const sent: string[] = [];
   const reminders = createDeadlineReminders({
     applications: createSqlApplicationStore(fake.db as unknown as Db),
-    checkedIn: createSqlProgramStore(fake.db as unknown as Db).checkedIn,
+    checkedIn: (week) => createSqlProgramStore(fake.db as unknown as Db).checkedIn(week),
     programs: () => Promise.resolve([program]),
     lpj: () =>
       Promise.resolve([
@@ -91,7 +91,7 @@ describe("deadline reminders (M6)", () => {
       const keys: string[] = [];
       const remind = createDeadlineReminders({
         applications: { bookingsBetween: () => Promise.resolve([]) },
-        checkedIn: createSqlProgramStore(fake.db as unknown as Db).checkedIn,
+        checkedIn: (week) => createSqlProgramStore(fake.db as unknown as Db).checkedIn(week),
         programs: () => Promise.resolve(programs),
         lpj: () => Promise.resolve([]),
         contacts: () => Promise.resolve(new Map()),

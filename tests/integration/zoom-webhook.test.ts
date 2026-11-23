@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createSqlWebhookEventStore, createSqlZoomStore } from "@website/db/sql";
 import type { ZoomRequest } from "@website/domain/zoom";
-import { createZoomTranscript } from "../../apps/admin/src/server/zoom";
+import { createZoomSummary, createZoomTranscript } from "../../apps/admin/src/server/zoom";
 import { ZoomApiError } from "../../apps/admin/src/server/zoom-client";
 import { createZoomWebhookRoute } from "../../apps/admin/src/server/zoom-webhook";
 import { fakeDb } from "../support/fake-db";
@@ -278,6 +278,26 @@ describe("Zoom sessions: empty ones and the summary (12.3)", () => {
       }),
     ]);
     expect(await createSqlZoomStore(fake.db as unknown as Db).sessionsForBookings([])).toEqual([]);
+  });
+
+  it("the meeting's summary joins every session's summary in time order", async () => {
+    const summary = createZoomSummary({ sessions: createSqlZoomStore(fake.db as unknown as Db) });
+    expect(await summary({ room: { zoomRequestId: null } })).toBeNull();
+    expect(await summary({ room: { zoomRequestId: "b1" } })).toBeNull();
+    await route()(signed(summaryEvent({ summary_overview: "Second." }, 1)));
+    const session = (id: string, summary: unknown, createdAt?: Date) =>
+      fake.docs.set(`recordingSessions/${id}`, { uuid: id, bookingId: "b1", summary, createdAt });
+    session("s0", null);
+    session(
+      "s1",
+      { title: "", overview: "First.", details: [], nextSteps: [], at: new Date(0) },
+      clock,
+    );
+    expect(await summary({ room: { zoomRequestId: "b1" } })).toBe("First.\n\nRapat\n\nSecond.");
+    sent.length = 0;
+    await route()(signed(summaryEvent({ meeting_uuid: undefined, summary_overview: "No id." }, 9)));
+    expect(sent).toHaveLength(1);
+    expect(await summary({ room: { zoomRequestId: "b1" } })).toBe("First.\n\nRapat\n\nSecond.");
   });
 });
 

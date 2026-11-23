@@ -1197,7 +1197,10 @@ describe("upload path v2 and manual letters (14.2)", () => {
     });
     const created = await actions().save(...as(secretariat))({
       ...manual,
-      signedBy: [{ name: "Rina Sekjen", seat: "Sekretaris Jenderal" }],
+      signedBy: [
+        { name: "Rina Sekjen", seat: "Sekretaris Jenderal" },
+        { name: "Budi", seat: "" },
+      ],
       draftUrl: "https://docs.google.com/document/d/abc/edit",
       id: bare.data.id,
       source: undefined,
@@ -1216,8 +1219,15 @@ describe("upload path v2 and manual letters (14.2)", () => {
       coordinator: null,
       signers: [
         { name: "Rina Sekjen", desk: "Sekretaris Jenderal", position: "Sekretaris Jenderal" },
+        { name: "Budi", desk: "", position: null },
       ],
       draftUrl: "https://docs.google.com/document/d/abc/edit",
+    });
+    expect(
+      await actions().issue(...as(secretariat))({ id, version: letter.version }),
+    ).toMatchObject({
+      ok: false,
+      issues: ["Only a draft takes its number."],
     });
     expect(
       await actions().issueFile(...as(secretariat))({ id, version: letter.version }),

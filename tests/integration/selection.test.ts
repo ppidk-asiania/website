@@ -497,7 +497,7 @@ describe("seats per unit (step 11.1)", () => {
     await draft("ari", ["media"], {});
     expect(await applying().submit({ uid: "ari" }, { recruitmentId })).toMatchObject({
       error: "refused",
-      message: expect.stringContaining("Choose a seat in Direktorat Media"),
+      message: expect.stringContaining("Choose a seat in Direktorat Media") as string,
     });
   });
 

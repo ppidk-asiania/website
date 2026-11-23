@@ -420,7 +420,7 @@ describe("action items (F5)", () => {
           approvedBy: null,
           attendanceSnapshot: null,
         },
-      } as Meeting,
+      },
       "chair",
       clock,
     );

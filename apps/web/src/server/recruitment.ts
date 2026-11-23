@@ -223,14 +223,13 @@ export function createApplying(deps: ApplyingDeps) {
         contentType: "application/pdf" as const,
         size: bytes.byteLength,
       };
-      const outcome =
-        target === "pact"
-          ? await deps.store.setPact(recruitment.id, g.uid, file, now)
-          : questionId === null
-            ? await deps.store.setPortfolio(recruitment.id, g.uid, file, now)
-            : late
-              ? await deps.store.setLateFile(recruitment.id, g.uid, questionId, file, now)
-              : await deps.store.setAnswerFile(recruitment.id, g.uid, questionId, file, now);
+      const outcome = await (target === "pact"
+        ? deps.store.setPact(recruitment.id, g.uid, file, now)
+        : questionId === null
+          ? deps.store.setPortfolio(recruitment.id, g.uid, file, now)
+          : late
+            ? deps.store.setLateFile(recruitment.id, g.uid, questionId, file, now)
+            : deps.store.setAnswerFile(recruitment.id, g.uid, questionId, file, now));
       const result = toResult(outcome);
       if (!result.ok) await deps.storage.remove?.(path);
       return Response.json(result.ok ? { ok: true, name: file.name } : result, {

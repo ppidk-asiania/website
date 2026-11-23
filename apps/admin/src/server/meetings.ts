@@ -189,7 +189,6 @@ export function createMeetingActions(deps: MeetingDeps) {
     key: (uid: string) => string,
     compose: (uid: string, zone: string) => string,
   ): Promise<number> {
-    if (uids.length === 0) return 0;
     const contacts = await deps.contacts(uids);
     let sent = 0;
     for (const uid of uids) {
@@ -499,13 +498,13 @@ export function createMeetingActions(deps: MeetingDeps) {
           : meeting.participantIds,
         (uid) => reminderKey(meeting, kind, uid),
         (uid, zone) =>
-          kind === "start"
+          facts
             ? [
                 both(
                   `Rapat "${meeting.title}" segera dimulai. Isi presensi dengan kode di layar.`,
                   `The meeting "${meeting.title}" starts soon. Sign the attendance with the code on the screen.`,
                 ),
-                ...(facts?.(zone) ?? []),
+                ...facts(zone),
                 ...(runsMeeting(meeting, uid)
                   ? [
                       both(

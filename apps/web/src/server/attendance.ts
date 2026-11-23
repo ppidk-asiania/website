@@ -1,6 +1,6 @@
 import "server-only";
 import type { SqlMeetingStore } from "@website/db/sql";
-import { markAttendance, normalizeCode } from "@website/domain/meetings";
+import { markAttendance, normalizeCode, type Attendance } from "@website/domain/meetings";
 import { RuleViolationError } from "@website/domain/shared";
 
 export type AttendResult =
@@ -41,7 +41,7 @@ export function createAttend(deps: {
       return {
         ok: true,
         title: saved.title,
-        at: (saved.attendance[uid]?.at ?? now).toISOString(),
+        at: (saved.attendance[uid] as Attendance).at.toISOString(),
         zone: (await deps.zoneOf(uid)) ?? saved.timeZone,
       };
     } catch (error) {

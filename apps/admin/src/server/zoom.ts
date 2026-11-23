@@ -105,7 +105,6 @@ export async function closeRoom(
   now: Date,
   actor: string,
 ): Promise<void> {
-  if (booking.closedAt) return;
   if (deps.client && booking.zoomMeetingId) {
     await deps.client
       .updateMeeting(booking.zoomMeetingId, {

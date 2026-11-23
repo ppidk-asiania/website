@@ -104,6 +104,17 @@ beforeEach(() => {
 });
 
 describe("public letter archive (14.3)", () => {
+  it("an entry without a number or a known unit lists under the organisation's name", async () => {
+    fake.docs.set("letters/legacy", letter("9", { numberFormatted: null, orgUnitId: "closed" }));
+    const pass = await archive().enter(guest, headers);
+    if (!pass.ok) throw new Error("no pass");
+    expect((await archive().list(pass.token, query))?.entries[0]).toMatchObject({
+      subject: "Panitia 9",
+      number: "",
+      unitName: "PPIDK Asia-Oseania",
+    });
+  });
+
   it("lists only issued letters of public types, newest first, without the recipient or body", async () => {
     const pass = await archive().enter(guest, headers);
     if (!pass.ok) throw new Error("no pass");
@@ -170,7 +181,7 @@ describe("public letter archive (14.3)", () => {
     const guests = await createSqlLetterArchive(fake.db as unknown as Db).guests();
     expect(guests).toEqual([
       {
-        id: expect.any(String),
+        id: expect.any(String) as string,
         name: "Arif",
         email: "arif@mail.com",
         institution: "UI",

@@ -22,7 +22,13 @@ describe("admin dashboard: only what needs the viewer", () => {
   const dashboard = createDashboard({
     graduatedOfficers: () =>
       Promise.resolve([
-        { name: "Siti", title: "Staf", graduatedOn: "2026-09-30", periodId: "p2026" },
+        {
+          name: "Siti",
+          title: "Staf",
+          graduatedOn: "2026-09-30",
+          periodId: "p2026",
+          orgUnitId: "media",
+        },
       ]),
     lpjSecretariatHolders: () => Promise.resolve(secretariatHolders),
     activePeriod: () => Promise.resolve(period),
@@ -44,7 +50,13 @@ describe("admin dashboard: only what needs the viewer", () => {
       noLpjSecretariat: false,
     });
     expect((await dashboard(staff(["appointments.edit"]))).graduatedOfficers).toEqual([
-      { name: "Siti", title: "Staf", graduatedOn: "2026-09-30", periodId: "p2026" },
+      {
+        name: "Siti",
+        title: "Staf",
+        graduatedOn: "2026-09-30",
+        periodId: "p2026",
+        orgUnitId: "media",
+      },
     ]);
   });
 

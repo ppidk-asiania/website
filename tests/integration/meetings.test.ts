@@ -653,6 +653,36 @@ describe("meeting notices (12.1)", () => {
     const body = bodies[`meeting:${m.id}:change:chair:${room.data.version}`] ?? "";
     expect(body).toContain("https://zoom.example/j/1");
     expect(body).toContain("pw123");
+    sent.length = 0;
+    const quiet = await actions().saveRoom(...as(planner))({
+      id: m.id,
+      version: room.data.version,
+      notify: false,
+      room: { kind: "link", url: "https://meet.example.org/q" },
+    });
+    if (!quiet.ok) throw new Error(JSON.stringify(quiet));
+    expect(sent).toEqual([]);
+    const back = await actions().saveRoom(...as(planner))({
+      id: m.id,
+      version: quiet.data.version,
+      room: { kind: "zoom", zoomRequestId: "z-ok" },
+    });
+    if (!back.ok) throw new Error(JSON.stringify(back));
+    const none = await actions().saveRoom(...as(planner))({
+      id: m.id,
+      version: back.data.version,
+      room: { kind: "link", url: "https://meet.example.org/q" },
+    });
+    if (!none.ok) throw new Error(JSON.stringify(none));
+    expect(bodies[`meeting:${m.id}:change:chair:${none.data.version}`]).toContain("pw123");
+  });
+
+  it("an invitation without a unit or agenda leaves those lines out", async () => {
+    const m = await create({ orgUnitId: null, agenda: [] });
+    const body = bodies[`meeting:${m.id}:invite:member`] ?? "";
+    expect(body).toContain("Rapat kerja");
+    expect(body).not.toContain("Unit:");
+    expect(body).not.toContain("Agenda:");
   });
 
   it("cancelling tells everyone once, unless switched off", async () => {
@@ -786,6 +816,7 @@ describe("meeting notices (12.1)", () => {
       recordedAt: null,
     });
     expect(await card("member", "ZZZZZZ")).toBeNull();
+    expect(await card("member", "not a code")).toBeNull();
     expect((await store().get(m.id))?.attendance).toEqual({});
     const attend = createAttend({ meetings: store(), zoneOf, now: () => clock });
     const done = await attend("member", "abcdef");
@@ -796,6 +827,13 @@ describe("meeting notices (12.1)", () => {
       zone: "Asia/Tokyo",
     });
     expect((await card("member", "ABCDEF"))?.recordedAt).toBe(clock.toISOString());
+    const row = fake.docs.get(`meetings/${m.id}`) as Record<string, unknown>;
+    fake.docs.set(`meetings/${m.id}`, {
+      ...row,
+      orgUnitId: null,
+      room: { zoomRequestId: "z-ok", externalUrl: null },
+    });
+    expect(await card("member", "ABCDEF")).toMatchObject({ unit: null, place: "Zoom" });
     expect((await store().get(m.id))?.attendance["member"]?.status).toBe("present");
   });
 

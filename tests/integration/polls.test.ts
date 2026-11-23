@@ -201,6 +201,8 @@ describe("POST /webhooks/waha (J3)", () => {
     expect((await route()(big)).status).toBe(413);
     expect((await route()(signed("not json"))).status).toBe(400);
     expect((await route()(signed({ event: "message", payload: {} }))).status).toBe(200);
+    expect((await route()(signed({ event: "message" }))).status).toBe(200);
+    expect((await route()(signed({ event: "session.status", payload: {} }))).status).toBe(200);
     expect((await route()(signed({ event: "poll.vote", payload: {} }))).status).toBe(400);
     expect((await route()(signed(vote("not a list")))).status).toBe(400);
     expect((await route()(signed(vote([5, labels[0]])))).status).toBe(200);

@@ -477,6 +477,37 @@ describe("the approved plan changes only through a decided revision", () => {
     });
   });
 
+  it("the store refuses a missing or trashed programme, lists pending oldest first and reads older rows", async () => {
+    const audit = (() => ({})) as never;
+    const ask = (id: string) => store().requestRevision(id, changes, "x", "pic", audit, clock);
+    await expect(ask("ghost")).rejects.toThrow("does not exist");
+    const trashed = await approved();
+    fake.docs.set(`programs/${trashed.id}`, {
+      ...fake.docs.get(`programs/${trashed.id}`),
+      deletedAt: clock,
+    });
+    await expect(ask(trashed.id)).rejects.toThrow("in the trash");
+    const first = await approved();
+    const { id: firstRevision } = await request(first.id);
+    clock = new Date(clock.getTime() + 60_000);
+    const second = await approved();
+    const { id: secondRevision } = await request(second.id);
+    expect((await store().listPendingRevisions("p1")).map((r) => r.id)).toEqual([
+      firstRevision,
+      secondRevision,
+    ]);
+    fake.docs.delete(`programs/${first.id}`);
+    await expect(
+      store().decideRevision(firstRevision, "rejected", "sekjen", audit, audit, clock),
+    ).rejects.toThrow("does not exist");
+    expect(await store().getRevision("../bad")).toBeNull();
+    const row = fake.docs.get(`programs/${second.id}`) as Record<string, unknown>;
+    fake.docs.set(`programs/${second.id}`, { ...row, keyResultIds: undefined, keyResultId: "kr1" });
+    expect((await store().get(second.id))?.keyResultIds).toEqual(["kr1"]);
+    fake.docs.set(`programs/${second.id}`, { ...row, keyResultIds: undefined });
+    expect((await store().get(second.id))?.keyResultIds).toEqual([]);
+  });
+
   it("an approval after the programme was closed is refused; rejecting still works", async () => {
     const { id, version } = await approved();
     const { id: revisionId } = await request(id);

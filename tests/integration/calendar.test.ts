@@ -109,7 +109,10 @@ const lpj = [
 let fake: ReturnType<typeof fakeDb>;
 let principals: Record<string, Principal>;
 const store = () => createSqlCalendarStore(fake.db as unknown as Db);
-const cal = (secret: string | null = "calendar-secret-calendar-secret-123456") =>
+const cal = (
+  secret: string | null = "calendar-secret-calendar-secret-123456",
+  extra: Partial<Parameters<typeof createCalendar>[0]> = {},
+) =>
   createCalendar({
     meetings: () =>
       Promise.resolve([
@@ -138,6 +141,7 @@ const cal = (secret: string | null = "calendar-secret-calendar-secret-123456") =
     secret,
     adminUrl: "https://admin.example.org",
     now: () => now,
+    ...extra,
   });
 
 beforeEach(async () => {
@@ -151,6 +155,25 @@ beforeEach(async () => {
 });
 
 describe("calendar (G2)", () => {
+  it("names the chapter a Zoom booking is for, when the chapter is known", async () => {
+    const items = await cal(undefined, {
+      zoom: () =>
+        Promise.resolve([
+          { ...zoom("z5", "2026-11-21T00:00:00Z"), chapterId: "jp" },
+          { ...zoom("z6", "2026-11-22T00:00:00Z"), chapterId: "gone" },
+        ]),
+      chapterNames: () => Promise.resolve(new Map([["jp", "Japan"]])),
+    }).items(
+      principals["rina"] as Principal,
+      new Date("2026-11-21T00:00:00Z"),
+      new Date("2026-11-22T23:59:59Z"),
+    );
+    expect(items.filter((i) => i.kind === "zoom").map((i) => i.title)).toEqual([
+      "Zoom z5 · Japan",
+      "Zoom z6",
+    ]);
+  });
+
   it("shows what the person may see, with holiday (in the item's zone) and Zoom warnings", async () => {
     const items = await cal().items(
       principals["rina"] as Principal,

@@ -761,7 +761,7 @@ export function createSqlLetterArchive(db: Database) {
         letterDate: l.letterDate,
         subject: l.subject,
         typeId: l.typeId,
-        typeName: typeName.get(l.typeId) ?? "",
+        typeName: typeName.get(l.typeId) as string,
         unitName: (units.get(l.orgUnitId)?.["name"] as string | undefined) ?? "PPIDK Asia-Oseania",
         issuedAt: l.issuedAt as Date,
       }));

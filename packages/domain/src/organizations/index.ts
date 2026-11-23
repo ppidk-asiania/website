@@ -389,7 +389,7 @@ export const SEAT_WORDS: Readonly<Record<AppointmentSeat, string>> = {
   treasurer: "Bendahara",
   member: "Anggota",
 };
-const UNIT_TYPE_WORDS: Partial<Record<OrgUnitType, string>> = {
+const UNIT_TYPE_WORDS: Record<Exclude<OrgUnitType, CoreUnitType>, string> = {
   direktorat: "Direktorat",
   biro: "Biro",
   bidang: "Bidang",
@@ -400,7 +400,7 @@ const UNIT_TYPE_WORDS: Partial<Record<OrgUnitType, string>> = {
 /** "Kepala Bidang Desain", never "Kepala Bidang Bidang Desain"; a core unit is its own seat. */
 export function seatLabel(seat: AppointmentSeat, unit: Pick<OrgUnit, "name" | "type">): string {
   if (isCoreUnit(unit.type)) return unit.name;
-  const word = UNIT_TYPE_WORDS[unit.type] ?? "";
+  const word = UNIT_TYPE_WORDS[unit.type];
   const named = new RegExp(`^${word}\\b`, "i").test(unit.name) ? unit.name : `${word} ${unit.name}`;
   return `${SEAT_WORDS[seat]} ${named.trim()}`;
 }

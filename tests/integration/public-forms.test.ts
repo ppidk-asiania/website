@@ -415,6 +415,9 @@ describe("who may answer (10.3)", () => {
         profile: { seat: "Kepala Bidang Desain", campus: "UGM", chapter: "PPI Sydney" },
       },
     });
+    expect(await reader({ uid: "u4", email: null, name: null })(publicToken)).toMatchObject({
+      mine: { name: "u4", email: "" },
+    });
     expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: true });
     expect(responses()).toEqual([`formResponses/${id}_u1`]);
     expect(fake.docs.get(`formResponses/${id}_u1`)).toMatchObject({

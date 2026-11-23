@@ -218,7 +218,7 @@ describe("application analysis (step 11.9)", () => {
     expect(bodies).toHaveLength(0);
 
     const runs = await Promise.all([actions.runNext(), actions.runNext()]);
-    expect(runs.map((r) => r.processed).sort()).toEqual([0, 1]);
+    expect(runs.map((r) => r["processed"]).sort()).toEqual([0, 1]);
     expect(bodies).toHaveLength(1);
 
     const latest = (await actions.read(boss, ["r1_u1"], ["u1"])).analyses["r1_u1"];

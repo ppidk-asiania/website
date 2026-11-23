@@ -44,7 +44,7 @@ export function applyRevision(program: Program, changes: RevisionChanges): Progr
     ...{ name, goal, description, orgUnitId, keyResultIds, plannedStart, plannedEnd, budgets },
     ...changes,
   });
-  if (!plan.success) return refuse(plan.error.issues[0]?.message ?? "The revised plan is invalid.");
+  if (!plan.success) return refuse(plan.error.issues.map((i) => i.message).join(" "));
   return { ...program, ...plan.data };
 }
 

@@ -32,6 +32,7 @@ import {
   portfolioPath,
   portfolioRequired,
   RecruitmentInputSchema,
+  type RecruitmentUnit,
   seatCounterId,
   TRANSITIONS,
 } from "@website/domain/recruitment";
@@ -44,7 +45,7 @@ const window = {
   opensAt: new Date("2026-11-01T00:00:00Z"),
   closesAt: new Date("2026-11-20T00:00:00Z"),
 };
-const units = [
+const units: RecruitmentUnit[] = [
   { orgUnitId: "media", name: "Media", quota: 2, portfolioRequired: true, seats: ["member"] },
   { orgUnitId: "finance", name: "Finance", quota: 1, portfolioRequired: false, seats: ["member"] },
   {
@@ -194,7 +195,11 @@ describe("applying (C3 steps 1-2)", () => {
   });
 
   it("shows ONE next action per state", () => {
-    const offer = { orgUnitId: "media", expiresAt: new Date("2026-11-11T00:00:00Z") };
+    const offer = {
+      orgUnitId: "media",
+      seat: "member" as const,
+      expiresAt: new Date("2026-11-11T00:00:00Z"),
+    };
     const at = (status: (typeof APPLICATION_STATUSES)[number]) =>
       nextAction(window, { status, offer: status === "offered" ? offer : null }, now);
     expect(nextAction(window, null, now)).toBe("start");
@@ -509,7 +514,7 @@ describe("recruitment switches (11.2)", () => {
 
   it("lists the files an application still waits for", () => {
     expect(waitingFor([letter, cv], {})).toEqual([letter]);
-    expect(waitingFor([letter, cv], { q_letter: "x" as never })).toEqual([]);
+    expect(waitingFor([letter, cv], { q_letter: "x" })).toEqual([]);
   });
 
   it("accepts late files until the deadline, or without a limit when there is none", () => {
@@ -555,6 +560,10 @@ describe("seats per unit (step 11.1)", () => {
 
   it("fills a single seat silently and takes the wish for a unit with several", () => {
     expect(checkChoiceSeats(rec, ["media"], {}, true)).toEqual({ media: "member" });
+    expect(checkChoiceSeats(rec, ["media"], undefined, true)).toEqual({ media: "member" });
+    expect(() => checkChoiceSeats(rec, ["media"], { media: "boss" }, true)).toThrow(
+      /from the list/,
+    );
     expect(checkChoiceSeats(rec, ["media", "edu"], { edu: "secretary" }, true)).toEqual({
       media: "member",
       edu: "secretary",

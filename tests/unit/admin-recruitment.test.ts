@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Recruitment } from "@website/domain/recruitment";
+import type { Application, Recruitment } from "@website/domain/recruitment";
 import {
   choicesLine,
   matchesQueueTab,
@@ -29,6 +29,8 @@ const r: Recruitment = {
   pactTemplateUrl: null,
   personalityTest: true,
   documentDeadline: null,
+  interviewRubric: [],
+  waGroup: null,
   published: true,
   version: 3,
   createdAt: new Date("2026-10-01T00:00:00Z"),
@@ -126,7 +128,8 @@ describe("selection queue model", () => {
       seat: "head" as const,
       expiresAt: new Date("2026-11-09T00:00:00Z"),
     },
-    interview: null,
+    interviews: {},
+    interviewChanged: [],
     pacts: [],
     pactNote: null,
     appointmentId: null,
@@ -225,7 +228,7 @@ describe("selection queue model", () => {
 
   it("names the files an application is waiting for", () => {
     const follow = { ...question("q_letter", "file"), mayFollow: true };
-    const waiting = (a: typeof application, questions: Parameters<typeof toApplicationItem>[2]) =>
+    const waiting = (a: Application, questions: Parameters<typeof toApplicationItem>[2]) =>
       toApplicationItem(a, r, questions, null, [], at).waitingFor;
     expect(waiting(application, [question("q_cv", "file"), follow])).toEqual(["q_letter"]);
     expect(

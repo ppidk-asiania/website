@@ -24,7 +24,7 @@ const card: PeriodReportCard = {
     objectives: [{ id: "o1", title: "Grow", orgUnitId: "media", percent: 40, keyResults: 2 }],
   },
   programmes: {
-    counts: { proposed: 1, approved: 0, running: 2, finished: 1, cancelled: 0 },
+    counts: { draft: 0, proposed: 1, approved: 0, running: 2, finished: 1, cancelled: 0 },
     total: 4,
     troubled: 1,
     completionPercent: 33,

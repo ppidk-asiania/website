@@ -116,6 +116,13 @@ const revisions = [
     orgUnitPath: ["dirs", "media"],
   },
   {
+    id: "r4",
+    programId: "deleted-programme",
+    status: "pending",
+    requestedBy: "x",
+    orgUnitPath: ["dirs", "media"],
+  },
+  {
     id: "r3",
     programId: "pr1",
     status: "rejected",

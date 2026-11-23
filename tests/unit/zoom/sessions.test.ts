@@ -144,9 +144,13 @@ describe("summaryText and summaryFolded", () => {
   };
   it("writes the summary as plain text for the drafter", () => {
     expect(summaryText(base)).toBe("T\n\nO\n\nL: S\n\nNext steps:\n- N");
+    expect(summaryText({ ...base, details: [{ label: "", summary: "S" }], nextSteps: [] })).toBe(
+      "T\n\nO\n\nS",
+    );
   });
   it("folds above three parts or 800 characters", () => {
     expect(summaryFolded(base)).toBe(false);
+    expect(summaryFolded({ ...base, overview: "", nextSteps: ["a", "b"] })).toBe(false);
     expect(summaryFolded({ ...base, nextSteps: ["a", "b", "c"] })).toBe(true);
     const long = (n: number) => ({
       ...base,

@@ -279,11 +279,12 @@ export function createMinutesActions(deps: MinutesDeps) {
           : input.source === "ai_summary"
             ? await deps.zoomSummary(meeting)
             : await deps.zoomTranscript(meeting);
+      if (transcript === null && input.source === "ai_summary") {
+        throw new RuleViolationError("There is no Zoom summary for this meeting's room yet.");
+      }
       if (transcript === null) {
         throw new RuleViolationError(
-          input.source === "ai_summary"
-            ? "There is no Zoom summary for this meeting's room yet."
-            : "Zoom has no transcript for this meeting's room yet (it comes with the cloud recording).",
+          "Zoom has no transcript for this meeting's room yet (it comes with the cloud recording).",
         );
       }
       const names = await deps.names(meeting.participantIds);

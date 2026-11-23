@@ -216,8 +216,8 @@ export function isRecruitmentOpen(
 export function soleOpen<
   T extends Pick<Recruitment, "published" | "opensAt" | "closesAt" | "deletedAt">,
 >(list: readonly T[], now: Date): T | null {
-  const open = list.filter((r) => isRecruitmentOpen(r, now));
-  return open.length === 1 ? (open[0] ?? null) : null;
+  const [only, second] = list.filter((r) => isRecruitmentOpen(r, now));
+  return second ? null : (only ?? null);
 }
 
 /** Apply wizard: 1 data, 2 proof, 3 application, 4 review. Opens on the first unfinished step; a step past what is done is refused. */
