@@ -1,33 +1,36 @@
 # admin
 
-Staff administration for content, events, members, users and audit.
+Staff administration for content, events, organisations, people and roles, and audit.
 
 ## Responsibilities
 
 - CMS: news, articles, pages, galleries, events, organization and chapters
-- Members: approval and profile access (`members.*` permissions)
-- Users and roles, audit log and 14-day revert
+- Role Manager (people, invites and roles), audit log and 14-day revert
 - Tools: QR codes, Zoom meeting requests, calendar feed
 
 ## Structure
 
-| Path                           | Purpose                                                                                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/app/`                     | Pages (App Router). Partial Prerendering: data-free shell; session parts stream in `<Suspense>`.                                                        |
-| `src/app/(panel)/layout.tsx`   | Every staff page: the side panel (`src/components/admin-sidebar.tsx`), see [docs/side-panel.md](docs/side-panel.md).                                    |
-| `src/navigation.ts`            | Side panel pages, in order, with the permission each one needs.                                                                                         |
-| `src/proxy.ts`                 | Runs before every request: origin check, per-IP rate limit, private caching, sign-in redirect without a session cookie (`src/server/request-guard.ts`). |
-| `src/app/api/session/route.ts` | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                                                                 |
-| `src/server/context.ts`        | `getAdminViewer()` / `getPrincipal()` — session → Firebase → roles in Firestore; staff only. `requireAdminViewer(path, permission)` gates each page.    |
-| `src/server/guarded-action.ts` | `createGuardedAction()` — the only way to write an admin mutation.                                                                                      |
-| `src/server/user-directory.ts` | Looks up a user's roles (fails closed until implemented).                                                                                               |
+| Path                                 | Purpose                                                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app/`                           | Pages (App Router). Partial Prerendering: data-free shell; session parts stream in `<Suspense>`.                                                        |
+| `src/app/(panel)/layout.tsx`         | Every staff page: the side panel (`src/components/admin-sidebar.tsx`), see [docs/side-panel.md](docs/side-panel.md).                                    |
+| `src/navigation.ts`                  | Side panel pages, in order, with the permission each one needs.                                                                                         |
+| `src/proxy.ts`                       | Runs before every request: origin check, per-IP rate limit, private caching, sign-in redirect without a session cookie (`src/server/request-guard.ts`). |
+| `src/app/health/route.ts`            | `GET /health` → `{"status":"ok"}` for uptime checks (no database call, no sign-in).                                                                     |
+| `src/app/api/session/route.ts`       | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                                                                 |
+| `src/server/context.ts`              | `getAdminViewer()` / `getPrincipal()` — session → Firebase → roles in MySQL; staff only. `requireAdminViewer(path, permission)` gates each page.        |
+| `src/server/guarded-action.ts`       | `createGuardedAction()` — the only way to write an admin mutation.                                                                                      |
+| `src/server/accounts.ts`, `roles.ts` | Role Manager actions: people, invites, roles (rules + audit), see [docs/users-and-roles.md](docs/users-and-roles.md).                                   |
+| `src/server/stores.ts`, `wiring.ts`  | MySQL stores, files and Firebase Auth account operations, wired once per process.                                                                       |
+| `src/server/user-directory.ts`       | uid → account status + roles from MySQL (`@website/db`); no record or no staff role = no access.                                                        |
+| `src/data/mock/`                     | Placeholder data for the UI-only pages (nothing is saved), see [docs/admin-shell.md](docs/admin-shell.md).                                              |
 
 ## Rules
 
 - Domain `admin.example.org`, local port **3001**.
 - Only accounts with a staff role (`admin.access`) get in; members and customers are refused.
 - Every mutation: authenticate → validate → authorize → domain logic → audit (same transaction).
-- Never reads or writes Firestore from the browser.
+- Never reads or writes the database from the browser.
 
 ## Commands
 

@@ -1,0 +1,158 @@
+import "server-only";
+import { createHmac } from "node:crypto";
+import type { SqlZoomStore } from "@website/db/sql";
+import { messageTo, type Contact, type Messenger } from "@website/domain/messaging";
+import {
+  recordingIsEmpty,
+  summaryContent,
+  zoomEventMeeting,
+  type ZoomRequest,
+} from "@website/domain/zoom";
+import { readBodyLimited, verifyHmacSignature } from "@website/security";
+import { closeRoom, systemZoomAudit } from "./zoom";
+import type { ZoomClient } from "./zoom-client";
+
+const MAX_BODY = 256 * 1024;
+
+export interface ZoomWebhookDeps {
+  readonly secret: string | undefined;
+  readonly record: (provider: string, eventId: string, now: Date) => Promise<boolean>;
+  readonly zoom: Pick<SqlZoomStore, "findByZoomMeetingId" | "write" | "addSession" | "saveSummary">;
+  readonly client: Pick<ZoomClient, "updateMeeting"> | null;
+  readonly contacts: (uids: readonly string[]) => Promise<Map<string, Contact>>;
+  readonly send: Messenger["send"];
+  readonly adminUrl: string;
+  readonly logError: (message: string, fields: Record<string, unknown>) => void;
+  readonly now: () => Date;
+}
+
+const reply = (body: unknown, status = 200) =>
+  Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+const NOTICES: Record<string, readonly [string, string, string]> = {
+  "recording.completed": [
+    "recording",
+    "Rekaman Zoom sudah tersedia.",
+    "The Zoom recording is ready.",
+  ],
+  "meeting.summary_completed": [
+    "summary",
+    "Ringkasan AI Zoom sudah tersedia.",
+    "The Zoom AI summary is ready.",
+  ],
+};
+
+export function createZoomWebhookRoute(deps: ZoomWebhookDeps) {
+  async function onEnded(booking: ZoomRequest, now: Date) {
+    if (booking.closedAt || now.getTime() < booking.endsAt.getTime()) return;
+    await closeRoom(deps, booking, now, "zoom-webhook");
+  }
+
+  async function onRecording(
+    booking: ZoomRequest,
+    uuid: string | null,
+    duration: unknown,
+    now: Date,
+  ) {
+    if (!uuid || booking.recordingUuids.includes(uuid)) return;
+    await deps.zoom.addSession(
+      uuid,
+      booking.id,
+      now,
+      typeof duration === "number" ? duration : null,
+    );
+    await deps.zoom.write(
+      booking.id,
+      booking.version,
+      (current) => {
+        const latest = current as ZoomRequest;
+        return { ...latest, recordingUuids: [...new Set([...latest.recordingUuids, uuid])] };
+      },
+      systemZoomAudit("zoom-webhook"),
+      now,
+    );
+  }
+
+  async function notify(booking: ZoomRequest, event: string, uuid: string | null) {
+    const notice = NOTICES[event] as (typeof NOTICES)[string];
+    const contacts = await deps.contacts([booking.requestedBy]);
+    const text = `${notice[1]}\n\n${notice[2]}\n\n${booking.topic}\n${deps.adminUrl}/zoom`;
+    await deps.send(
+      messageTo(contacts.get(booking.requestedBy) ?? null, {
+        subject: `Zoom: ${booking.topic}`,
+        text,
+        html: `<p>${text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`).replace(/\n/g, "<br>")}</p>`,
+      }),
+      `zoom:${booking.id}:${notice[0]}:${(uuid ?? "").replace(/[^A-Za-z0-9_.@-]/g, "_") || "none"}`,
+    );
+  }
+
+  return async (request: Request): Promise<Response> => {
+    const bytes = await readBodyLimited(request, MAX_BODY);
+    if (!bytes) return reply({ error: "too_large" }, 413);
+    const body = new TextDecoder().decode(bytes);
+    const timestamp = request.headers.get("x-zm-request-timestamp") ?? "";
+    const now = deps.now();
+    if (
+      !deps.secret ||
+      !verifyHmacSignature({
+        payload: `v0:${timestamp}:${body}`,
+        signature: request.headers.get("x-zm-signature"),
+        secret: deps.secret,
+        prefix: "v0=",
+        timestamp,
+        now,
+        toleranceSeconds: 300,
+      })
+    ) {
+      return reply({ error: "unauthenticated" }, 401);
+    }
+    let event: { event?: unknown; event_ts?: unknown; payload?: unknown };
+    try {
+      event = JSON.parse(body) as typeof event;
+    } catch {
+      return reply({ error: "invalid_input" }, 400);
+    }
+    const name = typeof event.event === "string" ? event.event : "";
+    if (name === "endpoint.url_validation") {
+      const plainToken = (event.payload as { plainToken?: unknown } | undefined)?.plainToken;
+      if (typeof plainToken !== "string") return reply({ error: "invalid_input" }, 400);
+      return reply({
+        plainToken,
+        encryptedToken: createHmac("sha256", deps.secret).update(plainToken).digest("hex"),
+      });
+    }
+    const meeting = zoomEventMeeting(event.payload);
+    if (!meeting) return reply({ ok: true });
+    const eventId = `${name}:${meeting.uuid ?? meeting.id}:${JSON.stringify(event.event_ts ?? null)}`;
+    const id = createHmac("sha256", "zoom-event").update(eventId).digest("hex");
+    if (!(await deps.record("zoom", id, now))) return reply({ ok: true });
+    const booking = await deps.zoom.findByZoomMeetingId(meeting.id);
+    if (!booking) return reply({ ok: true });
+    try {
+      if (name === "meeting.ended") await onEnded(booking, now);
+      // An empty session is still stored and archived; only the notice is held back.
+      if (name === "recording.completed") {
+        const duration = (event.payload as { object?: { duration?: unknown } }).object?.duration;
+        await onRecording(booking, meeting.uuid, duration, now);
+        if (!recordingIsEmpty(event.payload)) await notify(booking, name, meeting.uuid);
+      }
+      if (name === "meeting.summary_completed") {
+        const content = summaryContent(event.payload);
+        if (content) {
+          if (meeting.uuid) {
+            await deps.zoom.saveSummary(meeting.uuid, booking.id, { ...content, at: now }, now);
+          }
+          await notify(booking, name, meeting.uuid);
+        }
+      }
+    } catch (error) {
+      deps.logError("zoom webhook failed", {
+        event: name,
+        bookingId: booking.id,
+        error: String(error),
+      });
+    }
+    return reply({ ok: true });
+  };
+}

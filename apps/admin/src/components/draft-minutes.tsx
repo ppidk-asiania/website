@@ -1,0 +1,150 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { draftMinutesAction, saveActionItemAction } from "@/app/(panel)/meetings/actions";
+import { actionMessage } from "@/components/action-message";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+
+type Proposal = { title: string; pic: string | null; dueOn: string | null };
+
+export function DraftMinutes({
+  meetingId,
+  version,
+  names,
+  hasZoom,
+  hasSummary,
+}: {
+  meetingId: string;
+  version: number;
+  names: ReadonlyMap<string, string>;
+  hasZoom: boolean;
+  hasSummary: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState("");
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+
+  const submit = async (event: FormEvent | null, source: "ai_zoom" | "ai_summary" = "ai_zoom") => {
+    event?.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    const result = await draftMinutesAction(
+      event
+        ? { id: meetingId, version, transcript, source: "ai_transcript" }
+        : { id: meetingId, version, source },
+    );
+    setBusy(false);
+    if (!result.ok) return setMessage(actionMessage(result));
+    setProposals(result.data.proposals);
+    setMessage("Draft added to the empty agenda items. Check and edit it before approving.");
+    router.refresh();
+  };
+  const add = async (p: Proposal, index: number) => {
+    if (!p.pic) return;
+    const result = await saveActionItemAction({
+      version: null,
+      meetingId,
+      title: p.title,
+      pic: p.pic,
+      dueOn: p.dueOn,
+    });
+    if (!result.ok) return setMessage(actionMessage(result));
+    setProposals((all) => all.filter((_, i) => i !== index));
+    router.refresh();
+  };
+
+  return (
+    <>
+      <Button size="sm" variant="outline" icon="note" onClick={() => setOpen(true)}>
+        Draft from transcript
+      </Button>
+      <Modal
+        asForm
+        open={open}
+        title="Draft minutes from a transcript"
+        onClose={() => setOpen(false)}
+        onSubmit={(e) => void submit(e)}
+        footer={
+          <div className="admin-modal__footer-row">
+            <Button variant="outline" icon="chevronLeft" onClick={() => setOpen(false)}>
+              Back
+            </Button>
+            {hasZoom ? (
+              <Button
+                variant="outline"
+                icon="download"
+                disabled={busy}
+                title="The full Zoom transcript of the cloud recording, fetched from Zoom now"
+                onClick={() => submit(null)}
+              >
+                Pull Zoom transcript
+              </Button>
+            ) : null}
+            {hasSummary ? (
+              <Button
+                variant="outline"
+                icon="note"
+                disabled={busy}
+                title="The Zoom AI summaries already on this page (all sessions), not the full transcript"
+                onClick={() => submit(null, "ai_summary")}
+              >
+                Draft from Zoom summary
+              </Button>
+            ) : null}
+            <Button
+              type="submit"
+              variant="primary"
+              icon="note"
+              loading={busy}
+              title="The transcript pasted or uploaded above"
+              disabled={transcript.trim().length < 20}
+            >
+              {busy ? "Drafting…" : "Draft"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="admin-field">
+          <label className="admin-field__label" htmlFor="vtt-file">
+            Zoom transcript (.vtt) or paste below
+          </label>
+          <input
+            id="vtt-file"
+            type="file"
+            accept=".vtt,.txt,text/vtt,text/plain"
+            onChange={(e) => void e.target.files?.[0]?.text().then(setTranscript)}
+          />
+        </div>
+        <textarea
+          className="admin-textarea"
+          rows={10}
+          aria-label="Transcript"
+          value={transcript}
+          maxLength={200_000}
+          onChange={(e) => setTranscript(e.target.value)}
+        />
+        {message ? <p role="status">{message}</p> : null}
+        {proposals.length > 0 ? (
+          <ul>
+            {proposals.map((p, i) => (
+              <li key={`${p.title}-${i}`}>
+                {p.title} — {p.pic ? (names.get(p.pic) ?? p.pic) : "no PIC (add it by hand)"}
+                {p.dueOn ? `, due ${p.dueOn}` : ""}{" "}
+                {p.pic ? (
+                  <Button size="sm" variant="primary" icon="plus" onClick={() => add(p, i)}>
+                    Add
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Modal>
+    </>
+  );
+}

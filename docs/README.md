@@ -23,17 +23,33 @@ and link to it from the others.
 
 ## Feature docs index
 
-| Feature                                                  | Doc                                                                                         |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Member profiles                                          | [packages/domain/docs/members.md](../packages/domain/docs/members.md)                       |
-| Database                                                 | [packages/db/docs/database.md](../packages/db/docs/database.md)                             |
-| Authentication (Google, email/password, passkeys, reset) | [packages/auth/docs/authentication.md](../packages/auth/docs/authentication.md)             |
-| Authorization                                            | [packages/permissions/docs/authorization.md](../packages/permissions/docs/authorization.md) |
-| Request security                                         | [packages/security/docs/request-security.md](../packages/security/docs/request-security.md) |
-| Audit logging                                            | [packages/audit/docs/audit-logging.md](../packages/audit/docs/audit-logging.md)             |
-| Admin side panel                                         | [apps/admin/docs/side-panel.md](../apps/admin/docs/side-panel.md)                           |
-| Design tokens (colours, Poppins type scale, spacing)     | [packages/ui/docs/design-tokens.md](../packages/ui/docs/design-tokens.md)                   |
-| Error pages (401, 403, 404, 500)                         | [packages/ui/docs/error-pages.md](../packages/ui/docs/error-pages.md)                       |
+| Feature                                                                | Doc                                                                                         |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Public site (frame, language ID/EN, Home, News, About, Terms, Privacy) | [apps/web/docs/public-site.md](../apps/web/docs/public-site.md)                             |
+| News CMS (Article page, publish/schedule, rich text, preview)          | [packages/domain/docs/content.md](../packages/domain/docs/content.md)                       |
+| Member profiles                                                        | [packages/domain/docs/members.md](../packages/domain/docs/members.md)                       |
+| Forms (versioned questions, Forms page)                                | [packages/domain/docs/forms.md](../packages/domain/docs/forms.md)                           |
+| Recruitment (Oprec set-up, applying, seats)                            | [packages/domain/docs/recruitment.md](../packages/domain/docs/recruitment.md)               |
+| Documents (letter numbers, desks, verification, certificates)          | [packages/domain/docs/documents.md](../packages/domain/docs/documents.md)                   |
+| Programmes (OKR, work programmes, LPJ, report card)                    | [packages/domain/docs/programs.md](../packages/domain/docs/programs.md)                     |
+| Finance (money, requests and desks, cash book, cash report)            | [packages/domain/docs/finance.md](../packages/domain/docs/finance.md)                       |
+| Meetings (attendance codes, reminders, minutes)                        | [packages/domain/docs/meetings.md](../packages/domain/docs/meetings.md)                     |
+| Short links (goppi.id, s.id, silent and interactive modes)             | [packages/domain/docs/links.md](../packages/domain/docs/links.md)                           |
+| Zoom (bookings, capacity, rooms, webhooks, recordings)                 | [packages/domain/docs/zoom.md](../packages/domain/docs/zoom.md)                             |
+| Tasks and calendar (My Tasks, unit boards, .ics feed)                  | [packages/domain/docs/tasks.md](../packages/domain/docs/tasks.md)                           |
+| Image uploads (5 MB, WebP, thumbnail, cPanel disk)                     | [packages/db/docs/files.md](../packages/db/docs/files.md)                                   |
+| Database                                                               | [packages/db/docs/database.md](../packages/db/docs/database.md)                             |
+| Authentication (Google, email/password, passkeys, reset)               | [packages/auth/docs/authentication.md](../packages/auth/docs/authentication.md)             |
+| Authorization                                                          | [packages/permissions/docs/authorization.md](../packages/permissions/docs/authorization.md) |
+| Request security                                                       | [packages/security/docs/request-security.md](../packages/security/docs/request-security.md) |
+| Audit logging                                                          | [packages/audit/docs/audit-logging.md](../packages/audit/docs/audit-logging.md)             |
+| Messaging (message log, e-mail, Email page)                            | [apps/admin/docs/messaging.md](../apps/admin/docs/messaging.md)                             |
+| Cron jobs (cPanel) and incoming webhooks                               | [apps/admin/docs/cron.md](../apps/admin/docs/cron.md)                                       |
+| Admin side panel                                                       | [apps/admin/docs/side-panel.md](../apps/admin/docs/side-panel.md)                           |
+| Admin page pattern (list, add/edit form, confirm, labels)              | [apps/admin/docs/admin-shell.md](../apps/admin/docs/admin-shell.md)                         |
+| Role Manager: people, invites, roles (staff second sign-in method)     | [apps/admin/docs/users-and-roles.md](../apps/admin/docs/users-and-roles.md)                 |
+| Design tokens (colours, Poppins type scale, spacing)                   | [packages/ui/docs/design-tokens.md](../packages/ui/docs/design-tokens.md)                   |
+| Error pages (401, 403, 404, 500)                                       | [packages/ui/docs/error-pages.md](../packages/ui/docs/error-pages.md)                       |
 
 Add a row here when you add a feature doc.
 

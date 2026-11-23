@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { APP_ENVIRONMENTS } from "../environments";
 
-/**
- * Reusable env fragments. Apps compose only the fragments they need, so an app
- * cannot accidentally receive (or require) another app's secrets.
- */
 const nonEmpty = z.string().trim().min(1);
 const optionalUrl = z.url().optional();
 
@@ -13,16 +9,25 @@ export const baseEnv = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-/** Firebase Admin SDK (server only). Credentials are optional so that
- * Workload Identity Federation / ADC can be used instead of a JSON key. */
 export const firebaseAdminEnv = z.object({
   FIREBASE_PROJECT_ID: nonEmpty,
   FIREBASE_CLIENT_EMAIL: z.email().optional(),
   FIREBASE_PRIVATE_KEY: nonEmpty.optional(),
-  FIREBASE_STORAGE_BUCKET: nonEmpty.optional(),
 });
 
-/** Firebase web config. Public by design — never put secrets here. */
+export const databaseEnv = z.object({
+  DATABASE_URL: nonEmpty.regex(/^mysql:\/\//, "mysql://user:password@localhost:3306/database"),
+  DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(20).default(5),
+});
+
+export const filesEnv = z.object({
+  FILE_STORAGE_DIR: z
+    .string()
+    .trim()
+    .regex(/^(\/|[A-Za-z]:[\\/])/, "an absolute path (/home/… or C:\\…)")
+    .optional(),
+});
+
 export const firebaseClientEnv = z.object({
   NEXT_PUBLIC_FIREBASE_API_KEY: nonEmpty,
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: nonEmpty,
@@ -31,12 +36,7 @@ export const firebaseClientEnv = z.object({
 });
 
 export const sessionEnv = z.object({
-  /** Session lifetime in hours (max 12 by policy). Use the same value in web, admin and shop. */
   SESSION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(12).default(8),
-  /**
-   * Parent domain on which the ONE session cookie is shared by web, admin and shop
-   * (e.g. `ppiasiania.id`). Empty = host-only (local development).
-   */
   SESSION_COOKIE_DOMAIN: z
     .string()
     .trim()
@@ -53,9 +53,64 @@ export const sessionEnv = z.object({
     .optional(),
 });
 
-/** HMAC key for per-IP rate-limit counters. Required in staging/production (checked at startup). */
+export const cronEnv = z.object({
+  CRON_SECRET: nonEmpty.min(32).optional(),
+});
+
 export const rateLimitEnv = z.object({
   RATE_LIMIT_SECRET: nonEmpty.min(32).optional(),
+});
+
+export const messagingEnv = z.object({
+  MESSAGING_MODE: z.enum(["log", "live"]).default("log"),
+  MESSAGING_TEST_RECIPIENTS: z
+    .string()
+    .default("")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    )
+    .pipe(z.array(z.union([z.email(), z.string().regex(/^\+[1-9]\d{6,14}$/)]))),
+});
+
+export const wahaEnv = z.object({
+  WAHA_BASE_URL: optionalUrl,
+  WAHA_API_KEY: z.string().min(1).optional(),
+  WAHA_SESSION: z.string().min(1).default("default"),
+  WAHA_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // The bot's own number: members message it to link their WhatsApp (wa.me link on the profile page).
+  WAHA_BOT_NUMBER: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "E.164, e.g. +6281234567890")
+    .optional(),
+});
+
+export const shortLinkEnv = z.object({
+  GOPPI_BASE_URL: optionalUrl,
+  GOPPI_API_KEY: z.string().min(1).optional(),
+  SHORTLINK_API_KEY: z.string().min(1).optional(),
+});
+
+export const driveEnv = z.object({
+  GOOGLE_DRIVE_CLIENT_EMAIL: z.email().optional(),
+  GOOGLE_DRIVE_PRIVATE_KEY: z.string().min(1).optional(),
+  GOOGLE_DRIVE_IMPERSONATE: z.email().optional(),
+  GOOGLE_DRIVE_FOLDER_ID: z.string().min(1).optional(),
+});
+
+export const whatsappCloudEnv = z.object({
+  WHATSAPP_CLOUD_PHONE_NUMBER_ID: z.string().min(1).optional(),
+  WHATSAPP_CLOUD_TOKEN: z.string().min(1).optional(),
+  WHATSAPP_CLOUD_APP_SECRET: z.string().min(1).optional(),
+  WHATSAPP_CLOUD_VERIFY_TOKEN: z.string().min(16).optional(),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+});
+
+export const anthropicEnv = z.object({
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_MODEL: z.string().min(1).optional(),
 });
 
 export const resendEnv = z.object({
@@ -80,6 +135,30 @@ export const zoomEnv = z.object({
   ZOOM_ACCOUNT_ID: nonEmpty,
   ZOOM_CLIENT_ID: nonEmpty,
   ZOOM_CLIENT_SECRET: nonEmpty,
+  ZOOM_HOST_USER: nonEmpty,
+  ZOOM_WEBHOOK_SECRET_TOKEN: nonEmpty,
+});
+
+export const newsletterEnv = z.object({
+  SUBSCRIBER_HASH_SECRET: nonEmpty.min(32),
+  LINK_SIGNING_SECRET: nonEmpty.min(32),
+});
+
+export const documentsEnv = z.object({
+  VERIFICATION_HOST: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/, "a host name such as verif.ppiasiania.id")
+    .optional(),
+});
+
+export const fieldEncryptionEnv = z.object({
+  FIELD_ENCRYPTION_KEY: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, "32 random bytes, base64 (44 characters)")
+    .optional(),
 });
 
 export const calendarEnv = z.object({
@@ -88,7 +167,6 @@ export const calendarEnv = z.object({
 
 export const gatewayEnv = z.object({
   PORT: z.coerce.number().int().positive().default(3003),
-  /** Pepper mixed into API-key hashes. Rotating it invalidates every key. */
   API_KEY_PEPPER: nonEmpty.min(32),
   GATEWAY_DB_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(20).default(5),
   GATEWAY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),

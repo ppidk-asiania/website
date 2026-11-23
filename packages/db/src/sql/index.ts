@@ -1,0 +1,280 @@
+import { getDatabase, type Database } from "./store";
+import type { DatabaseRole } from "../roles";
+
+export {
+  StoredTimestamp,
+  getDatabase,
+  type CollectionReference,
+  type Database,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Query,
+  type QueryDocumentSnapshot,
+  type Transaction,
+} from "./store";
+export { createSqlRateLimitStore } from "./rate-limit";
+export {
+  createSqlAuditStore,
+  createSqlAuditWriter,
+  type AuditListQuery,
+  type SqlAuditStore,
+  type SqlAuditWriter,
+  type RevertibleCollections,
+  type RevertOutcome,
+} from "./audit";
+export { getDocumentsByIds } from "./batch";
+export { deleteExpired, EXPIRING_COLLECTIONS } from "./expiry";
+export {
+  createSqlPageViewStore,
+  periodsOf,
+  SITE_PAGE,
+  type PageViewHit,
+  type PageViewKind,
+  type PageViewStat,
+  type SqlPageViewStore,
+} from "./page-views";
+export { nextNumbers } from "./counters";
+export { createSqlSignatureStore, type SqlSignatureStore } from "./signatures";
+export {
+  createSqlIncomingStore,
+  incomingSnapshot,
+  type SqlIncomingStore,
+  type IncomingAudit,
+} from "./incoming";
+export {
+  createSqlLetterSettingsStore,
+  createSqlLetterStore,
+  createSqlLetterTypeStore,
+  createSqlVerificationReader,
+  createSqlLetterArchive,
+  letterSnapshot,
+  letterTypeSnapshot,
+  type ArchiveGuest,
+  type SqlLetterArchive,
+  type SqlLetterSettingsStore,
+  type SqlLetterStore,
+  type SqlLetterTypeStore,
+  type SqlVerificationReader,
+  type LetterAudit,
+  type LetterListQuery,
+} from "./letters";
+export {
+  createSqlCertificateStore,
+  type CertificateAudit,
+  type SqlCertificateStore,
+} from "./certificates";
+export {
+  cashEntrySnapshot,
+  createSqlFinanceStore,
+  financeSnapshot,
+  type CashAudit,
+  type FinanceAudit,
+  type FinanceListQuery,
+  type SqlFinanceStore,
+} from "./finance";
+export { createSqlPasskeyStore } from "./passkeys";
+export {
+  checkFilePath,
+  createDbFileStorage,
+  createDiskFileStorage,
+  fileContentType,
+  FILE_LINK_PURPOSE,
+  type FileVisibility,
+} from "./storage";
+export { createSqlWebhookEventStore } from "./webhooks";
+export {
+  createSqlContactReader,
+  createSqlGroupNoticeReader,
+  createSqlMessageLog,
+  type SqlContactReader,
+  type SqlMessageLog,
+} from "./messages";
+export {
+  createSqlSubscriberReader,
+  createSqlSubscriberStore,
+  subscriberSnapshot,
+  type SqlSubscriberReader,
+  type SqlSubscriberStore,
+  type SubscriberRow,
+} from "./subscribers";
+export {
+  campaignSnapshot,
+  createSqlCampaignStore,
+  createSqlCampaignWebStore,
+  type CampaignFields,
+  type SqlCampaignStore,
+  type SqlCampaignWebStore,
+} from "./campaigns";
+export {
+  chapterSnapshot,
+  createSqlChapterReader,
+  createSqlChapterStore,
+  type ChapterFields,
+  type SqlChapterReader,
+  type SqlChapterStore,
+} from "./chapters";
+export {
+  appointmentSnapshot,
+  createSqlAppointmentStore,
+  type AppointmentAudit,
+  type SqlAppointmentStore,
+} from "./appointments";
+export { createSqlMemberProfileStore, type SqlMemberProfileStore } from "./member-profiles";
+export {
+  createSqlUniversityStore,
+  type SqlUniversityStore,
+  type UniversityDecision,
+} from "./universities";
+export {
+  createSqlOrgUnitStore,
+  orgUnitSnapshot,
+  type SqlOrgUnitStore,
+  type OrgUnitAudit,
+  type OrgUnitFields,
+} from "./org-units";
+export {
+  createSqlPeriodStore,
+  periodSnapshot,
+  type SqlPeriodStore,
+  type PeriodFields,
+  type PeriodStatusAudit,
+} from "./periods";
+export {
+  albumSnapshot,
+  createSqlGalleryReader,
+  createSqlGalleryStore,
+  type AlbumFields,
+  type SqlGalleryReader,
+  type SqlGalleryStore,
+} from "./gallery";
+export {
+  createSqlEventReader,
+  createSqlEventStore,
+  createSqlRegistrationStore,
+  eventSnapshot,
+  type EventFields,
+  type SqlEventReader,
+  type SqlEventStore,
+  type SqlRegistrationStore,
+} from "./events";
+export {
+  contentSnapshot,
+  createSqlNewsReader,
+  createSqlContentStore,
+  type ContentFields,
+  type SqlContentStore,
+  type SqlNewsReader,
+} from "./content";
+export {
+  createSqlFormStore,
+  createSqlFormWebStore,
+  formSnapshot,
+  type OwnFormData,
+  type SignedInAccount,
+  type SqlFormStore,
+  type SqlFormWebStore,
+  type SubmitOutcome,
+  type FormAudit,
+  type FormFields,
+  type FormSettings,
+} from "./forms";
+export {
+  createSqlPersonalityStore,
+  type SqlPersonalityStore,
+  type PersonalityResult,
+} from "./personality";
+export {
+  applicationSnapshot,
+  createSqlApplicationStore,
+  createSqlInterviewStore,
+  createSqlRecruitmentStore,
+  createSqlRecruitmentWebStore,
+  recruitmentSnapshot,
+  toApplication,
+  type ApplicationAudit,
+  type ApplyOutcome,
+  type Decision,
+  type InterviewBooking,
+  type SqlApplicationStore,
+  type SqlInterviewStore,
+  type SqlRecruitmentStore,
+  type SqlRecruitmentWebStore,
+  type RecruitmentAudit,
+  type RecruitmentFields,
+} from "./recruitment";
+export {
+  createSqlAccountStore,
+  createSqlRoleStore,
+  createSqlUserStore,
+  inviteId,
+  type SqlAccountStore,
+  type SqlRoleStore,
+} from "./users";
+export {
+  createSqlObjectiveStore,
+  createSqlProgramStore,
+  createSqlLpjStore,
+  createSqlPeriodReport,
+  type SqlPeriodReport,
+  lpjSnapshot,
+  type LpjAudit,
+  type SqlLpjStore,
+  objectiveSnapshot,
+  programSnapshot,
+  type CheckinAudit,
+  type ObjectiveAudit,
+  type ObjectiveFields,
+  type ProgramAudit,
+  type RevisionAudit,
+  type ProgramFields,
+  type SqlObjectiveStore,
+  type SqlProgramStore,
+} from "./programs";
+export {
+  createSqlActionItemStore,
+  createSqlMeetingStore,
+  meetingSnapshot,
+  type ActionItemAudit,
+  type SqlActionItemStore,
+  type MeetingAudit,
+  type MeetingFields,
+  type SqlMeetingStore,
+} from "./meetings";
+export {
+  createSqlShortLinkStore,
+  type ShortLinkAudit,
+  type ShortLinkFields,
+  type SqlShortLinkStore,
+} from "./links";
+export {
+  createSqlZoomStore,
+  zoomSnapshot,
+  type SqlZoomStore,
+  type ZoomAudit,
+  type ZoomRequestFields,
+} from "./zoom";
+export { createSqlAiStore, type SqlAiStore } from "./ai";
+export { createSqlAnalysisStore, type SqlAnalysisStore } from "./analyses";
+export { createSqlSurveyStore, type SqlSurveyStore } from "./surveys";
+export {
+  createSqlConversationStore,
+  type Conversation,
+  type SqlConversationStore,
+} from "./conversations";
+export { createSqlTaskShareStore, type SqlTaskShareStore } from "./task-shares";
+export { createSqlCalendarStore, type SqlCalendarStore } from "./calendar";
+export { createSqlChapterRecordStore, type SqlChapterRecordStore } from "./chapter-records";
+
+if ("window" in globalThis) {
+  throw new Error("@website/db must never be bundled into browser code.");
+}
+
+export interface DatabaseRoleConfig {
+  readonly role: DatabaseRole;
+  readonly url: string;
+  readonly connectionLimit?: number | undefined;
+}
+
+export function getDatabaseForRole(config: DatabaseRoleConfig): Database {
+  return getDatabase({ url: config.url, connectionLimit: config.connectionLimit });
+}

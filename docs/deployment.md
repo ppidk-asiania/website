@@ -2,22 +2,42 @@
 
 ## Boundaries
 
-Four Vercel projects from one repository (see `infrastructure/vercel/README.md`). Each has its
-own domain, environment variables, service account and rollback. `turbo-ignore` skips builds for
-apps whose dependency graph did not change. To host on cPanel instead, see [cPanel](#cpanel).
+All four apps run on **DomaiNesia cPanel** (Setup Node.js App = CloudLinux + Passenger), one
+Node.js app per deployable, each with its own (sub)domain, environment variables, Firebase service
+account and restart. There are no preview deployments.
+
+| App     | Domain             | Built where                                | Runs             |
+| ------- | ------------------ | ------------------------------------------ | ---------------- |
+| web     | main domain        | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
+| admin   | `admin.` subdomain | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
+| shop    | `shop.` subdomain  | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
+| gateway | `api.` subdomain   | on the server (cPanel Git Version Control) | `dist/server.js` |
+
+Shared hosts often have a glibc older than the Next.js compiler needs (the build fails with
+`GLIBC_2.29 not found`), so web, admin and shop are built in GitHub Actions and uploaded; only the
+gateway (plain Node, tsup) is built on the server.
+
+What Passenger means for the code:
+
+- Passenger may stop an idle app and may run **more than one process**. Nothing that must be
+  shared lives in memory (rate-limit counters are in MySQL); small per-process caches are fine.
+- No background workers or timers: work without a visitor runs through [cron jobs](#scheduled-jobs-cpanel-cron-jobs).
+- `"use cache"` entries live in one process, so `revalidateTag()` clears only the process that ran
+  it. Public lists use `cacheLife("minutes")` at most; revalidation is a speed-up, not the guarantee.
+- Restart = touch `tmp/restart.txt` in the app root (`scripts/deploy-cpanel.sh` does it).
 
 ## Branches and flow
 
 There are exactly three branches. **Do not create other branches** (no feature/fix branches).
 
-| Branch    | Purpose                               | Deploys to                          | Firebase project     |
-| --------- | ------------------------------------- | ----------------------------------- | -------------------- |
-| `dev`     | All day-to-day work is committed here | Vercel Preview (dev branch)         | `ppidk-website-prod` |
-| `staging` | Release candidate, tested by the team | Vercel Staging (custom environment) | `ppidk-website-prod` |
-| `prod`    | What is live (default branch)         | Vercel Production                   | `ppidk-website-prod` |
+| Branch    | Purpose                               | Deploys to                                | Firebase project     |
+| --------- | ------------------------------------- | ----------------------------------------- | -------------------- |
+| `dev`     | All day-to-day work is committed here | nothing (check locally: `pnpm dev`, e2e)  | `ppidk-website-prod` |
+| `staging` | Release candidate, tested by the team | optional `staging.*` apps (same workflow) | `ppidk-website-prod` |
+| `prod`    | What is live (default branch)         | cPanel production apps                    | `ppidk-website-prod` |
 
 ```text
-commit + push to dev ─PR─▶ staging ─PR─▶ prod
+commit + push to dev ─PR─▶ staging ─PR─▶ prod ─▶ GitHub Actions (web, admin, shop) + cPanel Git (gateway)
 CI runs on every push and PR: format, lint+boundaries, typecheck, test, build, secrets, e2e
 ```
 
@@ -28,64 +48,14 @@ CI runs on every push and PR: format, lint+boundaries, typecheck, test, build, s
 - GitHub protection: `staging` and `prod` require a PR + the **CI** check (plus ≥ 1 approval on
   `prod`); all three block force pushes and deletion.
 - Dependency updates are done by hand (no Dependabot version-update branches).
+- Every environment uses the live Firebase project: test with drafts and your own account, and keep
+  `MESSAGING_MODE=log` outside production.
 
-## Rollback
-
-- **Code**: Vercel instant rollback per app.
-- **Data**: changes are expand/contract — add new fields/collections first, ship code that handles
-  both shapes, remove the old shape in a later release. Never ship a destructive data change in
-  the same deploy as the code that needs it. Take a backup/PITR note before every migration.
-
-## Migrations
-
-Firestore has no schema migrations: use versioned scripts (`infrastructure/` in a later phase)
-plus a `schemaVersion` field and tolerant readers.
-
-## Feature flags
-
-Start with a server-side flags module/config document. Adopt a flag service only when
-percentage rollouts are needed.
-
-## Secrets
-
-Vercel environment variables (Sensitive), separate per environment. Prefer Vercel OIDC →
-GCP Workload Identity Federation over JSON keys. Rotate on schedule and when anyone leaves.
-
-## Environment set-up (owner checklist)
-
-One-time console work before the organisation-management features are built. Tick each item
-here when it is done; never write secret values in this file (they live in Vercel and the
-password manager).
-
-- [ ] Vercel **Pro** plan for the admin project (minute-level cron, DEC-4 in `architecture.md`).
-- [ ] Firebase Authentication: **multi-factor authentication** enabled (needs the Identity
-      Platform upgrade) — staff roles require MFA.
-- [ ] Firebase Storage: default bucket exists; its name is in `FIREBASE_STORAGE_BUCKET`.
-- [ ] Firestore: **point-in-time recovery**, **scheduled backups** and **delete protection**
-      enabled (`disaster-recovery.md`).
-- [ ] Per-app service accounts, or Vercel OIDC → GCP Workload Identity Federation, for web,
-      admin, shop and gateway (see "Secrets" above).
-- [ ] Generate `CRON_SECRET`, `FIELD_ENCRYPTION_KEY` and `SIGNED_LINK_SECRET` and store them in
-      the password manager. They are added to Vercel when the step that uses them is built.
-
-## cPanel
-
-Alternative to Vercel for cPanel hosting (e.g. Domanesia). It has two parts, because shared hosts
-often have a glibc older than the Next.js compiler needs (the build fails with
-`GLIBC_2.29 not found`), so web, admin and shop cannot be built on the server:
-
-- **web, admin, shop**: GitHub Actions (`.github/workflows/deploy-cpanel.yml`, on every push to
-  `prod`) builds them with `NEXT_OUTPUT=standalone`, which makes each emit a self-contained
-  `server.js`, then `scripts/deploy-cpanel.sh apps` uploads each one over SSH to `~/apps/<app>`
-  and restarts it. Without `NEXT_OUTPUT` nothing changes for Vercel or `pnpm start`.
-- **gateway**: cPanel **Git Version Control** pulls `prod`; `.cpanel.yml` then runs
-  `scripts/deploy-cpanel.sh gateway`, which builds it on the server and restarts it.
+## One-time setup
 
 Needs: **Setup Node.js App** offering Node 22.12 or newer, and a host that accepts SSH logins from
 GitHub's servers. Check the Node path with `ls /opt/alt` in cPanel Terminal and fix the `PATH` in
 `.cpanel.yml` if it differs.
-
-One-time setup:
 
 1. **SSH Access** → generate a key with **no passphrase** → Authorize. Add its public key to
    GitHub → repository → Settings → Deploy keys (read-only). The server uses it to pull.
@@ -102,7 +72,7 @@ One-time setup:
 | `CPANEL_SSH_PORT`    | Variable | only if the host does not use port 22                |
 | `CPANEL_KNOWN_HOSTS` | Variable | output of `ssh-keyscan -p <port> <server host name>` |
 
-Also add these five as **Variables** (public values, the same as in Vercel): `NEXT_PUBLIC_FIREBASE_API_KEY`,
+Also add these five as **Variables** (public values, not secret): `NEXT_PUBLIC_FIREBASE_API_KEY`,
 `NEXT_PUBLIC_FIREBASE_APP_ID`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID` and
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`. The browser bundles are built with them.
 
@@ -121,7 +91,26 @@ Also add these five as **Variables** (public values, the same as in Vercel): `NE
    [environment.md](environment.md)): `APP_ENV=production`, real `https://` URLs, the same
    `SESSION_COOKIE_DOMAIN` for web, admin and shop. Never put them in the repository.
 
-Every release: merge to `prod` (PR from `staging`, as above).
+8. **SSL/TLS Status** → run AutoSSL for the main domain and the `admin.`, `shop.` and `api.`
+   subdomains (webhooks and cron calls need a valid certificate on `admin.`).
+
+9. **MySQL Databases** (once): create one database (e.g. `<cpanel>_ppidk`) and one user per app
+   (`<cpanel>_web`, `<cpanel>_admin`, `<cpanel>_shop`), each added to the database with ALL
+   PRIVILEGES (tables are created on first use). Their URLs go into `DATABASE_URL` of each app
+   (`mysql://<user>:<password>@localhost:3306/<database>`). Keep the passwords in the password manager.
+10. **Files** (nothing to set up): uploads and copied files live in the MySQL `files` collection
+    (`packages/db/docs/files.md`), so they are covered by the database backup. `FILE_STORAGE_DIR`
+    is no longer read by web, admin or the ops scripts.
+11. **Cron Jobs**: add the `expire` job (once a day) next to the others (`apps/admin/docs/cron.md`),
+    and the nightly backup lines from [disaster-recovery.md](disaster-recovery.md).
+12. **Moving existing data off Firestore** (once, only if Firestore still holds data): in cPanel
+    Terminal in `~/repositories/2026`, run `infrastructure/scripts/copy-firestore-to-mysql.mjs`
+    (header of the script: dry run, read `copy-report.json`, then `--files --apply`) while nobody
+    edits, then restart web and admin. Spot-check news, a member profile and an uploaded image.
+
+## Every release
+
+Merge to `prod` (PR from `staging`, as above).
 
 - web, admin, shop deploy by themselves: watch **Actions → Deploy cPanel**. To redeploy without a
   new commit, use **Run workflow** on `prod`.
@@ -129,12 +118,142 @@ Every release: merge to `prod` (PR from `staging`, as above).
   **Deploy HEAD Commit**. Never edit files in the server copy: cPanel refuses to deploy a
   repository with uncommitted changes.
 
-Rollback: revert the change on `prod` through a PR; the workflow redeploys web, admin and shop,
-then deploy the gateway again.
-
 Behind Passenger, `request.url` is the internal address (`http://localhost:<port>`), so the
 origin check in `packages/security/src/request-guard.ts` compares the `Origin` header with the
 `Host`/`X-Forwarded-Host` header instead. A 403 on `/api/session` after sign-in means that check failed.
 
-There are no Preview or Staging deployments on cPanel; test on `dev`/`staging` locally or on Vercel.
-Scheduled jobs (DEC-4) use Vercel Cron; on cPanel they need **Cron Jobs** calling `/cron/<job>`.
+## Rollback
+
+- **Code**: revert the change on `dev`, promote it to `prod` through the usual PRs; the workflow
+  redeploys web, admin and shop, then deploy the gateway again (Git Version Control → Deploy HEAD
+  Commit). For an emergency, **Run workflow** on an older `prod` commit redeploys web, admin and shop.
+- **Data**: changes are expand/contract — add new fields/collections first, ship code that handles
+  both shapes, remove the old shape in a later release. Never ship a destructive data change in
+  the same deploy as the code that needs it. Take a backup/PITR note before every migration.
+
+## Scheduled jobs (cPanel Cron Jobs)
+
+Read-time rules come first (offer expiry, scheduled news visibility, overdue deadlines need no
+schedule). Work that must happen without a visitor (reminders, retries, newsletter sends) is a job
+in admin at `GET /cron/<job>`, called by **cPanel → Cron Jobs**, one line per job:
+
+```bash
+curl -fsS --max-time 50 -H "Authorization: Bearer $(cat ~/.config/ppidk/cron-secret)" https://admin.<domain>/cron/<job> >/dev/null
+```
+
+- The secret file holds `CRON_SECRET`; create it once with `mkdir -p ~/.config/ppidk`, write the
+  value, then `chmod 600 ~/.config/ppidk/cron-secret`. Never put the secret in the repository or in
+  the crontab line itself.
+- Each job is idempotent, handles one bounded batch per call (target < 30 s) and returns a JSON
+  summary; the next call continues. The job list and their crontab lines are in
+  `apps/admin/docs/cron.md` (call `noop` once after set-up to check the secret and the route).
+- The shortest interval the hosting plan allows is in [Limits](#limits).
+
+## Logs
+
+Apps write structured JSON lines (`@website/observability`) to stdout/stderr. Passenger stores them
+in `stderr.log` in each app root (cPanel → File Manager, or `tail -f` in Terminal). There is no log
+drain and no database log viewer yet (DEC-9). Never log secrets or personal data; the logger
+redacts known keys.
+
+## Monitoring
+
+web and admin answer `GET /health`, the gateway `GET /health` and `GET /v1/health`, all with
+`{"status":"ok"}` and no database call. Uptime checks for all four hosts are listed in
+`infrastructure/monitoring/checks.example.json`.
+
+## Limits
+
+Filled in by the owner from the DomaiNesia plan (step 0.3). Steps that stream big files, render
+big PDFs or send in batches must stay inside them.
+
+| Limit                                 | Value                                                                |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Memory per account / per process      | 3 GB per account (Hosting 3.0 Monster, 2026-10-31)                   |
+| CPU                                   | 100% (one core)                                                      |
+| Entry processes (concurrent requests) | 20                                                                   |
+| Number of processes                   | 200                                                                  |
+| Maximum request time                  | _tbd_                                                                |
+| Shortest cron interval                | _tbd_                                                                |
+| Node.js versions offered (`/opt/alt`) | _tbd_                                                                |
+| glibc version (`ldd --version`)       | _tbd_                                                                |
+| Passenger processes per app           | _tbd_                                                                |
+| MySQL                                 | 8.0.46; databases 7.94 GB of the 12 GB disk; I/O 150 MB/s, 6000 IOPS |
+
+## Migrations
+
+Collections are MySQL tables with a JSON `data` column, created on first use from
+`packages/db/src/sql/collections.ts`, so a new collection needs no migration. Data changes use
+versioned scripts in `infrastructure/scripts/` (`--dry-run` first) plus a `schemaVersion` field and
+tolerant readers. Take a `mysqldump` before every data change.
+
+## Feature flags
+
+Start with a server-side flags module/config document. Adopt a flag service only when
+percentage rollouts are needed.
+
+## Secrets
+
+- Runtime values live in each app's **Setup Node.js App** screen; `NEXT_PUBLIC_*` values (public,
+  baked into browser bundles) are GitHub Actions **Variables**. Everything secret is also kept in
+  the password manager.
+- Each app uses its own MySQL user (`DATABASE_URL`) and its own Firebase service account
+  (`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, Authentication only) with the narrowest IAM role
+  it needs. Rotate passwords and keys on schedule and when anyone leaves.
+- Every new variable: schema fragment (`packages/config/src/env/schemas.ts`) + `.env.example`
+  placeholder + a row in [environment.md](environment.md).
+
+## Environment set-up (owner checklist)
+
+One-time console work. Tick each item here when it is done; never write secret values in this
+file (they live in the cPanel app screens and the password manager).
+
+- [ ] DomaiNesia: fill in [Limits](#limits) from the hosting plan.
+- [ ] On the host: `ldd --version`, `ls /opt/alt`; after the first deploy that ships image uploads,
+      `node -e "require('sharp')"` in the admin app root (if it fails, install the WebAssembly build of sharp:
+      `packages/db/docs/files.md` → Configuration).
+- [ ] Firebase Authentication: **multi-factor authentication** enabled (Identity Platform upgrade) —
+      staff roles require a second sign-in method.
+- [ ] MySQL database + one user per app, `FILE_STORAGE_DIR` folder, cron `expire` (One-time setup
+      steps 9–11).
+- [ ] Nightly `mysqldump` + files backup and a weekly off-server copy
+      ([disaster-recovery.md](disaster-recovery.md)).
+- [ ] Existing Firestore data and Storage files copied once (One-time setup step 12).
+- [ ] One Firebase service account per app (web, admin, shop) for Authentication only; keys only in
+      that app's Setup Node.js App screen and the password manager.
+- [ ] Generate `CRON_SECRET`, `FIELD_ENCRYPTION_KEY` and `SIGNED_LINK_SECRET` and store them in the
+      password manager; they are added to the app screens when the step that uses them is built.
+- [ ] Decide the main domain name and whether to run a `staging.*` set of apps (DEC-17); then
+      DNS + AutoSSL for the main domain, `admin.`, `shop.` and `api.` (later `verif.ppiasiania.id`).
+- [ ] First superadmin granted (`infrastructure/scripts/grant-superadmin.mjs`, see
+      `packages/auth/docs/authentication.md` → Account lifecycle).
+- [ ] People and the organisation imported from PPIDK once (block J): freeze the PPIDK people
+      screens, export the tables as TSV, set "Roles from appointments" (Role Manager → Edit Role), then
+      `infrastructure/scripts/import-ppidk-people.mjs --dir <folder>` (dry run, read
+      `import-report.json`, then `--apply`; see `packages/domain/docs/members.md` → Import from
+      PPIDK). Spot-check 10 people; re-grant the manual roles the report lists.
+- [ ] Forms and recruitment imported from PPIDK after the people import: freeze those PPIDK
+      screens, export the tables as TSV, run
+      `infrastructure/scripts/import-ppidk-recruitment.mjs --dir <folder> --files <storage>`
+      (dry run, read `import-recruitment-report.json`, then `--apply`; see
+      `packages/domain/docs/recruitment.md` → Import from PPIDK).
+- [ ] Letters, certificates and the agenda book imported from PPIDK after the people import:
+      freeze the PPIDK letter screens, export the tables as TSV, download the archived PDFs from
+      R2, run `infrastructure/scripts/import-ppidk-documents.mjs --dir <folder> --files <pdfs>`
+      (dry run, read `import-documents-report.json`, then `--apply`; see
+      `packages/domain/docs/documents.md` → Import from PPIDK). Open a few PPIDK codes on the
+      verification host before switching it over.
+- [ ] OKR, work programmes, LPJ and finance imported from PPIDK after the people import: freeze
+      the PPIDK proker and finance screens, export the tables as TSV, download the finance PDFs
+      from R2, run
+      `infrastructure/scripts/import-ppidk-programs.mjs --dir <folder> --files <pdfs>` (dry
+      run, read `import-programs-report.json`, then `--apply`; see
+      `packages/domain/docs/programs.md` and `finance.md` → Import from PPIDK). Compare the period
+      report card and the cash balance with PPIDK before switching it off.
+- [ ] Before the first letter is issued: add `verif.ppiasiania.id` as an extra domain of the web
+      app (cPanel → Domains + AutoSSL, DNS record), set `VERIFICATION_HOST` to it on web AND admin.
+- [ ] Personal signatures: generate `FIELD_ENCRYPTION_KEY` once (`docs/environment.md`), set the
+      SAME value on web AND admin, keep a copy offline (losing it loses every stored signature).
+- [ ] Universities imported once the PPI chapters are active
+      (`infrastructure/scripts/import-ror-universities.mjs`, dry run first; see
+      `packages/domain/docs/members.md` → Universities). Run again when chapters are added.

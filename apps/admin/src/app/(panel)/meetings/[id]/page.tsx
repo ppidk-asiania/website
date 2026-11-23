@@ -1,0 +1,169 @@
+import { notFound } from "next/navigation";
+import { attendanceOpen, attendanceState, meetingStatus } from "@website/domain/meetings";
+import { summaryFolded } from "@website/domain/zoom";
+import { utcToWallTime } from "@website/domain/shared";
+import { inTreeOrder, orgUnitPath, seatLabel } from "@website/domain/organizations";
+import { can } from "@website/permissions";
+import { safeId } from "@website/security/validation";
+import { AccessMessage } from "@/components/access-message";
+import { MeetingPage } from "@/components/meeting-page";
+import { requireAdminViewer } from "@/server/context";
+import { canRunMeeting, canSeeMeeting } from "@/server/meetings";
+import { canApproveMinutes } from "@/server/minutes";
+import { getAdminEnv } from "@/server/env";
+import { adminReads } from "@/server/wiring";
+
+export const instant = false;
+
+export default async function MeetingRoute({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const viewer = await requireAdminViewer(`/meetings/${id}`, "meetings.read");
+  if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
+  const { principal } = viewer;
+  if (!safeId.safeParse(id).success) notFound();
+  const meeting = await adminReads.getMeeting(id);
+  if (!meeting || meeting.deletedAt || !canSeeMeeting(principal, meeting)) notFound();
+  const DAY = 86_400_000;
+  const [units, items, bookings, sessions, appointments] = await Promise.all([
+    adminReads.listOrgUnits(meeting.periodId),
+    adminReads.listActionItems(meeting.id),
+    adminReads.listZoom(
+      new Date(meeting.startsAt.getTime() - DAY),
+      new Date(meeting.startsAt.getTime() + DAY),
+    ),
+    meeting.room.zoomRequestId ? adminReads.zoomSessions([meeting.room.zoomRequestId]) : [],
+    adminReads.listAppointments(meeting.periodId),
+  ]);
+  const summaries = sessions
+    .flatMap((s) => (s.summary ? [s.summary] : []))
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+  const people = await adminReads.getUsers([
+    ...new Set([...meeting.participantIds, ...items.map((i) => i.pic)]),
+  ]);
+  const now = new Date();
+  const status = meetingStatus(meeting, now);
+  const runs = canRunMeeting(principal, meeting);
+  const canEdit =
+    status === "scheduled" && can(principal, "meetings.edit", { orgUnitPath: meeting.orgUnitPath });
+  const name = (uid: string) => people.get(uid)?.name ?? people.get(uid)?.email ?? uid;
+  // PIC candidates after the participants: officers of the meeting's period, with their seat.
+  const officers = new Map<string, { uid: string; name: string; seats: string[] }>();
+  for (const a of appointments) {
+    const unit = units.find((u) => u.id === a.orgUnitId);
+    if (a.status !== "active" || !unit || meeting.participantIds.includes(a.userId)) continue;
+    const officer = officers.get(a.userId) ?? { uid: a.userId, name: a.name, seats: [] };
+    officer.seats.push(seatLabel(a.seat, unit));
+    officers.set(a.userId, officer);
+  }
+  return (
+    <MeetingPage
+      meeting={{
+        id: meeting.id,
+        version: meeting.version,
+        periodId: meeting.periodId,
+        title: meeting.title,
+        description: meeting.description,
+        unitName: units.find((u) => u.id === meeting.orgUnitId)?.name ?? "Whole region",
+        startsAt: meeting.startsAt.toISOString(),
+        endsAt: meeting.endsAt.toISOString(),
+        timeZone: meeting.timeZone,
+        status,
+        started: now.getTime() >= meeting.startsAt.getTime(),
+        externalUrl: meeting.room.externalUrl,
+        zoomRequestId: meeting.room.zoomRequestId,
+        zoomBookings: bookings
+          .filter((b) => b.meetingId === meeting.id && b.status === "approved")
+          .map((b) => ({
+            id: b.id,
+            label: `${b.topic} (${b.shortUrl ?? b.joinUrl ?? "room pending"})`,
+          })),
+        zoomSummaries: summaries.map((s) => ({
+          ...s,
+          at: s.at.toISOString(),
+          folded: summaryFolded(s),
+        })),
+        cancelReason: meeting.cancelReason,
+        agenda: meeting.agenda.map((a) => a.title),
+        agendaItems: meeting.agenda.map((a) => ({ id: a.id, title: a.title })),
+        minutes: meeting.minutes && {
+          notes: { ...meeting.minutes.notes },
+          other: meeting.minutes.other,
+          quorum: meeting.minutes.quorum,
+          source: meeting.minutes.source,
+          approvedAt: meeting.minutes.approvedAt?.toISOString() ?? null,
+          approvedBy: meeting.minutes.approvedBy ? name(meeting.minutes.approvedBy) : null,
+        },
+        actionItems: items.map((i) => ({
+          id: i.id,
+          version: i.version,
+          title: i.title,
+          pic: i.pic,
+          picName: name(i.pic),
+          dueOn: i.dueOn,
+          done: i.doneAt !== null,
+          mine: i.pic === principal.userId,
+        })),
+        participants: meeting.participants.map((p) => ({
+          uid: p.uid,
+          name: name(p.uid),
+          role: p.role,
+          presentAt: meeting.attendance[p.uid]?.at.toISOString() ?? null,
+          method: meeting.attendance[p.uid]?.method ?? null,
+          state: attendanceState(meeting, p.uid, now),
+          note: meeting.attendance[p.uid]?.note ?? "",
+        })),
+        officers: [...officers.values()].map((o) => ({
+          uid: o.uid,
+          name: `${o.name} - ${o.seats.join(", ")}`,
+        })),
+        own:
+          status !== "cancelled" && meeting.participantIds.includes(principal.userId)
+            ? {
+                state: attendanceState(meeting, principal.userId, now),
+                at: meeting.attendance[principal.userId]?.at.toISOString() ?? null,
+                windowOpen: attendanceOpen(meeting, now),
+              }
+            : null,
+        locked: Boolean(meeting.minutes?.approvedAt),
+      }}
+      runs={runs && status !== "cancelled"}
+      canDraft={Boolean(getAdminEnv().ANTHROPIC_API_KEY)}
+      canApprove={status !== "cancelled" && canApproveMinutes(principal, meeting)}
+      edit={
+        canEdit
+          ? {
+              units: [
+                ...(can(principal, "meetings.edit", { orgUnitPath: [] })
+                  ? [{ id: "", name: "Whole region" }]
+                  : []),
+                ...inTreeOrder(units)
+                  .filter(
+                    (u) =>
+                      !u.deletedAt &&
+                      can(principal, "meetings.edit", { orgUnitPath: orgUnitPath(u) }),
+                  )
+                  .map((u) => ({ id: u.id, name: u.name })),
+              ],
+              values: {
+                id: meeting.id,
+                version: meeting.version,
+                title: meeting.title,
+                description: meeting.description,
+                orgUnitId: meeting.orgUnitId,
+                startsAtLocal: utcToWallTime(meeting.startsAt, meeting.timeZone),
+                timeZone: meeting.timeZone,
+                durationMinutes: Math.round(
+                  (meeting.endsAt.getTime() - meeting.startsAt.getTime()) / 60_000,
+                ),
+                agenda: meeting.agenda.map((a) => a.title),
+                participants: meeting.participants.map((p) => ({
+                  email: people.get(p.uid)?.email ?? "",
+                  role: p.role,
+                })),
+              },
+            }
+          : null
+      }
+    />
+  );
+}

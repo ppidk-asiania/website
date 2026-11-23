@@ -9,45 +9,91 @@
   | ------------- | ------------------------------------------ |
   | `registrants` | `export`                                   |
   | `articles`    | `publish`                                  |
-  | `newsletter`  | `send`                                     |
+  | `newsletter`  | `send`, `export`                           |
   | `members`     | `pii` (personal data), `export`, `approve` |
   | `audit`       | `revert`                                   |
   | `shop_orders` | `refund`                                   |
 
   Adding a page or an extra is a reviewed code change (the page is code anyway).
 
-- **Roles** are data. Custom roles live in Firestore (`roles/{id}`: name + page permissions) and
-  are created and edited in the admin **Roles** page. `normalizePermissions()` cleans every
+- **Roles** are data. Custom roles live in MySQL (`roles/{id}`: name + page permissions) and
+  are created and edited in the admin **Role Manager → Edit Role** (with a badge colour). `normalizePermissions()` cleans every
   saved list (unknown entries dropped, edit/extras add read).
-- **Built-in roles** (`SYSTEM_ROLES`, code only, never editable): `superadmin` (every page),
-  `member` (approved member), `user` (every account). A stored role with one of these ids is
-  ignored.
-- **Assignments** in `users/{uid}.roleAssignments`: `{ roleId, scope }`, scope `global` or
-  `{ chapter }`. On each request the server resolves them against the role documents
-  (`resolveAssignments`); an assignment to a deleted role grants nothing.
+- **Built-in roles** (`SYSTEM_ROLES`, code only, never editable): `superadmin` (every page) and
+  `visitor` (every account, no admin pages). A stored role with one of these ids is ignored.
+  An account has one **website role** (`isWebsiteRole`: global, no period, not from an appointment;
+  a new one replaces it) plus any organizational roles (chapter / unit / period / appointment).
+  Every account is a Visitor: `parseAssignments` adds the default role when it is missing and the
+  next account change stores it.
+- **Assignments** in `users/{uid}.roleAssignments`:
+  `{ roleId, scope, periodId, source, revokedAt }`. On each request the server resolves them
+  against the role documents (`resolveAssignments`); an assignment to a deleted role grants
+  nothing.
+  - **Scope** (DEC-2): `global`, `{ type: "chapter", chapterId }` (that chapter only) or
+    `{ type: "orgUnit", orgUnitId }` (that unit and every unit below it, never its siblings —
+    the resource passes its `orgUnitPath`, the ids from the root down to itself).
+  - **Period** (B6): `periodId` set = the role belongs to one board period and only counts while
+    that period is active (`settings/activePeriod.periodId`, read with the user record in one
+    `getAll`). `null` = independent of periods (e.g. superadmin).
+  - **Revocation**: an assignment with `revokedAt` grants nothing; it stays for the history.
+    `source` is `manual` (Role Manager) or `appointment` (set by the server from a board
+    appointment, never from the client).
+  - Unknown scope types, bad ids and unreadable dates are dropped when the record is read.
+- **Appointments → roles** (B7, `apps/admin/src/server/appointments.ts`,
+  `packages/db/src/sql/appointments.ts`): appointing someone to a seat of a unit of the
+  active period writes the appointment and its roles in ONE transaction. The roles come from the
+  settings document `settings/appointmentRoles` (data, edited in Role Manager → Edit Role with
+  `roles.edit`; only existing custom roles, never built-in ones; "suggested" =
+  `SUGGESTED_APPOINTMENT_ROLES`; create those roles in Role Manager → Edit Role first). A unit's
+  own `roleMap` (set on the unit's **Officers** tab with `roles.edit`, step 10.2) is read first
+  and wins for that seat; the seats are head, deputy head, secretary, treasurer and member, a core
+  unit has only its head, and a unit has one head. Appointments are made and ended on the
+  Officers tab (`/organizations/periods/[id]/units/[unitId]/officers`, `appointments.read` /
+  `appointments.edit`). Default rules:
+  every officer → officer role (global); head of a core unit (secretary general, executive secretary,
+  executive treasurer and deputies) → that seat's role (global); head / secretary of any other unit → the
+  unit-head / unit-secretary role scoped to that unit (`derivedAssignments`). They carry
+  `periodId`, `source: "appointment"` and `appointmentId`. Ending the appointment sets `revokedAt`
+  on exactly those (a manual role stays) and ends the person's sessions; a role from an
+  appointment cannot be removed in Role Manager. Appointing needs `appointments.edit` and every
+  permission of each derived role (`canAppointInto`), never on your own account, a second
+  sign-in method on the person's account for staff roles, and a recent sign-in. Both the
+  appointment and the account change are audited (not revertible).
 - **Self-service** permissions (`profile.read_own`, `profile.write_own`, `events.register`,
   `registrations.read_own`, `shop.orders.read_own`) belong to every active account, for its own
   resources only (`ownerId === userId`). They cannot be put on a role.
 
 ```ts
 can(principal, "events.edit", { chapterId: "jp" });
+can(principal, "users.edit", { orgUnitPath: ["board", "media"] }); // unit and descendants
 can(principal, "profile.write_own", { ownerId: principal.userId });
 canAccessAdmin(principal); // any admin-page permission
 canInSomeScope(principal, "audit.read"); // what to SHOW (navigation), never an action check
+scopedChapterIds(principal, "users.read"); // "all" | chapter ids: filter list queries by it
 requirePermission(principal, "articles.publish");
-canSaveRole(principal, draft, previous); // Roles page
-canAssignRole(principal, role); // Users page
+canSaveRole(principal, draft, previous); // Role Manager → Edit Role
+canAssignRole(principal, role); // Role Manager (also invites)
+accountChangeRefusal({ actor, targetUserId, role, superadminsAfter }); // Role Manager: why not
 ```
 
 ## Rules
 
+- `can()` without a resource answers for a **global** assignment only, so a chapter or unit
+  assignment never passes an unscoped check (the PPIDK §56/§73 leak cannot happen here). Lists
+  of people are filtered in the repository query with `scopedChapterIds` (A2).
 - Evaluated **server-side only**. Never trust hidden buttons, client route guards, client
   state, a Firebase login alone, URL params, or role fields in payloads (tested).
 - Every admin mutation uses `createGuardedAction` (staff → validation → permission).
 - **No privilege escalation**: saving or deleting a role needs `roles.edit` and every permission
   the role has (and had) in a **global** assignment; assigning a role needs `users.edit` and every
   permission of that role; only a superadmin assigns `superadmin`; built-in roles cannot be saved
-  or deleted. Keep 2–3 superadmins; the last one cannot be demoted.
-- Role changes are audited and emit security events.
+  or deleted. Keep 2–3 superadmins; the last active one cannot be demoted or deactivated
+  (`accountChangeRefusal`, counted inside the same transaction).
+- Nobody changes their own roles or status.
+- A role that opens any admin page is only written when the account has **two sign-in methods**
+  (`hasTwoSignInMethods` in `@website/auth`: an MFA factor, or a passkey plus Google/password).
+- Role changes and deactivation need a sign-in in the last 15 minutes, are audited (not
+  revertible: they always go through these rules), revoke the account's sessions and emit the
+  `staff.role_changed` security event. Pages: `apps/admin/docs/users-and-roles.md`.
 - Third-party API scopes (`events.read`, `registrations.write`) are a separate vocabulary in
   `@website/apikeys`.

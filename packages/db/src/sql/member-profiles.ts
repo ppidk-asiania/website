@@ -1,0 +1,371 @@
+import { randomUUID } from "node:crypto";
+import type { Database, Transaction } from "./store";
+import type { AuditEvent, Snapshot } from "@website/audit";
+import {
+  guardedChanges,
+  profileAuditSnapshots,
+  WHATSAPP_LINK_TTL_MS,
+  type GuardedChanges,
+  type MemberProfile,
+  type MemberProfileRepository,
+  type ProofReview,
+  type ProofState,
+  type StudentProof,
+} from "@website/domain/members";
+import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
+import { safeId } from "@website/security/validation";
+import { createSqlAuditWriter } from "./audit";
+import { getDocumentsByIds } from "./batch";
+import { toDate } from "./slugged";
+
+const REMOVED_FIELDS = new Set(["verificationStatus", "verifiedBy", "verifiedAt"]);
+
+function toProofState(proof: unknown, review: unknown): ProofState {
+  const p = proof as
+    (Omit<StudentProof, "uploadedAt"> & { uploadedAt: unknown }) | null | undefined;
+  const r = review as (Omit<ProofReview, "at"> & { at: unknown }) | null | undefined;
+  return {
+    studentProof: p ? { ...p, uploadedAt: toDate(p.uploadedAt) as Date } : null,
+    proofReview: r ? { ...r, at: toDate(r.at) as Date } : null,
+  };
+}
+
+function toProfile(data: Record<string, unknown>): MemberProfile {
+  const {
+    privacyPolicyVersion,
+    consentedAt,
+    graduatedOn,
+    graduationMarkedBy,
+    whatsappVerifiedAt,
+    chapterId,
+    studentProof,
+    proofReview,
+    createdAt,
+    updatedAt,
+    deletedAt,
+    ...stored
+  } = data;
+  const fields = Object.fromEntries(
+    Object.entries(stored).filter(([key]) => !REMOVED_FIELDS.has(key)),
+  );
+  return {
+    ...(fields as Omit<
+      MemberProfile,
+      | "consent"
+      | "graduation"
+      | "chapterId"
+      | "whatsappVerifiedAt"
+      | "createdAt"
+      | "updatedAt"
+      | "deletedAt"
+    >),
+    chapterId: (chapterId as string | null | undefined) ?? null,
+    consent: {
+      privacyPolicyVersion: privacyPolicyVersion as string,
+      consentedAt: toDate(consentedAt) as Date,
+    },
+    graduation: {
+      on: (graduatedOn as string | null | undefined) ?? null,
+      markedBy: (graduationMarkedBy as string | null | undefined) ?? null,
+    },
+    whatsappVerifiedAt: toDate(whatsappVerifiedAt),
+    ...toProofState(studentProof, proofReview),
+    createdAt: toDate(createdAt) as Date,
+    updatedAt: toDate(updatedAt) as Date,
+    deletedAt: toDate(deletedAt),
+  };
+}
+
+function toDoc(profile: MemberProfile): Record<string, unknown> {
+  const { consent, graduation, ...fields } = profile;
+  return {
+    ...fields,
+    privacyPolicyVersion: consent.privacyPolicyVersion,
+    consentedAt: consent.consentedAt,
+    graduatedOn: graduation.on,
+    graduationMarkedBy: graduation.markedBy,
+  };
+}
+
+type ProfileAudit = (input: {
+  action: "UPDATE";
+  title: string;
+  resourceId: string;
+  before: Snapshot | null;
+  after: Snapshot | null;
+  versionBefore: number;
+  versionAfter: number;
+}) => AuditEvent;
+
+const memberAudit =
+  (uid: string, now: Date): ProfileAudit =>
+  (input) => ({
+    ...input,
+    id: randomUUID(),
+    occurredAt: now,
+    actor: { type: "member", id: uid },
+    module: "members",
+    resourceType: "profile",
+    operationId: randomUUID(),
+    revertible: false,
+    revertOf: null,
+    request: { requestId: randomUUID() },
+    prevHash: null,
+    hash: null,
+  });
+
+const redacted = (before: MemberProfile, after: MemberProfile, changes: GuardedChanges) => {
+  const pick = (p: MemberProfile) =>
+    Object.fromEntries(
+      Object.keys(changes).map((field) => [field, p[field as keyof MemberProfile]]),
+    );
+  const snapshots = profileAuditSnapshots(pick(before), pick(after));
+  return { before: snapshots.before as Snapshot, after: snapshots.after as Snapshot };
+};
+
+export function createSqlMemberProfileStore(db: Database) {
+  const profiles = db.collection("memberProfiles");
+  const users = db.collection("users");
+  const chapters = db.collection("chapters");
+  const codes = db.collection("whatsappLinkCodes");
+  const auditLog = createSqlAuditWriter(db);
+
+  const chapterOf = async (tx: Transaction, countryCode: string) => {
+    const found = await tx.get(
+      chapters.where("countryCode", "==", countryCode).where("active", "==", true),
+    );
+    return found.docs.find((doc) => !doc.get("deletedAt"))?.id ?? null;
+  };
+
+  const repository: MemberProfileRepository = {
+    async findByUserId(userId) {
+      if (!safeId.safeParse(userId).success) return null;
+      const snapshot = await profiles.doc(userId).get();
+      return snapshot.exists ? toProfile(snapshot.data() as Record<string, unknown>) : null;
+    },
+
+    save(profile, expectedVersion) {
+      const ref = profiles.doc(safeId.parse(profile.userId));
+      const userRef = users.doc(profile.userId);
+      return db.runTransaction(async (tx) => {
+        const [stored, chapterId] = await Promise.all([
+          tx.get(ref),
+          chapterOf(tx, profile.ppiCountry),
+        ]);
+        const before = stored.exists ? toProfile(stored.data() as Record<string, unknown>) : null;
+        if ((before?.version ?? null) !== expectedVersion) {
+          throw new ConcurrencyConflictError("memberProfiles version changed");
+        }
+        // the proof is changed only by updateProof, so a profile save never drops it
+        const next = {
+          ...profile,
+          chapterId,
+          studentProof: before?.studentProof ?? null,
+          proofReview: before?.proofReview ?? null,
+        };
+        const direct = before ? guardedChanges(before, next) : {};
+        const log = Object.keys(direct).length > 0 ? await auditLog.begin(tx) : null;
+        tx.set(ref, toDoc(next));
+        tx.update(userRef, { chapterId });
+        if (log && before) {
+          const snapshots = redacted(before, next, direct);
+          log.append(
+            memberAudit(
+              profile.userId,
+              profile.updatedAt,
+            )({
+              action: "UPDATE",
+              title: before.fullName,
+              resourceId: profile.userId,
+              before: snapshots.before,
+              after: snapshots.after,
+              versionBefore: before.version,
+              versionAfter: next.version,
+            }),
+          );
+        }
+        return next;
+      });
+    },
+  };
+
+  return {
+    ...repository,
+
+    /** A new code replaces the member's old one. Null when the member has no profile. */
+    issueWhatsappCode(uid: string, codeHash: string, now: Date): Promise<Date | null> {
+      return db.runTransaction(async (tx) => {
+        const [profile, old] = await Promise.all([
+          tx.get(profiles.doc(safeId.parse(uid))),
+          tx.get(codes.where("uid", "==", uid)),
+        ]);
+        if (!profile.exists) return null;
+        for (const doc of old.docs) tx.delete(doc.ref);
+        const expiresAt = new Date(now.getTime() + WHATSAPP_LINK_TTL_MS);
+        tx.create(codes.doc(safeId.parse(codeHash)), { uid, createdAt: now, expiresAt });
+        return expiresAt;
+      });
+    },
+
+    /** Uses the code (single use, also when refused) and verifies `number` on its owner's profile. */
+    linkWhatsapp(
+      codeHash: string,
+      number: string,
+      now: Date,
+    ): Promise<{ ok: true; uid: string } | { ok: false; reason: "invalid" | "taken" }> {
+      const codeRef = codes.doc(safeId.parse(codeHash));
+      return db.runTransaction(async (tx) => {
+        const code = await tx.get(codeRef);
+        if (!code.exists) return { ok: false, reason: "invalid" } as const;
+        const uid = String(code.get("uid"));
+        const [stored, sameNumber] = await Promise.all([
+          tx.get(profiles.doc(safeId.parse(uid))),
+          tx.get(profiles.where("whatsappNumber", "==", number)),
+        ]);
+        const valid = (toDate(code.get("expiresAt")) as Date) > now && stored.exists;
+        const taken = sameNumber.docs.some(
+          (doc) => doc.id !== uid && Boolean(doc.get("whatsappVerifiedAt")),
+        );
+        if (!valid || taken) {
+          tx.delete(codeRef);
+          return { ok: false, reason: valid ? "taken" : "invalid" } as const;
+        }
+        const current = toProfile(stored.data() as Record<string, unknown>);
+        const next: MemberProfile = {
+          ...current,
+          whatsappNumber: number,
+          whatsappVerifiedAt: now,
+          version: current.version + 1,
+          updatedAt: now,
+        };
+        const log = await auditLog.begin(tx);
+        tx.delete(codeRef);
+        tx.set(profiles.doc(uid), toDoc(next));
+        const snapshots = profileAuditSnapshots(
+          { whatsappNumber: current.whatsappNumber },
+          { whatsappNumber: number },
+        );
+        log.append(
+          memberAudit(
+            uid,
+            now,
+          )({
+            action: "UPDATE",
+            title: current.fullName,
+            resourceId: uid,
+            before: { ...snapshots.before, whatsappVerified: current.whatsappVerifiedAt !== null },
+            after: { ...snapshots.after, whatsappVerified: true },
+            versionBefore: current.version,
+            versionAfter: next.version,
+          }),
+        );
+        return { ok: true, uid } as const;
+      });
+    },
+
+    /** Changes only the proof fields, in one transaction, without touching the profile version. */
+    updateProof(
+      uid: string,
+      update: (current: ProofState) => ProofState,
+      audit?: (before: ProofState, after: ProofState, profile: MemberProfile) => AuditEvent,
+    ): Promise<{ before: ProofState; after: ProofState } | null> {
+      const ref = profiles.doc(safeId.parse(uid));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) return null;
+        const profile = toProfile(snapshot.data() as Record<string, unknown>);
+        const before = {
+          studentProof: profile.studentProof ?? null,
+          proofReview: profile.proofReview ?? null,
+        };
+        const after = update(before);
+        const log = audit ? await auditLog.begin(tx) : null;
+        tx.update(ref, { studentProof: after.studentProof, proofReview: after.proofReview });
+        if (log && audit) log.append(audit(before, after, profile));
+        return { before, after };
+      });
+    },
+
+    async proofsOf(uids: readonly string[]): Promise<Map<string, ProofState>> {
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids);
+      return new Map(
+        [...found.entries()].flatMap(([uid, data]) =>
+          data ? [[uid, toProofState(data["studentProof"], data["proofReview"])] as const] : [],
+        ),
+      );
+    },
+
+    /** The account that verified this number by messaging the bot (step 11.8 keywords), or null. */
+    async uidByVerifiedNumber(number: string): Promise<string | null> {
+      const found = await profiles.where("whatsappNumber", "==", number).get();
+      return found.docs.find((doc) => Boolean(doc.get("whatsappVerifiedAt")))?.id ?? null;
+    },
+
+    /** Where applicants come from, as the profile says today (recruitment recap, step 11.7). */
+    async originsOf(uids: readonly string[]) {
+      const found = await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids);
+      return new Map(
+        [...found.entries()].flatMap(([uid, data]) =>
+          data
+            ? [
+                [
+                  uid,
+                  {
+                    chapterId: (data["chapterId"] as string | null | undefined) ?? null,
+                    campus: (data["university"] as string | undefined) ?? "",
+                    level: (data["educationLevel"] as string | undefined) ?? "",
+                    entryYear: (data["yearOfEntry"] as number | undefined) ?? 0,
+                    gender: (data["gender"] as string | undefined) ?? "",
+                  },
+                ] as const,
+              ]
+            : [],
+        ),
+      );
+    },
+
+    setGraduation(
+      uid: string,
+      expectedVersion: number,
+      graduation: { on: string | null; markedBy: string | null },
+      check: (current: MemberProfile) => void,
+      now: Date,
+    ) {
+      const ref = profiles.doc(safeId.parse(uid));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) throw new RuleViolationError("This profile does not exist.");
+        const current = toProfile(snapshot.data() as Record<string, unknown>);
+        if (current.version !== expectedVersion) {
+          throw new ConcurrencyConflictError("memberProfiles version changed");
+        }
+        check(current);
+        const next: MemberProfile = {
+          ...current,
+          graduation: { on: graduation.on, markedBy: graduation.markedBy },
+          version: current.version + 1,
+          updatedAt: now,
+        };
+        const log = await auditLog.begin(tx);
+        tx.set(ref, toDoc(next));
+        log.append(
+          memberAudit(
+            uid,
+            now,
+          )({
+            action: "UPDATE",
+            title: current.fullName,
+            resourceId: uid,
+            before: { graduatedOn: current.graduation.on },
+            after: { graduatedOn: graduation.on },
+            versionBefore: current.version,
+            versionAfter: next.version,
+          }),
+        );
+        return next;
+      });
+    },
+  };
+}
+
+export type SqlMemberProfileStore = ReturnType<typeof createSqlMemberProfileStore>;

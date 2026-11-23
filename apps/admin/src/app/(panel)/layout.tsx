@@ -1,17 +1,12 @@
 import { Suspense, type ReactNode } from "react";
-import { AppShell, StatusBadge } from "@website/ui";
+import { AppShell, initials, StatusBadge } from "@website/ui";
 import { AdminSidebar } from "@/components/admin-sidebar";
-import { initials, navigationFor } from "@/navigation";
+import { navigationFor } from "@/navigation";
 import { getAdminViewer } from "@/server/context";
+import { getAppUrls } from "@/server/env";
+import { interviewScopeOf } from "@/server/wiring";
+import { hasInterviewScope } from "@website/domain/recruitment";
 
-/**
- * Frame for every staff page. Partial Prerendering: the page segment ({children}) is ALWAYS
- * rendered — in the prerendered fallback and after the session is known — so Next.js can
- * validate instant navigation. The side panel depends on the session and streams in.
- *
- * The layout is not the security boundary (layouts are not re-run on every client navigation):
- * each page checks the session itself inside its own <Suspense> (see (panel)/page.tsx).
- */
 export default function PanelLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={<SignedOutFrame>{children}</SignedOutFrame>}>
@@ -25,10 +20,12 @@ async function Panel({ children }: { children: ReactNode }) {
   if (!viewer) return <SignedOutFrame>{children}</SignedOutFrame>;
 
   const name = viewer.name ?? viewer.email ?? "Staff member";
+  const interviewer = hasInterviewScope(await interviewScopeOf(viewer.principal.userId));
   return (
     <AdminSidebar
-      items={navigationFor(viewer.principal)}
+      items={navigationFor(viewer.principal, interviewer)}
       user={{ name, email: viewer.email, initials: initials(name) }}
+      webUrl={getAppUrls().WEB_URL}
     >
       {children}
     </AdminSidebar>

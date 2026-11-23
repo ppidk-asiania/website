@@ -5,6 +5,7 @@ import { useState } from "react";
 import { signUpWithEmail } from "@/lib/auth-client";
 import { signUpSchema } from "@/lib/auth-errors";
 import {
+  AuthSeparator,
   Button,
   Field,
   formClass,
@@ -18,8 +19,7 @@ export function SignUpForm() {
   const { busy, error, run } = useAuthAction();
   const [invalid, setInvalid] = useState("");
   return (
-    <div className={formClass}>
-      <GoogleButton />
+    <>
       <form
         className={formClass}
         onSubmit={(event) => {
@@ -45,9 +45,13 @@ export function SignUpForm() {
         <Message text={invalid || error} />
         <Button busy={busy}>Create account</Button>
       </form>
-      <p>
+      <AuthSeparator />
+      <div className={formClass}>
+        <GoogleButton />
+      </div>
+      <p className="auth-footer">
         Already have an account? <Link href="/login">Sign in</Link>
       </p>
-    </div>
+    </>
   );
 }

@@ -9,53 +9,58 @@ import {
 } from "./permissions";
 
 export type Scope =
-  { readonly type: "global" } | { readonly type: "chapter"; readonly chapterId: string };
+  | { readonly type: "global" }
+  | { readonly type: "chapter"; readonly chapterId: string }
+  | { readonly type: "orgUnit"; readonly orgUnitId: string };
 
-/** What is stored in `users/{uid}.roleAssignments`. */
+export const ACCOUNT_STATUSES = ["active", "inactive"] as const;
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+
 export interface RoleAssignment {
   readonly roleId: string;
   readonly scope: Scope;
+  readonly periodId?: string | null;
+  readonly source?: "appointment" | "manual";
+  readonly appointmentId?: string | null;
+  readonly revokedAt?: Date | null;
 }
 
-/** An assignment with its role's permissions resolved on the server for this request. */
 export interface ResolvedAssignment extends RoleAssignment {
   readonly permissions: ReadonlySet<PagePermission>;
 }
 
-/**
- * The server-side view of who is acting. One shape for every account (staff, member,
- * customer). Built ONLY on the server from a verified session + the user record and role
- * documents in Firestore — never from client input, URL params, payload fields or token claims.
- */
 export interface Principal {
   readonly kind: "user";
-  /** Firebase Auth uid; also the Firestore document id in `users`. */
   readonly userId: string;
   readonly active: boolean;
   readonly assignments: readonly ResolvedAssignment[];
 }
 
 export interface ResourceContext {
-  /** Present when the resource belongs to a chapter; enables chapter-scoped assignments. */
   readonly chapterId?: string;
-  /** Present for user-owned resources; required by `*_own` permissions. */
+  readonly orgUnitPath?: readonly string[];
   readonly ownerId?: string;
 }
 
-/** Roles every new account receives on first sign-in. */
 export const DEFAULT_ROLE_ASSIGNMENTS: readonly RoleAssignment[] = [
-  { roleId: "user", scope: { type: "global" } },
+  { roleId: "visitor", scope: { type: "global" } },
 ];
 
-/**
- * Turns stored assignments into resolved ones. Built-in roles always come from code; an
- * assignment to a role that no longer exists is dropped (fail closed).
- */
+export const isWebsiteRole = (a: RoleAssignment): boolean =>
+  a.scope.type === "global" &&
+  !a.periodId &&
+  a.source !== "appointment" &&
+  !a.revokedAt &&
+  a.roleId !== SYSTEM_ROLES.visitor.id;
+
 export function resolveAssignments(
   stored: readonly RoleAssignment[],
   customRoles: ReadonlyMap<string, RoleDefinition>,
+  activePeriodId: string | null = null,
 ): ResolvedAssignment[] {
   return stored.flatMap((assignment) => {
+    if (assignment.revokedAt) return [];
+    if (assignment.periodId && assignment.periodId !== activePeriodId) return [];
     const role = isSystemRoleId(assignment.roleId)
       ? SYSTEM_ROLES[assignment.roleId]
       : customRoles.get(assignment.roleId);
@@ -64,14 +69,20 @@ export function resolveAssignments(
   });
 }
 
+export function sameScope(a: Scope, b: Scope): boolean {
+  if (a.type === "chapter" && b.type === "chapter") return a.chapterId === b.chapterId;
+  if (a.type === "orgUnit" && b.type === "orgUnit") return a.orgUnitId === b.orgUnitId;
+  return a.type === "global" && b.type === "global";
+}
+
 function scopeCovers(scope: Scope, resource: ResourceContext | undefined): boolean {
   if (scope.type === "global") return true;
+  if (scope.type === "orgUnit") return resource?.orgUnitPath?.includes(scope.orgUnitId) ?? false;
   return resource?.chapterId !== undefined && resource.chapterId === scope.chapterId;
 }
 
 const isOwnPermission = (permission: Permission) => permission.endsWith("_own");
 
-/** Deny by default. Inactive principals can do nothing. */
 export function can(
   principal: Principal | null,
   permission: Permission,
@@ -79,7 +90,6 @@ export function can(
 ): boolean {
   if (principal === null || !principal.active) return false;
   if (isOwnPermission(permission)) {
-    // Every active account has self-service permissions, for its OWN resources only.
     return resource?.ownerId !== undefined && resource.ownerId === principal.userId;
   }
   return principal.assignments.some(
@@ -89,17 +99,35 @@ export function can(
   );
 }
 
-/**
- * True when the principal holds the permission in at least one scope. For deciding what to SHOW
- * (e.g. which admin pages appear in the navigation); every action still checks `can()` with the
- * resource, so a chapter assignment only ever reaches its own chapter's data.
- */
 export function canInSomeScope(principal: Principal | null, permission: PagePermission): boolean {
   if (principal === null || !principal.active) return false;
   return principal.assignments.some((a) => a.permissions.has(permission));
 }
 
-/** True when the principal may enter the admin area at all (any admin-page permission). */
+export function scopedChapterIds(
+  principal: Principal | null,
+  permission: PagePermission,
+): "all" | string[] {
+  if (principal === null || !principal.active) return [];
+  const holding = principal.assignments.filter((a) => a.permissions.has(permission));
+  if (holding.some((a) => a.scope.type === "global")) return "all";
+  return [
+    ...new Set(holding.flatMap((a) => (a.scope.type === "chapter" ? [a.scope.chapterId] : []))),
+  ];
+}
+
+export function scopedOrgUnitIds(
+  principal: Principal | null,
+  permission: PagePermission,
+): "all" | string[] {
+  if (principal === null || !principal.active) return [];
+  const holding = principal.assignments.filter((a) => a.permissions.has(permission));
+  if (holding.some((a) => a.scope.type === "global")) return "all";
+  return [
+    ...new Set(holding.flatMap((a) => (a.scope.type === "orgUnit" ? [a.scope.orgUnitId] : []))),
+  ];
+}
+
 export function canAccessAdmin(principal: Principal | null): boolean {
   if (principal === null || !principal.active) return false;
   return principal.assignments.some((a) => a.permissions.size > 0);
@@ -119,7 +147,6 @@ export class UnauthenticatedError extends Error {
   }
 }
 
-/** Throwing variant for server handlers. */
 export function requirePermission(
   principal: Principal | null,
   permission: Permission,
@@ -129,16 +156,10 @@ export function requirePermission(
   if (!can(principal, permission, resource)) throw new ForbiddenError(permission);
 }
 
-/** Holds every listed permission in a GLOBAL assignment (chapter assignments never grant). */
 function holdsGlobally(principal: Principal | null, permissions: readonly PagePermission[]) {
   return permissions.every((permission) => can(principal, permission));
 }
 
-/**
- * Creating or editing a custom role (Roles page). Anti-escalation: `roles.edit`, and the editor
- * must hold globally every permission the role gets AND (when editing) every permission it had.
- * Built-in roles can never be saved.
- */
 export function canSaveRole(
   principal: Principal | null,
   role: RoleDefinition,
@@ -148,23 +169,46 @@ export function canSaveRole(
   return holdsGlobally(principal, [...role.permissions, ...(previous?.permissions ?? [])]);
 }
 
-/** Deleting a custom role: same rule as editing it. Built-in roles can never be deleted. */
 export function canDeleteRole(principal: Principal | null, role: RoleDefinition): boolean {
   return canSaveRole(principal, role);
 }
 
-/**
- * Assigning a role to a user: `users.edit` and every permission of that role (no granting what
- * you lack). Superadmin is assigned only by a superadmin.
- */
+export function isSuperadmin(principal: Principal | null): boolean {
+  return (
+    principal !== null &&
+    principal.active &&
+    principal.assignments.some((a) => a.roleId === SUPERADMIN_ROLE_ID && a.scope.type === "global")
+  );
+}
+
 export function canAssignRole(principal: Principal | null, role: RoleDefinition): boolean {
   if (!can(principal, "users.edit")) return false;
-  if (role.id === SUPERADMIN_ROLE_ID) {
-    return (
-      principal?.assignments.some(
-        (a) => a.roleId === SUPERADMIN_ROLE_ID && a.scope.type === "global",
-      ) ?? false
-    );
-  }
+  if (role.id === SUPERADMIN_ROLE_ID) return isSuperadmin(principal);
   return holdsGlobally(principal, role.permissions);
+}
+
+export function canAppointInto(principal: Principal | null, role: RoleDefinition): boolean {
+  if (isSystemRoleId(role.id) || !can(principal, "appointments.edit")) return false;
+  return holdsGlobally(principal, role.permissions);
+}
+
+export function canRatifyInto(principal: Principal | null, role: RoleDefinition): boolean {
+  if (isSystemRoleId(role.id) || !can(principal, "recruitment.confirm")) return false;
+  return holdsGlobally(principal, role.permissions);
+}
+
+export type AccountChangeRefusal = "self" | "forbidden" | "last_superadmin";
+
+export function accountChangeRefusal(input: {
+  readonly actor: Principal | null;
+  readonly targetUserId: string;
+  readonly role?: RoleDefinition;
+  readonly superadminsAfter: number;
+}): AccountChangeRefusal | null {
+  const { actor, targetUserId, role, superadminsAfter } = input;
+  if (actor !== null && actor.userId === targetUserId) return "self";
+  const allowed = role ? canAssignRole(actor, role) : can(actor, "users.edit");
+  if (!allowed) return "forbidden";
+  if (superadminsAfter === 0) return "last_superadmin";
+  return null;
 }

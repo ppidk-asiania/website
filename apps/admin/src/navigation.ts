@@ -1,51 +1,91 @@
 import {
   canAccessAdmin,
   canInSomeScope,
+  type AdminPageId,
   type PagePermission,
   type Principal,
 } from "@website/permissions";
 
-/** What the side panel renders. Only label and link reach the browser. */
+type NavGroup = "Workspace" | "Content" | "Organization" | "Planning" | "Administration";
+
 export interface NavItem {
+  readonly group: NavGroup;
   readonly label: string;
   readonly href: string;
 }
 
 interface NavEntry extends NavItem {
-  /** Permission needed to see the page; `null` = every staff member (the dashboard). */
   readonly permission: PagePermission | null;
+  readonly also?: readonly AdminPageId[];
+  /** Shown only to people with an interview scope (a seat or the extra), whatever their pages. */
+  readonly interviewer?: true;
 }
 
-/**
- * The admin side panel, in display order. A page appears only when the signed-in staff member
- * can read it in some scope; the page itself re-checks `can()` for every action.
- * Hiding a link is a convenience, never the security boundary.
- */
 export const ADMIN_NAVIGATION: readonly NavEntry[] = [
-  { label: "Dashboard", href: "/", permission: null },
-  { label: "Tools", href: "/tools", permission: "tools.read" },
-  { label: "Event", href: "/events", permission: "events.read" },
-  { label: "Gallery", href: "/gallery", permission: "gallery.read" },
-  { label: "Article", href: "/articles", permission: "articles.read" },
-  { label: "Newsletter", href: "/newsletter", permission: "newsletter.read" },
-  { label: "Organizations", href: "/organizations", permission: "organizations.read" },
-  { label: "Audit Log", href: "/audit", permission: "audit.read" },
+  { group: "Workspace", label: "Dashboard", href: "/", permission: null },
+  { group: "Workspace", label: "My Tasks", href: "/tasks", permission: null },
+  { group: "Workspace", label: "Calendar", href: "/calendar", permission: "calendar.read" },
+  { group: "Workspace", label: "Tools", href: "/tools", permission: "tools.read" },
+  {
+    group: "Content",
+    label: "Event",
+    href: "/events",
+    permission: "events.read",
+    also: ["registrants"],
+  },
+  { group: "Content", label: "Gallery", href: "/gallery", permission: "gallery.read" },
+  { group: "Content", label: "Article", href: "/articles", permission: "articles.read" },
+  { group: "Content", label: "Newsletter", href: "/newsletter", permission: "newsletter.read" },
+  { group: "Content", label: "Forms", href: "/forms", permission: "forms.read" },
+  {
+    group: "Organization",
+    label: "Recruitment",
+    href: "/recruitment",
+    permission: "recruitment.read",
+  },
+  {
+    group: "Organization",
+    label: "My interview times",
+    href: "/interviews",
+    permission: null,
+    interviewer: true,
+  },
+  {
+    group: "Organization",
+    label: "Letter",
+    href: "/letters",
+    permission: "letters.read",
+    also: ["letter_types", "incoming"],
+  },
+  {
+    group: "Organization",
+    label: "Organizations",
+    href: "/organizations",
+    permission: "organizations.read",
+    also: ["periods", "structure", "appointments", "universities"],
+  },
+  { group: "Planning", label: "OKR", href: "/okr", permission: "okr.read" },
+  { group: "Planning", label: "Programmes", href: "/programs", permission: "programs.read" },
+  { group: "Planning", label: "LPJ", href: "/lpj", permission: "lpj.read" },
+  { group: "Planning", label: "Finance", href: "/finance", permission: "finance.read" },
+  { group: "Planning", label: "Meetings", href: "/meetings", permission: "meetings.read" },
+  { group: "Planning", label: "Zoom", href: "/zoom", permission: "zoom.read" },
+  {
+    group: "Administration",
+    label: "Role Manager",
+    href: "/roles",
+    permission: "users.read",
+    also: ["roles"],
+  },
+  { group: "Administration", label: "Audit Log", href: "/audit", permission: "audit.read" },
+  { group: "Administration", label: "Email", href: "/emails", permission: "messages.read" },
 ];
 
-export function navigationFor(principal: Principal): NavItem[] {
+export function navigationFor(principal: Principal, interviewer = false): NavItem[] {
   if (!canAccessAdmin(principal)) return [];
-  return ADMIN_NAVIGATION.filter(
-    (entry) => entry.permission === null || canInSomeScope(principal, entry.permission),
-  ).map(({ label, href }) => ({ label, href }));
-}
-
-/** Avatar initials: first + last name ("Nevyllo Zamuel Kalangi" → "NK"). */
-export function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const first = words[0];
-  if (first === undefined) return "?";
-  const last = words.length > 1 ? words[words.length - 1] : undefined;
-  return (
-    last === undefined ? first.slice(0, 2) : `${first[0] ?? ""}${last[0] ?? ""}`
-  ).toUpperCase();
+  return ADMIN_NAVIGATION.filter((entry) =>
+    entry.interviewer
+      ? interviewer
+      : entry.permission === null || canInSomeScope(principal, entry.permission),
+  ).map(({ group, label, href }) => ({ group, label, href }));
 }

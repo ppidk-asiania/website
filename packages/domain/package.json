@@ -11,7 +11,19 @@
     "./newsletter": "./src/newsletter/index.ts",
     "./shop": "./src/shop/index.ts",
     "./members": "./src/members/index.ts",
-    "./shared": "./src/shared/index.ts"
+    "./shared": "./src/shared/index.ts",
+    "./messaging": "./src/messaging/index.ts",
+    "./gallery": "./src/gallery/index.ts",
+    "./forms": "./src/forms/index.ts",
+    "./recruitment": "./src/recruitment/index.ts",
+    "./documents": "./src/documents/index.ts",
+    "./programs": "./src/programs/index.ts",
+    "./finance": "./src/finance/index.ts",
+    "./meetings": "./src/meetings/index.ts",
+    "./links": "./src/links/index.ts",
+    "./zoom": "./src/zoom/index.ts",
+    "./tasks": "./src/tasks/index.ts",
+    "./ai": "./src/ai/index.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",

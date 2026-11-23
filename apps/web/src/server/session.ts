@@ -1,9 +1,17 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { createSessionRoutes, SESSION_COOKIE, type VerifiedIdentity } from "@website/auth";
+import {
+  createSessionRoutes,
+  hasTwoSignInMethods,
+  SESSION_COOKIE,
+  type VerifiedIdentity,
+} from "@website/auth";
 import { createFirebaseIdentityProvider } from "@website/auth/firebase-admin";
 import { lazyEnv } from "@website/config/env";
+import { createSqlUserStore, getDatabaseForRole } from "@website/db/sql";
+import { createLogger, logSecurityEvent } from "@website/observability";
 import { getWebEnv } from "./env";
+import { ownSignInMethods } from "./passkeys";
 
 export const identity = lazyEnv(() => {
   const env = getWebEnv();
@@ -15,15 +23,35 @@ export const identity = lazyEnv(() => {
   });
 });
 
+export const logger = lazyEnv(() => createLogger({ service: "web", level: getWebEnv().LOG_LEVEL }));
+
+const users = lazyEnv(() => {
+  const env = getWebEnv();
+  return createSqlUserStore(
+    getDatabaseForRole({
+      role: "web_ro",
+      url: env.DATABASE_URL,
+      connectionLimit: env.DATABASE_CONNECTION_LIMIT,
+    }),
+  );
+});
+
 export const sessionRoutes = lazyEnv(() =>
   createSessionRoutes({
     identity: identity(),
     maxAgeHours: getWebEnv().SESSION_MAX_AGE_HOURS,
     cookieDomain: getWebEnv().SESSION_COOKIE_DOMAIN,
+    onSignIn: async (signedIn) => {
+      const { roleIds } = await users().recordSignIn(signedIn, new Date(), async () =>
+        hasTwoSignInMethods(await ownSignInMethods(signedIn.uid)),
+      );
+      if (roleIds.some((id) => id !== "visitor")) {
+        logSecurityEvent(logger(), { type: "staff.login", actorId: signedIn.uid });
+      }
+    },
   }),
 );
 
-/** The signed-in user (verified session cookie, revocation checked), or null. */
 export async function getSignedInUser(): Promise<VerifiedIdentity | null> {
   const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
   return cookie ? identity().verifySessionCookie(cookie) : null;

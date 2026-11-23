@@ -1,0 +1,95 @@
+# Role Manager (people and roles)
+
+## What it does
+
+One page, **Role Manager** in the side panel, for who holds which role and what each role may do.
+
+**People** (`/roles`, `users.read` / `users.edit`): everyone who holds a role other than the
+default role (Visitor: every account has it, so Visitors are never listed), plus pending invites.
+Columns: Name, Role (the website role), Status (Active / Inactive / Invited) and Last login. Tabs
+per website role (with counts), search by name or e-mail, sort by any column, 10/25/50 per page.
+
+**Two kinds of roles.** The **website role** is given here by hand, everywhere and for any period:
+an account has **one** (besides Visitor); giving another replaces it (`isWebsiteRole` in
+`@website/permissions`; replacing needs the same rights as removing). **Organizational roles**
+come from one chapter, unit or board period, or from an appointment; they are kept apart, shown
+read-only in the popup and changed where they come from.
+
+- **Add New People**: "Email or Name" + a role. An e-mail or the exact name of an account gives
+  the role at once, replacing the account's website role. An e-mail without an account becomes an
+  **invite**: stored, e-mailed, and applied when that e-mail signs in (see Invites below). A name
+  that matches no account or several accounts is refused. While typing (2+ characters, 300 ms
+  after the last key) up to 8 accounts whose e-mail or name starts with the text are suggested
+  (`findPeople`, `users.edit`); arrow keys + Enter or a click picks one (its e-mail is used).
+- The **pencil** opens the person popup: status, last sign-in, sign-in methods (read on open),
+  the website role (one dropdown; "Visitor (no role)" removes it, then Save), the organizational
+  roles (read-only) and Deactivate / Reactivate. An invite's popup has "Cancel invite".
+
+**Edit Role** (`/roles/edit`, `roles.read` / `roles.edit`): every role with its colour and
+permissions. **Add New Role** and the pencil open the role popup: name, preview, colour (10
+fixed colours) and permissions: the chosen ones as chips (× removes) and the "Add more
+permissions" dropdown, which holds a search box and checkboxes per admin page: the page (e.g.
+"Audit Log") and below it its permissions ("Audit Read", "Audit Edit", "Audit Revert"). Ticking
+the page gives all its permissions and disables the single boxes; ticking a single permission
+disables the page box. The search keeps a page whose name matches with all its permissions,
+otherwise only the matching permissions. A role that has every permission of a page opens with
+the page ticked (`splitPermissions` / `joinPermissions` in the model). The bin deletes a custom role
+that nobody holds (soft delete). Built-in roles (`superadmin`, Visitor) are read-only.
+
+**By permission** (`/roles/edit?view=permissions`, `roles.read`; button on Edit Role): read-only,
+every admin page with each of its permissions, the roles that hold it and the number of people
+who hold one of those roles today (`permissionHolders` in the model; each person once). Revoked
+assignments, assignments of another period and inactive accounts are not counted. The number opens
+the names with their scope (Everywhere, Chapter x, Unit y); names are only sent to viewers with
+`users.read` for all chapters, others see the counts only.
+
+## Where it lives
+
+- Pages: `src/app/(panel)/roles/page.tsx` (people), `src/app/(panel)/roles/edit/page.tsx`
+  (roles), server actions `src/app/(panel)/roles/actions.ts`.
+- UI: `src/components/role-manager-page.tsx`; pure rules (rows, tabs, search, badge text
+  colour, permission groups) `src/components/role-manager-model.ts`.
+- Rules: `src/server/accounts.ts` (`createAccountActions`: give/remove role, status, Add New
+  People and its suggestions, cancel invite, person details), `src/server/roles.ts` (`createRoleActions`), wired in
+  `src/server/wiring.ts` (the invite e-mail goes through `messenger()`).
+- Data: `@website/db` → `createSqlAccountStore` (`listRoleHolders`, `findByName`,
+  `searchByPrefix`,
+  `invite`, `cancelInvite`, `listInvites`), `createSqlRoleStore`, `createSqlUserStore`
+  (`recordSignIn` applies invites) — `packages/db/docs/database.md`.
+- Colours: `ROLE_COLORS` / `DEFAULT_ROLE_COLOR` in `@website/permissions` (display only).
+- Tests: `tests/integration/users-and-roles.test.ts`, `tests/unit/admin-role-manager.test.ts`,
+  `tests/unit/permissions.test.ts`.
+
+## Rules and assumptions
+
+- Escalation, superadmin-only superadmin, last superadmin and "not yourself" rules:
+  `packages/permissions/docs/authorization.md`. They apply to invites too.
+- Staff roles need two sign-in methods on the account (MFA factor, or passkey + Google/password).
+  The person adds a passkey on web → Your account.
+- Every change needs a sign-in in the last 15 minutes ("Sign in again" link otherwise), is
+  written with its audit entry in one transaction (`module` `users` / `roles`, not revertible),
+  then ends the account's sessions (`revokeRefreshTokens`) and logs `staff.role_changed`.
+  Deactivation also disables the Firebase Auth account.
+- Chapter isolation (A2): with `users.read` for some chapters only, the list shows only accounts
+  whose `chapterId` is one of them and no invites; the person popup opens only for such an
+  account. Giving or removing roles, invites and (de)activating need `users.edit` globally.
+- Concurrent edits: each change sends the version it showed; a stale version → "changed by
+  someone else". The popup's Save runs one action: give the chosen role (it replaces the old one)
+  or, for Visitor, remove the role.
+
+## Invites
+
+- `invites/{sha256(e-mail)}`: `email`, `roleIds` (the one role still to give; inviting again
+  replaces it), `status`
+  (`pending` / `accepted` / `cancelled`), `invitedBy`, `version`, timestamps. Never deleted.
+- Applied in `recordSignIn` (website session, every sign-in) only for a **verified** e-mail.
+  Roles without admin pages apply at once; staff roles only when the account has two sign-in
+  methods (asked only then), otherwise they wait for a later sign-in. Each application is
+  audited (actor `system`, module `users`) and replaces the account's website role. A deleted
+  role or one already held is dropped.
+- The e-mail (Indonesian / English) links to `WEB_URL/login`; key
+  `invite:<id>:<version>` (one e-mail per invite change). Failed e-mails show on Messages.
+
+## Configuration
+
+`WEB_URL` (link in the invite e-mail) and messaging (`apps/admin/docs/messaging.md`).

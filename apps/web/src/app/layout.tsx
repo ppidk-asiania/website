@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import type { ReactNode } from "react";
 import "@website/ui/styles.css";
+import "./globals.css";
+import { PageViewTracker } from "@/components/page-view-tracker";
+import { SiteFooter, SiteHeader } from "@/components/site-frame";
+import { Localized } from "@/i18n/localized";
 
-// Self-hosted at build time by next/font; design tokens use it through --font-poppins.
 const poppins = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -12,13 +15,18 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: { default: "PPIDK Asia-Oseania", template: "%s · PPIDK Asia-Oseania" },
-  description: "Public website",
+  description: "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={poppins.variable}>
-      <body>{children}</body>
+    <html lang="id" className={poppins.variable}>
+      <body>
+        <PageViewTracker />
+        <Localized render={(t) => <SiteHeader t={t} />} />
+        {children}
+        <Localized render={(t) => <SiteFooter t={t} />} />
+      </body>
     </html>
   );
 }

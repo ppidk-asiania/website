@@ -2,7 +2,7 @@
 
 **One Firebase Authentication user pool for everyone** — staff, members and shop customers —
 in the one Firebase project (`ppidk-website-prod`) used by every environment. Firebase says _who_ someone
-is; _what_ they may do comes only from RBAC role assignments in Firestore (`users/{uid}`).
+is; _what_ they may do comes only from RBAC role assignments in MySQL (`users/{uid}`).
 
 ## Sign-in methods
 
@@ -14,7 +14,9 @@ is; _what_ they may do comes only from RBAC role assignments in Firestore (`user
 | Forgot password  | —                                                                           | `/forgot-password` → Firebase reset email → back to `/login` | Firebase              |
 
 - Email must be verified before a member profile can be saved.
-- Staff accounts (any role with `admin.access`) must have MFA enabled before the role is granted.
+- Staff roles (any role that opens an admin page) are only granted to accounts with **two sign-in
+  methods**: an MFA factor, or a passkey plus Google/password (`hasTwoSignInMethods`). Web
+  `/account` lists the account's methods (`createFirebaseAccountAdmin` + our passkeys).
 - Pages live in `apps/web/src/app/{login,signup,forgot-password,account}`; browser logic in
   `apps/web/src/lib/auth-client.ts`. Firebase keeps nothing in the browser (in-memory persistence):
   after each sign-in the ID token is exchanged for the session cookie and the browser signs out of Firebase.
@@ -44,11 +46,20 @@ sign in: POST /api/passkeys/login-options → browser signs → POST /api/passke
 
 ## Account lifecycle
 
-1. Anyone may create an account. On first sign-in the server creates `users/{uid}` with
-   the default role `user` (self-service only).
-2. Completing the member profile + approval by a `chapter_admin`/`admin` adds `member`.
+1. Anyone may create an account. Every sign-in method ends in web `POST /api/session`; after the
+   session cookie is created, `onSignIn` (from `createSessionRoutes`) reads the uid back from that
+   verified cookie and `recordSignIn` creates `users/{uid}` with the default role `visitor`
+   (self-service only) the first time, and updates `lastSignInAt` every time. If that write fails,
+   the sign-in fails (no cookie).
+2. There is no separate member role: every account is a **Visitor** (`visitor`).
 3. Staff roles are granted only by holders of `users.edit` who hold every permission of that role (superadmin only by a superadmin), never by sign-up.
    **There is no way to self-register into the admin area.**
+4. **Bootstrap** — the first superadmin: the person signs in on web once, then the owner runs
+   `node --env-file=apps/admin/.env.local infrastructure/scripts/grant-superadmin.mjs --email <address>`
+   (dry run), then again with `--apply`. Later superadmins are granted in the admin Role Manager.
+5. Too many wrong passwords: Firebase Auth throttles the account itself (`auth/too-many-requests`,
+   shown as "Too many attempts…"); `/api/session` also has the per-IP limit. There is no custom
+   failed-login counter (the server never sees failed Firebase password attempts).
 
 ## Sessions
 

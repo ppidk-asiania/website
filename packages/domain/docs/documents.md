@@ -1,0 +1,393 @@
+# Documents (letters, verification, certificates)
+
+Phase 4 of the plan (features D1-D9), ported from PPIDK `app/Support/Letters`. This doc grows
+with each step.
+
+## Letter numbers
+
+- `formatNumber(pattern, values)` in `src/documents/numbering.ts` builds a number from the letter
+  type's pattern. The placeholders keep PPIDK's names, so imported letter types number exactly as
+  before: `{nomor}` (padded sequence; `007.037` for sheet 37 of a certificate batch), `{jenis}`
+  (type code, trimmed), `{unit}` (issuing unit code, `PPIDK` when none), `{bulan_romawi}`
+  (`VIII`), `{bulan}` (`08`), `{tahun}` (`2026`), `{tahun_pendek}` (`26`), `{kode_kegiatan}`
+  (batch activity code, upper case). Month and year come from the letter date.
+- `checkNumberPattern(pattern)` refuses an unknown placeholder and a pattern without `{nomor}`
+  (PPIDK printed unknown placeholders as they were; a printed number can never be corrected).
+- Counters: `nextNumbers(db, tx, { collection, id }, count)` (`packages/db/src/sql/counters.ts`)
+  reserves `count` numbers from `{ last }` inside the caller's transaction, before its first
+  write. Numbers are reserved only when a letter is issued (no gaps from abandoned drafts) and
+  never given back (a cancelled letter keeps its number).
+
+## Private files
+
+- `isPdf(bytes)` (`@website/domain/shared`) checks the `%PDF-` magic bytes of every private PDF
+  upload (portfolios, pacts, letter archives, scans).
+- `sha256Hex(bytes)` (`@website/security`) is stored with an archived file and compared when
+  the file is served.
+
+## Letters workflow (D1, D2)
+
+`src/documents/letters.ts` (pure rules, from PPIDK `SuratService`), `packages/db/src/sql/letters.ts`
+(store), `apps/admin/src/server/letters.ts` (guarded actions), admin pages `/letters` and
+`/letters?tab=types`.
+
+```text
+draft ─→ review ─→ corrected ─→ desks ─→ approved ─→ issued ─→ cancelled
+  ↑________________________________|  "Return to draft" with a note (clears both desks)
+```
+
+- **Write** (`letters.edit`): type, issuing unit (of the active period; its code is `{unit}`),
+  subject, recipient (only for types that have one: a type without recipient clears it on save),
+  letter date, place, attachment note, body (rich text, sanitized with the news allowlist;
+  images are not printed). Drafts and letters in review can be edited; drafts can be deleted
+  (softly). Everything required is checked on **Submit**, not at the desk.
+- **Scope**: an org-unit assignment of `letters.edit` (directors, directorate secretaries) covers
+  the letters of that unit and the units below it (`orgUnitPath`, `scopedOrgUnitIds`); the list
+  shows only those letters. A global assignment covers all.
+- **Desks** (Letters page extras, roles are data): `review` (secretariat: pass the correction
+  or return it), `sign` (signer desk), `sign_coordinator` (top desk, only for
+  types that require it), `issue`, `cancel`. Nobody signs before the correction is passed;
+  one person never holds both desks of a letter.
+- **Issue** (`letters.issue`), ONE transaction: the next number from
+  `letterCounters/{periodId}_{typeId}` (formatted with the type's pattern), a verification code
+  (`8F3KM-QRTVW`, alphabet without I L O 0 1, `verificationCodes/{code}` — the space shared with
+  certificates), the signers frozen with their desk, name and seat at that time (`signers`), and
+  `contentDigest` = sha256 of `letterCanonical` (number, date, type, subject, recipient, body,
+  signers' ids; line endings unified). A failure uses no number and writes no audit entry.
+- **Cancel** (`letters.cancel`): issued letters only, with a reason (shown on the public
+  verification page later); the number is never reused.
+- **Audit**: module `letters` (CREATE / UPDATE per step / DELETE / PUBLISH = issue / UNPUBLISH =
+  cancel), never revertible (a step is undone by returning or cancelling). The snapshot stores
+  the body's length, not the body.
+- **Letter types** (`letter_types.edit`, `/letters?tab=types`): name, code (unique case-insensitively,
+  trimmed), number pattern (checked, with a live example), digits of `{nomor}`, top desk,
+  recipient, whether the verification page shows the content to anyone, in use, order.
+  Deactivated, never deleted. The code is fixed once a letter of the type has been numbered: it
+  is part of every `contentDigest`, so changing it would make the public verification report
+  those letters as altered. Give the permissions in the Role Manager, as in PPIDK: the
+  signer desk's role every desk but the top desk's plus letter types and incoming
+  letters; the top desk's role `sign_coordinator` and `cancel`; directors and directorate
+  secretaries `letters.edit` (scoped to their unit by the appointment).
+- **Desk titles** (step 10.1): the two desks are named by the letter's own period
+  (`deskTitle(period, "signer" | "coordinator")`, default "Sekretaris Eksekutif" / "Sekretaris
+  Jenderal"; `organization.md`). The Letters page, the signature block of the PDF and the signers
+  frozen at issue print them, so a letter of period A keeps A's titles after period B renames
+  them. Issued letters keep their frozen `signers`; new ones use the titles in force at issue.
+- Not built yet: PPIDK's format checker (warnings) and notifications to the desks.
+
+## Letter options (14.1)
+
+Chosen when drafting (`LetterInput`), stored on the letter, in the audit snapshot, imported from
+PPIDK (`hanya_sekjen`, `kotak_paraf`, `tautan_draf`):
+
+- **`topDeskOnly`** ("handled by the top desk alone", e.g. the SK that appoints the signer desk's
+  holder: nobody signs their own appointment). `desksOf(type, letter)` is just the top desk;
+  Submit goes straight to `corrected` (the secretariat may not exist yet at the start of a
+  period); only `letters.sign_coordinator` signs; only its holders (superadmin has every extra)
+  create, edit, submit, delete, upload or place stamps on it (`assertMayHandle` in
+  `apps/admin/src/server/letters.ts`; they still need `letters.edit` to write). The top desk
+  holders are told directly ("waits for your signature"). Number, code, digest, audit: as any
+  letter. Give the top desk's role `letters.edit` as well.
+- **`initialsBox`**: the "Paraf" box on every page, per letter. It replaces the old global
+  letterhead setting; an old `settings/letters` document that still holds `initialsBox` is read
+  without it. (A cancelled letter rendered again no longer prints the box that its frozen
+  letterhead used to carry; archived PDFs of issued letters are never rendered again.)
+- **`draftUrl`** (https, at most 1000 characters, only for own-PDF letters; typed letters drop
+  it): shown on the letter's detail view and added to the "waiting for correction" notice; never
+  part of the verification page's view.
+- **Stamp**: the letterhead gains `stamp` (image, same upload preset). Only holders of the
+  extra `letters.stamp` upload, replace or remove it (other letterhead editors keep header,
+  footer, watermark and emblem; the action refuses a changed stamp from anyone else). It is
+  frozen with the letterhead at issue. The own-PDF path prints it (14.2); typed letters do not.
+
+## Letter PDF, letterhead, archive (D1, D9)
+
+- **Rendering**: `@website/pdf` (`renderLetterPdf`, pdf-lib + qrcode, pure JavaScript) lays out
+  PPIDK's template: letterhead, "Tokyo, 2 November 2026", Nomor / Lampiran / Perihal / Jenis,
+  "Kepada Yth.", the body (Times 12 pt, 1.5 lines, justified, first-line indent 1.27 cm, lists,
+  headings), the desks (electronic-signature box with the date, or "waiting"), the note that no
+  wet signature is needed, the cancelled stamp, and the QR with the verification address and
+  code. Images and tables in the body are not printed. Dates are written in Indonesian in WIB.
+- **Letterhead** (`settings/letters`, Letter types page → Letterhead, `letter_types.edit`):
+  parent name, name, address line, full-width letterhead / footer / watermark images, emblem,
+  watermark strength (2-40 %), the organisation stamp (extra `letters.stamp`, see "Letter options").
+  The "Paraf" box is not a letterhead setting any more: it is chosen per letter. Images are uploaded with the `letterhead` preset
+  (public WebP, converted to PNG with sharp when rendering) and must come from that folder.
+  Without a letterhead image the text letterhead (emblem + names) is printed. It is FROZEN on
+  the letter at issue (`letters.letterhead`): a new design never changes issued letters; a lost
+  image falls back to the text letterhead.
+- **QR address**: `https://<VERIFICATION_HOST>/<CODE>` (PPIDK's printed form, e.g.
+  `verif.ppiasiania.id/8F3KM-QRTVW`) or `<WEB_URL>/verify/<CODE>` (`verificationUrl`).
+- **Archive**: right after the issue transaction the PDF is rendered and stored privately at
+  `letters/<periodId>/<letterId>_<random>.pdf` with its sha256 and size (`letters.archive`,
+  recorded once: a second render never replaces it). If that fails the letter stays issued and
+  the first PDF request archives it.
+- **Preview / download**: `GET /api/letters/<id>/pdf` (admin, `letters.read` in the letter's
+  unit; otherwise 404). Issued letters: the archive, its sha256 checked (a mismatch is an error,
+  never a silent re-render); drafts: rendered now without number or QR; cancelled letters:
+  rendered now with the stamp. The Letters detail view has the button.
+- Code: `apps/admin/src/server/letter-pdf.ts`, route `apps/admin/src/app/api/letters/[id]/pdf/route.ts`.
+- Configuration: `VERIFICATION_HOST` (or `WEB_URL`) and `FILE_STORAGE_DIR` on admin.
+
+## Upload path (D3, v2 in 14.2)
+
+For documents typed elsewhere (SOP, decrees with annexes, tables), from PPIDK `UnggahDokumen`.
+Since 14.2 the PDF and the boxes are part of the draft, so issuing is one action:
+
+```text
+draft (Document: own PDF) + PDF + boxes ─→ review ─→ corrected ─→ desks ─→ approved
+  ─→ "Issue and number": number taken, number/QR/signatures printed ─→ issued
+```
+
+- **Write**: choose "Own PDF" when creating (fixed afterwards); no body; an optional draft link.
+  The same correction and desks as typed letters.
+- **Upload while drafting** (`letters.edit` in the letter's unit): `POST /api/letters/<id>/file?version=`
+  with the PDF (≤ 10 MB, `%PDF-` checked, opened with pdf-lib: locked or damaged files are refused
+  with a clear message). The number is not known yet, so nothing is checked (`numberChecked` is
+  false). A new upload replaces (and removes) the previous one. Stored at
+  `letters/<periodId>/<id>_upload_<random>.pdf` with its sha256.
+- **Boxes** (`letters.edit`, `place`): a page and mm from the top-left corner of the page as it is
+  shown (CropBox and page rotation respected, `frameOf` in `packages/pdf/src/stamp.ts`) for up to 10
+  **number boxes** (the formatted number is printed in Helvetica, shrunk to fit the box), the **QR**
+  (with its size; the code and address are printed under it) and each desk's **signature** (at its
+  own width unless a width is set, only once that desk signed; "with stamp" also prints the
+  letterhead stamp, 28 mm wide, to the left of the signature). Submitting an upload letter needs the
+  PDF, one QR box and the number box(es) it asks for ("Complete first: Final PDF, Number box, QR box").
+- **Placement screen** (admin): the page is shown with pdf.js in the browser (`pdfjs-dist`, DEC-23;
+  the first 30 pages; the file comes from the preview route) and the boxes are dragged and resized on
+  it; the same values can be typed. The maths is in `components/placement-math.ts`.
+- **Issue** (`letters.issue`, approved letter): takes the number (same transaction as a typed letter:
+  verification code, signers, digest) and, when the file and the QR box exist, stamps and archives in
+  the same action (`stampAndIssue`). If stamping fails the number stays taken and the letter is
+  `awaiting_file`: fix the file or boxes and press **Issue the stamped PDF** (`issueFile`). Letters
+  numbered before 14.2 are `awaiting_file` too and finish the same way: type the number into the PDF,
+  upload it (the number check applies: a text layer of ≥ 40 characters must contain the number, a scan
+  is "not checked"), place the QR and signatures, issue.
+- **Preview** (`GET /api/letters/<id>/pdf`) and **Issue the stamped PDF** use the SAME function
+  (`stampUpload` in `apps/admin/src/server/letter-pdf.ts`): the stamped bytes are the archive (sha256,
+  size) and the letter becomes `issued`. A stored upload whose checksum no longer matches is refused;
+  a file replaced between stamping and the issue write is refused (issue again).
+- Code: `src/documents/letters.ts` (`missingUploadParts`, `checkUploadedNumber`, `attachUpload`,
+  `placeStamps`, `issueUpload`), `apps/admin/src/server/letters.ts` (`upload`, `place`, `issue`,
+  `issueFile`), `packages/pdf/src/stamp.ts`, `apps/admin/src/components/letter-upload-panel.tsx`,
+  `letter-placement-canvas.tsx`, route `apps/admin/src/app/api/letters/[id]/file/route.ts`.
+
+## Manual letters (9.10a)
+
+For a letter that was typed, signed and sent outside the platform but still needs a number from the
+register (source `manual`). No review, no desks, no body:
+
+```text
+draft (signers typed, optional draft link) ─→ "Take number" ─→ awaiting_file ─→ upload final PDF ─→ issued
+```
+
+- **Signers** (`signedBy`: 1-6 × name + position, required): written to the letter's `signers` when the
+  number is taken (`at` = that moment). The verification page shows them with "as recorded by the
+  secretariat" (`signersRecorded`), because nobody signed them in the system.
+- **Take number** (`letters.issue`, straight from the draft): number and verification code, no
+  letterhead is frozen. The number is typed into the document by the author; the upload checks it like
+  the old upload path (a mismatch is shown, not blocking).
+- **Issue the PDF** (`issueFile`): the uploaded file is archived exactly as it is (nothing is printed
+  into it; no QR box needed), byte for byte.
+
+## Certificates (D5)
+
+Many sheets from one template, from PPIDK `SertifikatService` (the opposite of the upload path):
+
+- **Batch** = a letter created as "Certificate batch" (`source: "certificate"`), with an
+  activity code (`{kode_kegiatan}`, required when the type's pattern uses it; stored upper
+  case) and an optional citation (the body as plain lines; empty = "atas partisipasinya dalam
+  kegiatan <subject>"). The same correction and desks; the batch needs at least one participant
+  before it is issued, and gets ONE agenda number (the type's counter).
+- **Participants** (`/letters/<id>/participants`, `letters.edit` in the batch's unit, only while
+  the batch is a draft or under review): pasted from a spreadsheet, one per line, a note after
+  the first TAB, `;` or `|` (never a comma: names carry degrees), spaces tidied, duplicates KEPT
+  (two people may share a name), at most 1000 lines per paste, optional title case (degrees and
+  particles kept). A column that is an e-mail address (anywhere after the name) is the pickup
+  e-mail: stored only as `emailHash` = keyedHash("certificate-email", lower-cased address,
+  SUBSCRIBER_HASH_SECRET), never as the address. Each sheet gets its sequence
+  (`certificateCounters/{batchId}`) and its own verification code when added, CERTIFICATE_CHUNK
+  (200) per transaction. Removing one deletes its sheet and code; the others keep their numbers
+  (audit: module `letters`).
+- **Numbers**: at issue the batch freezes `sheetNumberTemplate` (`001.{sheet:3}/SERT/LKMM/...`);
+  sheet 37 is `001.037/SERT/LKMM/...`. A later pattern change never renumbers printed sheets.
+- **Sheets** are rendered on demand (`GET /api/letters/<id>/certificates/<sheetId>`,
+  `letters.read` in scope; `renderCertificatePdf`): A4 landscape, double frame, emblem and names
+  from the letterhead frozen at issue (no letterhead band), "SERTIFIKAT", number, holder, note,
+  citation, place and date, the desks (each signer's own signature once signed), the sheet's QR
+  and code. Before issue: no number and no QR. Never stored as files.
+- **Cancel** the batch (as any letter): every sheet then verifies as cancelled.
+- **Verification**: a sheet's code shows "certificate", the number, the holder's name in full
+  (it is printed on the sheet), the note, the activity, the date, the unit, the signers; no
+  file here (the pickup page gives the sheets; the page links to it).
+- **Pickup (D5-P)**: `<WEB_URL>/certificates`, no sign-in. The holder types the e-mail given at
+  registration; reCAPTCHA (action `certificate_pickup`) and the 20/minute verification limit
+  apply. EXACT match through `emailHash` only (no lists, no partial search; at most 100 sheets),
+  sheets of issued batches only (drafts, cancelled and deleted batches give nothing). Each sheet
+  comes with a 15-minute link signed with LINK_SIGNING_SECRET (purpose `certificate-pickup`,
+  the sheet's verification code) to admin `GET /certificates/pickup?t=…`, which re-checks the
+  token and that the batch is issued, then renders the sheet (`attachment`). Bad, expired or
+  foreign tokens are 404. Sheets without an e-mail cannot be picked up (the participants page
+  says so per sheet).
+- **Bulk sending (D5, step 7.10)**: on the participants page of an ISSUED batch (never a draft or
+  a cancelled one), staff with `letters.edit` paste the same list with e-mails again (e-mails
+  are never stored, so lines are matched to sheets by `emailHash`). Each matched sheet gets a
+  LINK to the pickup page (never the PDF): on WhatsApp when the e-mail belongs to an account
+  with a number, else by e-mail, key `cert:{batchId}:{seq}` (never twice), at most 50 per
+  click (the page says how many are left). Progress per status from the message log;
+  "Retry failed" sends only the failed ones again (`createCertificateSending`).
+- Code: `src/documents/certificates.ts`, `packages/db/src/sql/certificates.ts`,
+  `apps/admin/src/server/certificates.ts`, `packages/pdf/src/certificate.ts`,
+  `apps/web/src/server/verification.ts` (`createCertificatePickup`),
+  `apps/web/src/app/certificates/**`, `apps/admin/src/app/certificates/pickup/route.ts`,
+  `apps/admin/src/app/(panel)/letters/[id]/participants/page.tsx`.
+
+## Personal signatures (D4)
+
+From PPIDK `TandaTanganPengguna`: one image per person, printed on the letters they signed.
+
+- **Own only**: `/account/signature` on the website (any signed-in person; the uid always comes
+  from the session — nobody, not even a superadmin, sees or replaces another person's
+  signature). PNG (best with a transparent background) or JPEG, ≤ 2 MB, magic bytes checked.
+  Printed width 10-80 mm (default 40) and rotation -180..180 degrees clockwise (to straighten a
+  skewed scan) can be changed without a new upload.
+- **Encrypted**: the file is stored with `encryptField` (AES-256-GCM, `FIELD_ENCRYPTION_KEY`, the
+  same key on web and admin) at `members/signatures/<uid>_<random>.enc`; `userSignatures/{uid}`
+  records the path, type, width and rotation. A new upload is stored first, then the old file
+  is removed. No key = signatures are off (upload refused, nothing printed).
+- **On letters** (`apps/admin/src/server/letter-pdf.ts`): only on a desk that person has already
+  signed, at the set width (never wider than the column), turned about its centre. The issued
+  letter's archive freezes it: a later change never alters an issued letter. A missing record,
+  a lost or undecryptable file, or an image pdf-lib cannot read prints the electronic-signature
+  box instead — a signature never blocks a letter.
+- Code: `src/documents/signatures.ts`, `packages/db/src/sql/signatures.ts`,
+  `apps/web/src/server/signature.ts`, `apps/web/src/app/account/signature/**`,
+  `apps/web/src/app/api/account/signature/route.ts`.
+
+## Public verification (D7)
+
+Anyone holding a letter checks it without signing in (PPIDK `VerifikasiController`):
+
+- **Addresses**: `<WEB_URL>/verify` (type the code), `<WEB_URL>/verify/<CODE>` and, on
+  `VERIFICATION_HOST` (the extra domain of the web app, e.g. `verif.ppiasiania.id`), the printed
+  short form `/<CODE>` (and `/<CODE>/pdf`); any other path there shows the search page
+  (`apps/web/src/lib/verification-host.ts`, rewrite in `apps/web/src/proxy.ts`). Never indexed.
+  At most 20 requests per minute per IP on these paths.
+- **Certificate sheets** (`certificateVerification`): see Certificates (D5).
+- **What it shows** (`letterVerification`, public DTO only — no ids): valid or cancelled (date,
+  reason), number, type, subject, the recipient masked (`A*** N***`, always three stars), letter
+  date, issuing unit, period, and the signers frozen at issue (desk, name, seat, time in WIB).
+  Drafts have no code; unknown, malformed and draft codes all answer "not found".
+- **Content**: shown when the type's "content public" is on; otherwise after typing the
+  recipient's name exactly as printed (case and spaces ignored), sent by a server action, never
+  in the URL. If the stored text no longer matches `contentDigest` the content is shown to
+  nobody. Letters without a digest (imported) are shown.
+- **Download**: the archived PDF, under the same rule (checked again in the route), never for
+  cancelled letters (the archive has no stamp), never when its sha256 does not match (the page
+  then says so).
+- Code: `packages/domain/src/documents/verification.ts`, reader
+  `createSqlVerificationReader`, `apps/web/src/server/verification.ts`, pages
+  `apps/web/src/app/verify/**`. Not built: PPIDK's camera scanner (the phone's camera app opens
+  the QR link directly).
+
+## Public letter archive (14.3)
+
+`/letter-archive` on the public site lists issued letters, after a guest book.
+
+- **Switch**: letter type `publicArchive` (off by default; edited on the Letter types page; imported
+  from PPIDK `letter_types.public_archive`). Only issued letters of such types are listed; drafts,
+  cancelled and deleted letters and certificate batches never are. Per row: number, date, subject,
+  type, unit and a link to `/verify/<code>`. The recipient, body and file are never in the response.
+- **Guest book** (`ArchiveGuestSchema`): name, e-mail and institution, reCAPTCHA v3 (action
+  `letter_archive`, `apps/web/src/server/captcha.ts`). Stored in `letterArchiveGuests` with the
+  keyed hash of the IP (`keyedHash("letter-archive", ip)`) and `expiresAt` = 12 months; the cron job
+  `expire` deletes older rows. Signed-in staff are asked too. Success sets a signed cookie
+  (`letter_archive_pass`, purpose `archive`, `LINK_SIGNING_SECRET`, one hour, httpOnly, path
+  `/letter-archive`). Without a valid pass the page shows only the guest book and the store is not
+  read.
+- **List**: search (number or subject), type chips (name without a leading "Surat", one of six fixed
+  colours per type, with counts), year, 20 per page; all in the address (`q`, `type`, `year`,
+  `page`). `parseArchiveQuery` and `searchArchive` are pure (`src/documents/letter-archive.ts`);
+  the newest 5000 issued rows are loaded (`createSqlLetterArchive.rows`).
+- **Admin**: Letters tab "Archive guests" (extra permission `letters.archive_guests`), read-only,
+  newest 300. Guest rows are personal data: no export, no edit. Privacy page mentions the guest book.
+- Code: `apps/web/src/server/letter-archive.ts` (+ `-wiring.ts`), `apps/web/src/app/letter-archive/`,
+  `apps/admin/src/components/letter-archive-guests-page.tsx`.
+
+## Incoming letters and dispositions (D6)
+
+`src/documents/incoming.ts` (rules, from PPIDK `AgendaService`), `packages/db/src/sql/incoming.ts`,
+`apps/admin/src/server/incoming.ts`, admin page `/letters?tab=incoming` (Letter page, Incoming tab:
+read, edit, extra `dispose`).
+
+- **Record** (`incoming.edit`): sender, sender's number, subject, letter date, received date,
+  summary. The agenda number (`042/AG/VIII/2026`: sequence of the active period, Roman month and
+  year of the received date) is given in the recording transaction (`incomingCounters/{periodId}`):
+  the letter is in hand, so no number is ever left unused. Fields stay editable until archived;
+  the agenda number never changes.
+- **Scan**: one private PDF (≤ 10 MB, `%PDF-` checked), `POST /api/incoming/<id>/scan?version=`,
+  stored at `letters/incoming/<periodId>/<id>_<random>.pdf` with its sha256; opened inline with
+  `GET /api/incoming/<id>/scan` (`incoming.read`), never when the checksum no longer matches.
+- **Dispose** (`incoming.dispose`): to a unit of the letter's period OR an officer (active
+  appointments), with an instruction and an optional due date. Forwarding a disposition creates a
+  child and marks the parent "in progress" (it stays responsible). A disposition is marked done
+  (optional response) only when every disposition forwarded from it is done; when all are done the
+  letter is "done" and can be archived (`incoming.edit`), after which nothing changes.
+- Every step is one versioned write with an audit entry (module `incoming`, not revertible).
+- Not built yet: notifications to the recipients (7.1) and image scans (PPIDK also took JPG/PNG;
+  scan to PDF).
+
+## QR codes (D8)
+
+One set of rules (`src/documents/qr.ts`, from PPIDK `PembuatQr`) for the Tools page and the
+letter and certificate PDFs: content of at most `QR_MAX_LENGTH` (800) characters
+(`qrTextProblem`), error correction `H`, a 4-module quiet zone, downloads at 300 / 600 / 1000
+px. The optional centre logo goes only on PNGs, on an opaque plate in the code's light colour
+covering 22% of the width (`qrLogoPlate`, under 5% of the area); SVGs never carry it. PDFs embed
+the QR without a logo (the letterhead already shows the emblem).
+
+## Import from PPIDK (block J, step 4.10, DEC-10)
+
+- Mapping: `packages/db/src/ppidk/documents.ts` (pure, tested in
+  `tests/unit/ppidk-documents-import.test.ts`, which also opens every imported code on the
+  verification page); script: `infrastructure/scripts/import-ppidk-documents.mjs --dir <tsv
+folder> [--files <downloaded PPIDK PDFs>] [--apply]` (dry run by default, writes
+  `import-documents-report.json`). Run it after the people import (it refuses otherwise) and after
+  freezing the PPIDK letter screens. Tables: `users`, `org_units`, `letter_types`,
+  `letter_sequences`, `letters`, `certificates`, `incoming_letters`, `incoming_letter_sequences`,
+  `letter_dispositions`. Ids come from PPIDK (`ppidk-letter-<id>`, `ppidk-lettertype-<id>`,
+  `ppidk-incoming-<id>`, `ppidk-disposition-<id>`; sheets `<batch>_<seq>`).
+- Numbers and verification codes are kept as printed (PPIDK kept codes on `letters` and
+  `certificates`; each becomes `verificationCodes/{code}`). Counters (`letterCounters`,
+  `certificateCounters`, `incomingCounters`) are set to the highest of the PPIDK sequence row and
+  the numbers actually used, and the script never lowers a counter already further on the
+  platform. A type code or verification code already used by a platform document stops the import.
+- Statuses: `terkoreksi` → corrected, `menunggu_berkas` → awaiting_file; sources `unggah` →
+  upload, `sertifikat` → certificate. Verification answers exactly as in PPIDK: issued and cancelled
+  letters and the sheets of numbered batches resolve, everything else does not.
+- Content digest: when the PPIDK digest still matches the PPIDK text it is frozen again in the
+  platform's form (`letterCanonical`); one that no longer matched stays, so the content is shown to
+  nobody (as in PPIDK); letters issued before digests keep none. Bodies are sanitized on import.
+- Signers: PPIDK's frozen `signature_snapshot`; letters issued before it get the desks rebuilt from
+  the accounts (as PPIDK's page did, without the seat). Letterheads are not imported (the current
+  one is used if a letter without archive is rendered).
+- Files: archived letter PDFs (`pdf_path`) and incoming scans, only real PDFs found under `--files`;
+  an upload-path PDF whose sha256 differs from PPIDK's `berkas_sha256` is not imported (reported).
+  Non-PDF scans (JPG/PNG) are reported, not imported.
+- Not imported: personal signatures (encrypted with PPIDK's key; people upload them again), the
+  certificate pickup e-mail (PPIDK kept none, so imported sheets are not on the pickup page), and
+  letter types whose code the platform refuses keep no code pointer (rename them; reported).
+
+## Tests
+
+`tests/unit/documents.test.ts`, `tests/integration/numbering.test.ts`,
+`tests/security/field-encryption.test.ts`, `tests/unit/admin-tools.test.ts` (QR rules),
+`tests/unit/letters.test.ts`, `tests/unit/admin-letters.test.ts`, `tests/integration/letters.test.ts`,
+`tests/unit/pdf.test.ts`, `tests/integration/letter-pdf.test.ts`, `tests/unit/verification.test.ts`,
+`tests/integration/verification.test.ts`, `tests/unit/incoming.test.ts`,
+`tests/unit/admin-incoming.test.ts`, `tests/integration/incoming.test.ts`,
+`tests/integration/signatures.test.ts`, `tests/unit/pdf-stamp.test.ts`,
+`tests/unit/certificates.test.ts`, `tests/unit/certificate-pdf.test.ts`,
+`tests/integration/certificates.test.ts`, `tests/unit/ppidk-documents-import.test.ts`,
+`tests/unit/letter-archive.test.ts`, `tests/integration/letter-archive.test.ts`,
+`tests/unit/admin-placement.test.ts`.

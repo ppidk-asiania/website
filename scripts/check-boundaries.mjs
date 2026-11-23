@@ -1,26 +1,12 @@
 #!/usr/bin/env node
-/**
- * Architecture boundary check (runs in `pnpm lint` and CI).
- *
- * 1. Every workspace dependency edge must be in ALLOWED.
- * 2. Every `@website/*` import in source must be (a) declared in that workspace's
- *    package.json and (b) allowed — no phantom dependencies.
- * 3. No relative import may escape its workspace (e.g. ../../apps/admin/...).
- * 4. Subpath rules (e.g. shop may only use @website/domain/shop).
- * 5. The workspace dependency graph must be acyclic.
- */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/**
- * Approved dependency matrix. Changing this is an architecture decision (update docs/architecture.md).
- * @type {Record<string, string[]>}
- */
+/** @type {Record<string, string[]>} */
 const ALLOWED = {
-  // apps
   web: [
     "auth",
     "config",
@@ -41,6 +27,7 @@ const ALLOWED = {
     "domain",
     "email",
     "observability",
+    "pdf",
     "permissions",
     "security",
     "ui",
@@ -57,7 +44,6 @@ const ALLOWED = {
     "ui",
   ],
   gateway: ["apikeys", "config", "contracts", "db", "domain", "observability", "security"],
-  // packages
   config: [],
   security: [],
   contracts: ["security"],
@@ -68,22 +54,37 @@ const ALLOWED = {
   email: [],
   observability: [],
   ui: [],
+  pdf: ["domain"],
   auth: ["config", "security"],
-  db: ["apikeys", "auth", "config", "domain", "security"],
+  db: ["apikeys", "audit", "auth", "config", "domain", "permissions", "security"],
 };
 
-/** Subpath restrictions: workspace → package → allowed subpaths. @type {Record<string, Record<string, string[]>>} */
+/** @type {Record<string, Record<string, string[]>>} */
 const SUBPATHS = {
   shop: { domain: ["shop", "shared"] },
-  web: { domain: ["content", "events", "organizations", "newsletter", "members", "shared"] },
-  // Personal data (domain/members) never leaves through the third-party API.
+  web: {
+    domain: [
+      "content",
+      "events",
+      "gallery",
+      "organizations",
+      "newsletter",
+      "members",
+      "messaging",
+      "forms",
+      "recruitment",
+      "documents",
+      "meetings",
+      "shared",
+    ],
+  },
   gateway: { domain: ["content", "events", "organizations", "shared"] },
-  // The innermost layers may only use the framework-free sanitization helpers.
   domain: { security: ["validation"] },
+  pdf: { domain: ["documents"] },
   contracts: { security: ["validation"] },
 };
 
-/** Packages an app may never depend on, with the reason. @type {Record<string, Record<string, string>>} */
+/** @type {Record<string, Record<string, string>>} */
 const FORBIDDEN_REASON = {
   gateway: {
     auth: "gateway must not import staff auth/session",
@@ -111,7 +112,6 @@ const shortName = (/** @type {string} */ pkgName) => pkgName.replace(/^@website\
 const isInternal = (/** @type {string} */ name) =>
   name.startsWith("@website/") || ["web", "admin", "shop", "gateway"].includes(name);
 
-// 1. package.json edges
 /** @type {Map<string, string[]>} */
 const graph = new Map();
 for (const ws of workspaces) {
@@ -135,7 +135,6 @@ for (const ws of workspaces) {
   }
 }
 
-// 2–4. source imports
 const IMPORT_RE =
   /(?:import|export)\s[^'"`]*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|^\s*import\s*["']([^"']+)["']/gm;
 const walk = (/** @type {string} */ dir) => {
@@ -185,7 +184,6 @@ for (const ws of workspaces) {
   }
 }
 
-// 5. cycles
 const visiting = new Set();
 const done = new Set();
 const visit = (/** @type {string} */ node, /** @type {string[]} */ path) => {

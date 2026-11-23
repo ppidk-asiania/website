@@ -1,0 +1,127 @@
+import "server-only";
+import { ShortenerError, type CreatedLink, type Shortener } from "@website/domain/links";
+
+type Json = Record<string, unknown>;
+
+const failure = (status: number) =>
+  new ShortenerError(
+    status === 409 ? "slug_taken" : status >= 400 && status < 500 ? "invalid" : "unavailable",
+    `http_${status}`,
+  );
+
+async function call(
+  fetchImpl: typeof fetch,
+  url: string,
+  apiKey: string,
+  method: string,
+  body?: Json,
+): Promise<Json> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method,
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new ShortenerError("unavailable", "network");
+  }
+  if (!response.ok) throw failure(response.status);
+  const parsed = (await response.json().catch(() => ({}))) as unknown;
+  const json = (parsed && typeof parsed === "object" ? parsed : {}) as Json;
+  return (json["data"] && typeof json["data"] === "object" ? json["data"] : json) as Json;
+}
+
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+const unconfigured = (): never => {
+  throw new ShortenerError("unavailable", "not_configured");
+};
+
+export function goppiShortener(
+  config: { baseUrl: string; apiKey: string } | null,
+  fetchImpl: typeof fetch,
+): Shortener {
+  const base = config?.baseUrl.replace(/\/+$/, "") ?? "";
+  const api = (path: string, method: string, body?: Json) =>
+    config ? call(fetchImpl, `${base}${path}`, config.apiKey, method, body) : unconfigured();
+  return {
+    provider: "goppi",
+    async available(slug) {
+      const data = await api(`/links/check?slug=${encodeURIComponent(slug)}`, "GET");
+      return data["available"] === true;
+    },
+    async create(input): Promise<CreatedLink> {
+      const data = await api("/links", "POST", {
+        long_url: input.longUrl,
+        title: input.title,
+        ...(input.slug ? { slug: input.slug } : {}),
+      });
+      const slug = text(data["slug"]) || input.slug || "";
+      const id = data["id"];
+      const ref = typeof id === "number" || typeof id === "string" ? String(id) : "";
+      if (!ref || !slug) throw new ShortenerError("unavailable", "bad_answer");
+      return { ref, slug, shortUrl: text(data["short_url"]) || `https://goppi.id/${slug}` };
+    },
+    async archive(ref) {
+      await api(`/links/${encodeURIComponent(ref)}/archive`, "PUT");
+    },
+    async restore(ref) {
+      await api(`/links/${encodeURIComponent(ref)}/unarchive`, "PUT");
+    },
+    async clicks(ref) {
+      const data = await api(`/links/${encodeURIComponent(ref)}/analytics`, "GET");
+      const total = data["total_clicks"] ?? data["clicks"];
+      if (typeof total === "number") return total;
+      // shortcut: the answer's exact shape is unconfirmed; a click timeline is summed, anything else is "not reported".
+      const timeline = data["timeline"];
+      return Array.isArray(timeline)
+        ? timeline.reduce((sum: number, day: unknown) => {
+            const n = (day as Json | null)?.["clicks"];
+            return sum + (typeof n === "number" ? n : 0);
+          }, 0)
+        : null;
+    },
+  };
+}
+
+export function sidShortener(apiKey: string | null, fetchImpl: typeof fetch): Shortener {
+  const api = (path: string, method: string, body?: Json) =>
+    apiKey ? call(fetchImpl, `https://api.s.id/v2${path}`, apiKey, method, body) : unconfigured();
+  return {
+    provider: "sid",
+    async available(slug) {
+      const data = await api("/links/available", "POST", { custom_slug: slug });
+      return data["available"] === true;
+    },
+    async create(input): Promise<CreatedLink> {
+      const data = await api("/links", "POST", {
+        long_url: input.longUrl,
+        title: input.title,
+        ...(input.slug ? { custom_slug: input.slug } : {}),
+      });
+      const short = text(data["short"]) || text(data["custom_slug"]) || input.slug || "";
+      if (!short) throw new ShortenerError("unavailable", "bad_answer");
+      return {
+        ref: short,
+        slug: short,
+        shortUrl: text(data["short_url"]) || `https://s.id/${short}`,
+      };
+    },
+    async archive(ref) {
+      await api(`/links/${encodeURIComponent(ref)}`, "DELETE");
+    },
+    async restore(ref) {
+      await api(`/links/${encodeURIComponent(ref)}/unarchive`, "POST");
+    },
+    async clicks(ref) {
+      const data = await api(`/links/${encodeURIComponent(ref)}/stats`, "GET");
+      const total = data["clicks"] ?? data["total_clicks"];
+      return typeof total === "number" ? total : null;
+    },
+  };
+}

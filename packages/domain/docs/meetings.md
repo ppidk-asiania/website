@@ -1,0 +1,171 @@
+# Meetings
+
+Meetings (F4), ported from PPIDK `app/Support/Rapat/*` (rules only). Minutes (F5) and
+machine-drafted minutes (F6) build on the same document.
+
+## What it does
+
+Staff schedule a meeting of a unit (or of the whole region) with participants who each have a
+role IN the meeting; the chair and the secretary run it (room, attendance, cancel, minutes). The
+room is a Zoom booking XOR an external link. Participants sign the attendance with a short code
+shown on the meeting screen (or its QR); reminders go out before the start and after the end.
+
+```
+scheduled ──(end time passes, read-time)──→ finished
+    └──(chair/secretary cancels with a reason)──→ cancelled
+```
+
+## Where it lives
+
+- Rules: `packages/domain/src/meetings/index.ts`
+- Store: `packages/db/src/sql/meetings.ts` (`meetings`, `attendanceCodes`)
+- Admin: `apps/admin/src/server/meetings.ts`, pages `/meetings`, `/meetings/[id]`,
+  cron job `meeting-reminders` (`apps/admin/docs/cron.md`)
+- Web: `/attend` and `/attend/[code]` (`apps/web/src/server/attendance.ts`)
+- Tests: `tests/integration/meetings.test.ts`
+
+## Fields
+
+| Field                        | Rule                                                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                      | 2-200 characters                                                                                                                         |
+| `orgUnitId`                  | a unit (scope via `orgUnitPath`) or null = whole region (global edit)                                                                    |
+| `startsAtLocal` + `timeZone` | wall time in an IANA zone → `startsAt` in UTC; never in the past                                                                         |
+| `durationMinutes`            | 5-720 → `endsAt`                                                                                                                         |
+| `agenda[]`                   | ≤ 30 items; ids kept for unchanged titles (minutes are per item)                                                                         |
+| `participants[]`             | account e-mails → uids; exactly one chair, at most one secretary                                                                         |
+| `room`                       | `{ zoomRequestId, externalUrl }`: saving one clears the other                                                                            |
+| `attendance`                 | uid → `{ at, method: code \| manual, status: present \| excused \| sick, note }`; records without a status (before 12.2) read as present |
+
+## Rules
+
+- **Authority from the role in the meeting**: chair and secretary run it (`canRunMeeting`), as
+  does whoever holds `meetings.edit` for its unit. Their actions need `meetings.read` in some
+  scope (`inSomeScope` in `createGuardedAction`), the handler checks the seat.
+- Scheduling and editing need `meetings.edit` for the unit (global for region meetings). A
+  finished or cancelled meeting no longer changes.
+- **Attendance codes**: 6 characters from an alphabet without look-alikes, valid 2 minutes, the
+  screen asks for a new one every 90 seconds. Only `sha256("attend:" + code)` is stored
+  (`attendanceCodes/{hash}` with `expiresAt`; the `expire` cron job deletes old ones). A code is
+  accepted from 30 minutes before the start to 30 minutes after the end, only from a signed-in
+  participant; typing ignores case, spaces and dashes. Wrong, expired and other people's codes
+  get the same kind of answer.
+- The chair or secretary may mark one or several people at once (`mark`: `uids[]`, `status`
+  present / excused / sick / none, optional note) or clear a mark (`none`). "Present" needs the
+  meeting to have started; excused and sick may be noted earlier. Signing with the code turns an
+  excused or sick mark into present. A cancelled meeting or approved minutes refuse changes.
+- **Attendance states (step 12.2)**: present, excused and sick are stored; "not yet" (meeting
+  not over) and "no news" (over, no record) are computed by `attendanceState`. Only "present"
+  counts for the quorum, the minutes' frozen `attendanceSnapshot` and the minutes PDF "present"
+  (`presentUids`); the PDFs print excused / sick, and the attendance CSV has the state.
+- **Admin meeting page**: a box with the viewer's own attendance and the state of the window
+  (not shown for a cancelled meeting or a non-participant); the agenda card comes before the
+  participants table. The participants are a `ListCard` (25 per page, search by name, tabs All /
+  Not yet / Present / Excused-Sick / No news with counts, empty tabs hidden, select several and
+  mark them). The summary says "N participants not signed yet" and never "0".
+- **PIC of an action item**: a participant, or an active officer of the meeting's period
+  (appointment, listed after the participants with the seat label, `seatLabel`). The save checks
+  it in the transaction; an unchanged PIC who has since left office stays shown and valid.
+- **Web `/attend/[code]`**: for a signed-in participant a card shows the title, the time in
+  their zone, the unit, the place (the external link, or "Zoom") and the name that will be
+  recorded; someone already present sees "Your attendance at ... was recorded at 20.10 WIB"
+  instead of the button. Looking a code up (`createAttendCard`) never records; only the button
+  does.
+- **Reminders** (cron `meeting-reminders`): start reminder in the 15 minutes before the start,
+  end reminder in the hour after the end, to every participant on their channel (WhatsApp when
+  a number exists, else e-mail), keys `meeting:{id}:start:{uid}` and `meeting:{id}:end:{uid}`,
+  so a job interval up to 15 minutes works and a repeated call sends nothing twice. The start
+  reminder adds the unit, the link and the Zoom passcode, and the chair and secretary get one
+  more line ("open the attendance"); people marked excused or sick get no start reminder. Its key carries the start time
+  (`meeting:{id}:start:{uid}:{startsAtMs}`), so a moved meeting reminds again.
+
+## Notices (step 12.1)
+
+All texts are Indonesian + English, show the time in the recipient's own zone (profile
+`timezone`, else the meeting's zone) and skip inactive accounts. The person who saves is never
+told about their own change.
+
+| Notice     | When                                                                                                                                                       | Key                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Invitation | a participant is added (or the meeting is created) and the meeting has not started: title, time, unit, link + passcode, first five agenda items, page link | `meeting:{id}:invite:{uid}`           |
+| Change     | the edit form (switch "Tell participants about the change", on by default) or the room form changed start, end, link or passcode: old → new                | `meeting:{id}:change:{uid}:{version}` |
+| Cancel     | switch "Tell participants" (on by default), with the reason                                                                                                | `meeting:{id}:cancel:{uid}`           |
+
+- Someone added in the same save gets only the invitation. A save with no change, or one that
+  only relabels the time zone (same instants), sends nothing.
+- "Link" is the external link or the Zoom booking's join link; the passcode is the booking's.
+  There is no separate "place" field on a meeting yet.
+
+## Minutes and action items (F5)
+
+- `meeting.minutes`: notes per agenda item (`notes[agendaItemId]`), other business, `quorum`
+  (people needed; null = not set), `source` (`manual`, `ai_transcript`, `ai_zoom`, `ai_summary`).
+- The chair and the secretary write them (`saveMinutes`); notes of items no longer on the agenda
+  and empty notes are dropped.
+- **Approve and lock**: the chair, or `meetings.approve_minutes` for the meeting's unit, once the
+  meeting has started. Approval sets `approvedAt/By` and freezes `attendanceSnapshot` (uids
+  present); after that the minutes and the attendance no longer change (audited, not revertible).
+- Quorum met = present (the snapshot once approved) ≥ quorum; shown on the PDF.
+- **Action items** (`actionItems/{id}`: meetingId, meetingTitle, periodId, orgUnitPath, title,
+  pic, dueOn, doneAt): added and edited by whoever runs the meeting; the PIC must be a
+  participant or an active officer of the period (checked in the transaction on every save); the PIC or the chair marks them done;
+  they stay editable after approval. Overdue = due date before today and not done (read-time;
+  My Tasks reads them by PIC).
+- **PDF** at `/api/meetings/[id]/minutes`, rendered on request (`minutesSheet`), never stored:
+  attendance (frozen list once approved), quorum, notes per item, action items, approval line.
+  `?sheet=attendance` prints the attendance list alone (`attendanceSheet`: present with the
+  time signed and the method; excused / sick with the note; or absent) — M8.
+
+## Machine-drafted minutes (F6)
+
+- Port `MinutesDrafter` (`drafting.ts`); adapter `apps/admin/src/server/anthropic.ts`
+  (Anthropic Messages API, `ANTHROPIC_API_KEY`; forced tool output validated with
+  `DraftOutputSchema`; 60 s timeout). The adapter calls the shared `callModel("minutes", uid, …)`
+  wrapper, which picks the model (`settings/ai`, default `claude-sonnet-4-5`; `ANTHROPIC_MODEL`
+  only if it is a listed model) and writes one `aiUsage` row (feature, model, uid, token counts,
+  time; never the prompt or the answer) as soon as the answer arrives, before it is validated, so
+  a refused answer is logged too. A failed HTTP call logs nothing. No key = the "Draft from
+  transcript" button is hidden and the action refuses. Models, prices and cost maths:
+  `@website/domain/ai` (`AI_MODELS`, `costOf`, `summarizeUsage`); the superadmin's Dashboard AI
+  card shows the key's last four characters, the model per feature, and requests / tokens /
+  estimated cost this month and last month (a model without a known price is listed apart, never
+  counted as zero). Changing a model needs `ai.edit` (audited, `module: ai`). DEC-22.
+- Input: a pasted transcript, a Zoom `.vtt` file, or **Pull Zoom transcript** when the room is a
+  Zoom booking (`packages/domain/docs/zoom.md` → Webhooks). `parseVtt`
+  drops the header, NOTE blocks, cue numbers and timings, keeps every spoken line, treats a
+  "Name: " prefix as a speaker only when it occurs at least twice, joins a speaker's lines in a
+  row.
+- The draft fills only EMPTY agenda items (`mergeDraft`; a person's notes are never
+  overwritten); `minutes.source` records `ai_transcript` / `ai_zoom` / `ai_summary` when the machine wrote first.
+- **Draft from Zoom summary** (12.3): feeds the stored Zoom summaries of the meeting's booking,
+  all sessions in time order (`summaryText`), into the same drafter (`source = ai_summary`);
+  no Zoom call. The button tooltips tell the three sources apart: pasted transcript, Zoom
+  transcript pulled now, stored Zoom summary. Shown only when a summary exists. The drafter's
+  AI usage row (10.5) is added by that step's wrapper, not here.
+- Proposed action items come back to the page; a PIC who is not a participant becomes "no PIC"
+  and a person adds each item, which re-checks the PIC on save.
+- A failure is logged (`minutes draft failed`) and nothing is written.
+
+## Import from PPIDK (step 7.12, block J)
+
+`infrastructure/scripts/import-ppidk-meetings.mjs` (dry run first, idempotent, ids `ppidk-…`)
+with the pure mapping `packages/db/src/ppidk/meetings.ts`, after the people import and after
+freezing the PPIDK meeting, Zoom and Tools screens:
+
+- `meetings` + `meeting_participants` (pemimpin → chair, notulis → secretary, peserta and
+  undangan → participant; a second leader becomes a participant; no leader → the creator, else
+  the first participant, chairs), attendance `hadir` (kode → code, else manual), `izin` → excused, `sakit` → sick (`belum` and `alfa` are not stored, they are computed), agenda items
+  with discussion + decision as the notes, `minutes_status` disahkan → approved (snapshot =
+  those present), `minutes_assisted_source` → source; the Zoom room or `meeting_url`.
+- `meeting_action_items` (cancelled ones skipped; the PIC kept as history).
+- `zoom_meetings` (selesai → approved; `requested_passcode` cut to 10), capacity days rebuilt
+  from the approved bookings, `zoom_recording_sessions` (archived ones count as listed).
+- `shortlinks` (provider, external id as ref, archived), `outgoing_messages` as message log
+  history with key `ppidk:{idempotency_key}`: sent → sent, failed → failed, queued → blocked
+  ("not sent before the move", never sent late), channel log → logged.
+- Not imported: attendance codes (they rotate), satisfaction polls of PPIDK.
+- Report: `import-meetings-report.json` (counts and every skipped row).
+
+## Permissions
+
+`meetings.read`, `meetings.edit`, `meetings.approve_minutes` (F5) — Role Manager → Meetings.

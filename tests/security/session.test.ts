@@ -44,7 +44,6 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
   });
 
   it("uses a __Secure- cookie so one session can be shared by web, admin and shop", () => {
-    // __Host- forbids the Domain attribute; __Secure- still forces Secure.
     expect(SESSION_COOKIE).toBe("__Secure-session");
   });
 
@@ -56,7 +55,6 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     const signOut = await routes.DELETE(
       new Request("https://admin.ppiasiania.id/api/session", { method: "DELETE" }),
     );
-    // A cookie set with a Domain can only be cleared with the same Domain.
     expect(signOut.headers.get("set-cookie")).toContain("Domain=ppiasiania.id");
     expect(signOut.headers.get("set-cookie")).toContain("Max-Age=0");
   });
@@ -88,6 +86,38 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     );
     expect(res.status).toBe(401);
     expect(await res.text()).not.toContain("expired");
+  });
+
+  it("records the sign-in for the uid of the VERIFIED session, never for anything in the body", async () => {
+    const { identity, mocks } = provider();
+    const onSignIn = vi.fn(() => Promise.resolve());
+    const res = await createSessionRoutes({ identity, maxAgeHours: 8, onSignIn }).POST(
+      post({ idToken: "google-id-token" }),
+    );
+    expect(res.status).toBe(204);
+    expect(mocks.verifySessionCookie).toHaveBeenCalledWith("session-cookie-value");
+    expect(onSignIn).toHaveBeenCalledWith(expect.objectContaining({ uid: "u1" }));
+  });
+
+  it("records nothing when the token is refused or the new session does not verify", async () => {
+    const onSignIn = vi.fn(() => Promise.resolve());
+    const refused = provider({ createSessionCookie: () => Promise.reject(new Error("bad")) });
+    expect(
+      (
+        await createSessionRoutes({ identity: refused.identity, maxAgeHours: 8, onSignIn }).POST(
+          post({ idToken: "t" }),
+        )
+      ).status,
+    ).toBe(401);
+    const unverified = provider({ verifySessionCookie: () => Promise.resolve(null) });
+    const res = await createSessionRoutes({
+      identity: unverified.identity,
+      maxAgeHours: 8,
+      onSignIn,
+    }).POST(post({ idToken: "t" }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(onSignIn).not.toHaveBeenCalled();
   });
 
   it("sign-out revokes the user's sessions and clears the cookie", async () => {
