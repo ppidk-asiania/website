@@ -1,0 +1,109 @@
+# Forms (versioned questions)
+
+## What it does
+
+Staff build forms on the admin **Forms** page: a title, a description, where the form is used
+(a **public form** answered by guests, anonymously or with an account, or a **recruitment form** answered inside an application)
+and a list of questions. Questions live in numbered versions. A version is **frozen** once
+anyone answered it: changing the questions then saves version n+1, and earlier answers keep
+pointing at the version they answered. Answers are always validated on the server by a strict
+Zod schema built from the version.
+
+## Who may answer (respondents)
+
+`form.respondents` sets who answers a public form at `/f/{token}` (default `guest`):
+
+| Mode        | Page asks for                 | Stored on the response                       |
+| ----------- | ----------------------------- | -------------------------------------------- |
+| `guest`     | name + e-mail first           | name, e-mail                                 |
+| `anonymous` | nothing                       | answers only: no uid, no IP hash, no profile |
+| `account`   | sign-in first                 | uid, name, e-mail, profile copy              |
+| `officers`  | sign-in first, an active seat | same as `account`                            |
+
+`form.profileFields` (only for `account` / `officers`) is a subset of seat, whatsapp, chapter,
+campus, birthPlace, birthDate. The page lists the values before submit and the response stores a
+COPY in `response.profile` (blank when unknown); later profile changes never alter it. Seat is the
+title of the account's active appointments; the member profile has no birth place yet, so
+`birthPlace` is copied blank.
+
+Account / officers forms keep ONE response per account (id `{formId}_{uid}`): a later submit
+replaces the answers and the profile copy until the form closes, and does not raise the count.
+"Has an active seat" is an active appointment in the active period (`activeForUser`); step 10.2
+replaces it with `activeSeats(uid)`. Rules: `checkRespondent`, `copyProfile` in the domain.
+
+File questions stay for signed-in forms: `assertPublishable` refuses them on guest and anonymous
+forms only. (The `/f/{token}` page has no file upload yet.)
+
+**Own forms:** a global `forms.edit` covers every form; a unit-scoped `forms.edit` can create
+forms and change or delete only the forms the person created (`form.createdBy`). Forms without
+`createdBy` (older ones) need the global permission.
+
+The export gains Name / E-mail / `Profile: <field>` columns when responses carry them
+(still `forms.export`, still logged).
+
+## Where it lives
+
+- Rules: `packages/domain/src/forms/index.ts` (question types, `FormInputSchema`,
+  `planVersion`, `assertPublishable`, `formWindow`, `answersSchema`/`parseAnswers`,
+  `responseTable`).
+- Storage: `packages/db/src/sql/forms.ts` — `forms/{id}`,
+  `formVersions/{formId}_{n}` and `formResponses/{id}` (index: formId + submittedAt desc).
+- Admin: `apps/admin/src/server/forms.ts` (guarded actions), pages `/forms`
+  (`src/components/forms-page.tsx`, `forms-model.ts`) and `/forms/{id}/responses`
+  (`form-responses-page.tsx`).
+- Web: `/f/[token]` (`apps/web/docs/public-site.md`).
+- Tests: `tests/unit/forms.test.ts`, `tests/unit/admin-forms.test.ts`,
+  `tests/unit/web-forms.test.ts`, `tests/integration/forms.test.ts`,
+  `tests/integration/public-forms.test.ts`.
+
+## How to use it
+
+```ts
+import { parseAnswers } from "@website/domain/forms";
+
+const result = parseAnswers(version.questions, rawAnswers);
+if (!result.ok) return result.fields; // question id → message ("form" = unknown key)
+store(result.answers); // keyed by question id
+```
+
+## Rules and assumptions
+
+- **Question types:** short answer (≤ 300 characters), paragraph (≤ 5,000), e-mail, number
+  (optional min/max), date (`YYYY-MM-DD`, never shifted by a time zone), single choice,
+  checkboxes (optional "most ticks"), file, consent (must be ticked when required). Choices have
+  2–50 unique options and may allow one free-text "Other" answer. At most 100 questions.
+- **Question ids** (`q_` + 8 characters) are created by the server and never change, so the
+  answers of every version share a column in the responses table.
+- **Freezing:** unchanged questions write nothing; an unanswered version is edited in place; an
+  answered version is never changed (`planVersion`). The response that first answers a version
+  marks it `answered` in the same transaction.
+- **Answers:** text goes through `safeText` (no HTML); unknown keys are refused (`.strict()`);
+  blank answers to optional questions are dropped; required questions must be answered.
+- **Usage** (public / recruitment) changes only while the form is a draft. Recruitment forms
+  are never published at a public link.
+- **Files** are for signed-in applicants only: a public form cannot have a file question
+  (`assertPublishable`), so guests never upload anything. A file answer is a private Storage
+  path under `forms/{formId}/…`. A file question may be marked `mayFollow` ("May follow after
+  submit"): the recruitment accepts the application without it (`mayFollow` is stored only when
+  set; see `recruitment.md`).
+- **Public forms (C2):** `forms.publish` publishes a public form at `/f/{token}` on the website
+  (128-bit random token, created once and kept when a closed form is re-opened) and closes it.
+  `publicAnswerState` is the guard of that path: recruitment, draft and deleted forms are "not
+  found" there, closed forms and answers outside `opensAt`–`closesAt` are refused. A response is
+  written in ONE transaction with the version it answers (marked answered = frozen) and the
+  form's `responseCount`; a visitor whose page shows an older version is asked to reload.
+  reCAPTCHA v3 runs before anything is read; the per-IP limit of the request guard applies.
+- **Responses:** `/forms/{id}/responses` shows the newest 500 (`forms.responses`). Export CSV
+  needs `forms.export`, reads up to 10,000, and is logged as a `data.export` security event
+  (answers are personal data). CSV cells that would run as spreadsheet formulas get a leading
+  apostrophe (`esc` in `apps/admin/src/components/format.ts`).
+- **Permissions:** page `forms` — `forms.read` (list), `forms.edit` (build, delete),
+  `forms.publish`, `forms.responses`, `forms.export`.
+- **Audit:** module `forms`, resource `form`. A CREATE (revert = trash) and a DELETE (revert =
+  restore) can be reverted; edits cannot (they may have created a version). Question versions
+  are never deleted.
+
+## Configuration
+
+Existing `RECAPTCHA_SECRET_KEY`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_MIN_SCORE` (web)
+and `WEB_URL` (admin, for "Copy Link").

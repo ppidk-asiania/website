@@ -1,12 +1,8 @@
-/**
- * Minimal shared kernel. Keep this tiny — anything module-specific belongs in its module.
- */
 declare const brand: unique symbol;
 export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type EntityId = Brand<string, "EntityId">;
 
-/** Every editable entity carries these for optimistic concurrency, soft delete and auditing. */
 export interface EntityMeta {
   readonly id: string;
   readonly version: number;
@@ -21,7 +17,6 @@ export type Result<T, E extends string = string> =
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 export const err = <E extends string>(error: E): Result<never, E> => ({ ok: false, error });
 
-/** Injected clock so business rules are testable and never read global time implicitly. */
 export interface Clock {
   now(): Date;
 }
@@ -30,7 +25,26 @@ export class ConcurrencyConflictError extends Error {
   override readonly name = "ConcurrencyConflictError";
 }
 
+export class RuleViolationError extends Error {
+  override readonly name = "RuleViolationError";
+}
+
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export function isValidSlug(slug: string): boolean {
   return slug.length > 0 && slug.length <= 120 && SLUG.test(slug);
 }
+
+/**
+ * Official organisation name (DECISIONS s.112). Every place that prints the long name uses this.
+ * Short names "PPI Dunia", "PPIDK Asiania" and "PPIDK Asia-Oseania" stay as they are.
+ * The English wording is a proposal until the owner confirms it.
+ */
+export const ORGANISATION_NAME = {
+  id: "PERHIMPUNAN PELAJAR INDONESIA DUNIA KAWASAN ASIA-OSEANIA",
+  en: "Overseas Indonesian Students’ Association Alliance for Asia-Oceania Region",
+} as const;
+
+export * from "./files";
+export * from "./images";
+export * from "./money";
+export * from "./time";

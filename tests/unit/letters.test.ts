@@ -1,0 +1,443 @@
+import { describe, expect, it } from "vitest";
+import {
+  attachUpload,
+  cancelLetter,
+  checkUploadedNumber,
+  issueUpload,
+  letterUploadPath,
+  placeStamps,
+  UploadPlacementSchema,
+  deskLabel,
+  desksOf,
+  isEditable,
+  letterCanonical,
+  LetterInputSchema,
+  LetterTypeInputSchema,
+  makeVerificationCode,
+  missingFields,
+  missingUploadParts,
+  normalizeLetterInput,
+  normalizeVerificationCode,
+  passReview,
+  returnLetter,
+  signDesk,
+  submitForReview,
+  type Letter,
+  type LetterType,
+} from "@website/domain/documents";
+
+const now = new Date("2026-11-02T03:00:00Z");
+const meta = { version: 1, createdAt: now, updatedAt: now, deletedAt: null };
+const type = (extra: Partial<LetterType> = {}): LetterType => ({
+  id: "und",
+  ...meta,
+  ...LetterTypeInputSchema.parse({
+    name: "Surat Undangan",
+    code: "SU",
+    numberFormat: "{nomor}/{jenis}/{unit}/PPIDK-ASIANIA/{bulan_romawi}/{tahun}",
+  }),
+  ...extra,
+});
+const letter = (extra: Partial<Letter> = {}): Letter => ({
+  id: "l1",
+  ...meta,
+  typeId: "und",
+  orgUnitId: "sekjen",
+  orgUnitPath: ["sekjen"],
+  periodId: "p1",
+  subject: "Undangan rapat",
+  body: "<p>Isi</p>",
+  recipient: "Ketua PPI Jepang",
+  place: "Tokyo",
+  attachmentNote: "",
+  letterDate: "2026-11-02",
+  status: "draft",
+  source: "editor",
+  createdBy: "author",
+  reviewedBy: null,
+  reviewNote: null,
+  secretary: null,
+  coordinator: null,
+  number: null,
+  numberFormatted: null,
+  verificationCode: null,
+  issuedAt: null,
+  cancelledAt: null,
+  cancelReason: null,
+  contentDigest: null,
+  signers: [],
+  letterhead: null,
+  archive: null,
+  upload: null,
+  placement: null,
+  activityCode: null,
+  topDeskOnly: false,
+  initialsBox: false,
+  draftUrl: null,
+  signedBy: [],
+  sheetNumberTemplate: null,
+  ...extra,
+});
+
+describe("letter types", () => {
+  it("trims the code, checks the number pattern and keeps PPIDK defaults", () => {
+    const parsed = LetterTypeInputSchema.parse({
+      name: "Surat Permohonan",
+      code: " SPm ",
+      numberFormat: "{nomor}/{jenis}/{tahun}",
+    });
+    expect(parsed).toMatchObject({
+      code: "SPm",
+      numberPadding: 3,
+      requiresRecipient: true,
+      requiresCoordinator: false,
+      contentPublic: true,
+      active: true,
+    });
+    const bad = LetterTypeInputSchema.safeParse({
+      name: "X",
+      code: "X",
+      numberFormat: "{nomor}/{year}",
+    });
+    expect(bad.success ? null : bad.error.issues[0]?.message).toBe("Unknown placeholder {year}.");
+    expect(
+      LetterTypeInputSchema.safeParse({ name: "X", code: "A B", numberFormat: "{nomor}" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("letter workflow (draft → review → corrected → desks → approved)", () => {
+  it("submits only complete drafts; a type without recipient clears it", () => {
+    const sk = type({ requiresRecipient: false });
+    expect(normalizeLetterInput(letter(), sk, "editor").recipient).toBe("");
+    expect(normalizeLetterInput(letter(), type(), "editor").recipient).toBe("Ketua PPI Jepang");
+    expect(missingFields(letter({ recipient: "" }), sk)).toEqual([]);
+    expect(
+      missingFields(letter({ subject: " ", body: "", letterDate: null, recipient: "" }), type()),
+    ).toEqual(["Subject", "Body", "Letter date", "Recipient"]);
+    expect(missingFields(letter({ body: "", source: "upload" }), type())).toEqual([]);
+    expect(() => submitForReview(letter({ body: "" }), type())).toThrow("Complete first: Body.");
+    expect(submitForReview(letter(), type()).status).toBe("review");
+    expect(() => submitForReview(letter({ status: "review" }), type())).toThrow("Only drafts");
+    expect(isEditable(letter())).toBe(true);
+    expect(isEditable(letter({ status: "review" }))).toBe(true);
+    expect(isEditable(letter({ status: "corrected" }))).toBe(false);
+  });
+
+  it("nobody signs before the secretariat passes it; one person never holds both desks", () => {
+    const sk = type({ requiresCoordinator: true });
+    expect(() => signDesk(letter({ status: "review" }), sk, "secretary", "sekjen", now)).toThrow(
+      "The secretariat must pass",
+    );
+    const corrected = passReview(letter({ status: "review" }), sk, "sekre");
+    expect(corrected).toMatchObject({ status: "corrected", reviewedBy: "sekre" });
+    expect(() => passReview(letter(), sk, "sekre")).toThrow("Only letters under review");
+    const one = signDesk(corrected, sk, "secretary", "sekjen", now);
+    expect(one).toMatchObject({ status: "corrected", secretary: { uid: "sekjen", at: now } });
+    expect(() => signDesk(one, sk, "secretary", "x", now)).toThrow("already signed");
+    expect(() => signDesk(one, sk, "coordinator", "sekjen", now)).toThrow("both signing desks");
+    const both = signDesk(one, sk, "coordinator", "koor", now);
+    expect(both.status).toBe("approved");
+    expect(desksOf(type())).toEqual(["secretary"]);
+    expect(() => signDesk(corrected, type(), "coordinator", "koor", now)).toThrow(
+      "no top signing desk",
+    );
+    expect(signDesk({ ...corrected }, type(), "secretary", "sekjen", now).status).toBe("approved");
+    const reversed = signDesk(
+      signDesk(corrected, sk, "coordinator", "koor", now),
+      sk,
+      "secretary",
+      "sekjen",
+      now,
+    );
+    expect(reversed.status).toBe("approved");
+    expect(() =>
+      signDesk(signDesk(corrected, sk, "coordinator", "koor", now), sk, "secretary", "koor", now),
+    ).toThrow("both signing desks");
+  });
+
+  it("returning clears both desks and needs a note", () => {
+    const approved = letter({
+      status: "approved",
+      secretary: { uid: "s", at: now },
+      coordinator: { uid: "c", at: now },
+    });
+    expect(returnLetter(approved, "sekre", " Fix the date ")).toMatchObject({
+      status: "draft",
+      reviewNote: "Fix the date",
+      secretary: null,
+      coordinator: null,
+    });
+    expect(() => returnLetter(approved, "sekre", " ")).toThrow("Say what must be fixed.");
+    expect(() => returnLetter(letter({ status: "issued" }), "s", "x")).toThrow("Only letters in");
+  });
+
+  it("cancels only numbered letters, with a public reason; the number stays", () => {
+    const issued = letter({ status: "issued", number: 4, numberFormatted: "004/SU" });
+    expect(cancelLetter(issued, " wrong date ", now)).toMatchObject({
+      status: "cancelled",
+      number: 4,
+      cancelReason: "wrong date",
+      cancelledAt: now,
+    });
+    expect(cancelLetter(letter({ status: "awaiting_file" }), "x", now).status).toBe("cancelled");
+    expect(() => cancelLetter(issued, "", now)).toThrow("Give the reason");
+    expect(() => cancelLetter(letter(), "x", now)).toThrow("Only numbered letters");
+  });
+
+  it("desk labels as printed, from the period's desk titles", () => {
+    expect(deskLabel("coordinator", type(), null)).toBe("Sekretaris Jenderal PPIDK Asia-Oseania");
+    expect(deskLabel("secretary", type({ requiresCoordinator: true }), "Media")).toBe(
+      "Sekretaris Eksekutif PPIDK Asia-Oseania",
+    );
+    expect(deskLabel("secretary", type(), "Direktorat Media")).toBe("Direktorat Media");
+    expect(deskLabel("secretary", type(), null)).toBe("PPIDK Asia-Oseania");
+    const period = {
+      desks: {
+        coordinator: { title: "Ketua Umum", orgUnitId: null },
+        signer: { title: "Sekretaris Umum", orgUnitId: null },
+      },
+    };
+    expect(deskLabel("coordinator", type(), null, period)).toBe("Ketua Umum PPIDK Asia-Oseania");
+    expect(deskLabel("secretary", type({ requiresCoordinator: true }), "Media", period)).toBe(
+      "Sekretaris Umum PPIDK Asia-Oseania",
+    );
+  });
+});
+
+describe("letter options (14.1)", () => {
+  const url = "https://docs.google.com/document/d/abc/edit";
+  const base = {
+    typeId: "und",
+    orgUnitId: "sekjen",
+    subject: "SK",
+    letterDate: "2026-11-02",
+  };
+
+  it("options default to off and the draft link must be a short https address", () => {
+    expect(LetterInputSchema.parse(base)).toMatchObject({
+      topDeskOnly: false,
+      initialsBox: false,
+      draftUrl: null,
+    });
+    expect(LetterInputSchema.parse({ ...base, draftUrl: url }).draftUrl).toBe(url);
+    for (const bad of [
+      "http://x.test/a",
+      "javascript:alert(1)",
+      "not a url",
+      `https://x.test/${"a".repeat(1000)}`,
+    ]) {
+      expect(LetterInputSchema.safeParse({ ...base, draftUrl: bad }).success, bad).toBe(false);
+    }
+  });
+
+  it("the draft link is kept only on own-PDF letters", () => {
+    const linked = letter({ draftUrl: url });
+    expect(normalizeLetterInput(linked, type(), "upload").draftUrl).toBe(url);
+    expect(normalizeLetterInput(linked, type(), "editor").draftUrl).toBeNull();
+    expect(normalizeLetterInput(linked, type(), "certificate").draftUrl).toBeNull();
+  });
+
+  it("a top-desk letter has only the top desk, goes straight to corrected and is signed by it alone", () => {
+    const alone = letter({ topDeskOnly: true });
+    expect(desksOf(type(), alone)).toEqual(["coordinator"]);
+    expect(desksOf(type({ requiresCoordinator: true }), alone)).toEqual(["coordinator"]);
+    expect(desksOf(type({ requiresCoordinator: true }), letter())).toEqual([
+      "secretary",
+      "coordinator",
+    ]);
+    expect(submitForReview(alone, type()).status).toBe("corrected");
+    expect(() => submitForReview(letter({ topDeskOnly: true, body: "" }), type())).toThrow(
+      "Complete first: Body.",
+    );
+    const corrected = submitForReview(alone, type());
+    expect(() => signDesk(corrected, type(), "secretary", "sekjen", now)).toThrow(
+      "signed by the top desk alone",
+    );
+    expect(signDesk(corrected, type(), "coordinator", "koor", now)).toMatchObject({
+      status: "approved",
+      coordinator: { uid: "koor", at: now },
+      secretary: null,
+    });
+  });
+});
+
+describe("upload path v2 and manual letters (14.2)", () => {
+  const file = {
+    path: "letters/p1/l1_upload_x.pdf",
+    sha256: "a".repeat(64),
+    size: 10,
+    numberChecked: false,
+    uploadedBy: "author",
+    uploadedAt: now,
+  };
+  const boxes = UploadPlacementSchema.parse({
+    numbers: [{ page: 1, xMm: 20, yMm: 40, wMm: 80, hMm: 6 }],
+    qr: { page: 1, xMm: 170, yMm: 250, sizeMm: 22 },
+    secretary: { page: 1, xMm: 130, yMm: 230, withStamp: true },
+    coordinator: null,
+  });
+
+  it("boxes: numbers are optional in the schema, signatures know their stamp, sizes are bounded", () => {
+    const old = UploadPlacementSchema.parse({ qr: null, secretary: null, coordinator: null });
+    expect(old.numbers).toEqual([]);
+    expect(boxes.secretary).toMatchObject({ withStamp: true });
+    expect(
+      UploadPlacementSchema.parse({
+        ...old,
+        coordinator: { page: 2, xMm: 1, yMm: 1 },
+      }).coordinator,
+    ).toMatchObject({ withStamp: false });
+    const tooWide = { page: 1, xMm: 1, yMm: 1, wMm: 300, hMm: 6 };
+    expect(UploadPlacementSchema.safeParse({ ...old, numbers: [tooWide] }).success).toBe(false);
+    expect(
+      UploadPlacementSchema.safeParse({ ...old, numbers: Array(11).fill({ ...tooWide, wMm: 50 }) })
+        .success,
+    ).toBe(false);
+  });
+
+  it("an own-PDF letter is submitted only with its PDF, a number box and a QR box", () => {
+    const own = letter({ source: "upload", body: "" });
+    expect(missingUploadParts(own)).toEqual(["Final PDF", "Number box", "QR box"]);
+    expect(() => submitForReview(own, type())).toThrow(
+      "Complete first: Final PDF, Number box, QR box.",
+    );
+    const half = attachUpload(own, file);
+    expect(() => submitForReview(half, type())).toThrow("Complete first: Number box, QR box.");
+    const ready = placeStamps(half, boxes);
+    expect(missingUploadParts(ready)).toEqual([]);
+    expect(submitForReview(ready, type()).status).toBe("review");
+    expect(submitForReview(letter(), type()).status).toBe("review");
+  });
+
+  it("the file and boxes are taken in a draft or review (own-PDF letters), or while awaiting the file", () => {
+    const own = letter({ source: "upload", body: "" });
+    expect(attachUpload(own, file).upload).toEqual(file);
+    expect(placeStamps(letter({ source: "upload", status: "review" }), boxes).placement).toEqual(
+      boxes,
+    );
+    expect(() => attachUpload(letter({ source: "upload", status: "corrected" }), file)).toThrow(
+      "not waiting for its file",
+    );
+    expect(() => attachUpload(letter(), file)).toThrow("not waiting for its file");
+    expect(
+      attachUpload(letter({ source: "manual", status: "awaiting_file" }), file).upload,
+    ).toEqual(file);
+    expect(() => attachUpload(letter({ source: "manual" }), file)).toThrow("not waiting");
+  });
+
+  it("a manual letter needs its signers and never goes through correction", () => {
+    const manual = letter({ source: "manual", body: "" });
+    expect(missingFields(manual, type())).toEqual(["Signers"]);
+    expect(
+      missingFields({ ...manual, signedBy: [{ name: "Rina", seat: "Sekjen" }] }, type()),
+    ).toEqual([]);
+    expect(() => submitForReview(manual, type())).toThrow("takes its number straight");
+  });
+
+  it("signers and the draft link are kept for manual letters only (link: also own-PDF)", () => {
+    const input = letter({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [{ name: "Rina", seat: "Sekjen" }],
+    });
+    expect(normalizeLetterInput(input, type(), "manual")).toMatchObject({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [{ name: "Rina", seat: "Sekjen" }],
+    });
+    expect(normalizeLetterInput(input, type(), "upload")).toMatchObject({
+      draftUrl: "https://docs.google.com/document/d/abc/edit",
+      signedBy: [],
+    });
+    expect(normalizeLetterInput(input, type(), "editor")).toMatchObject({
+      draftUrl: null,
+      signedBy: [],
+    });
+  });
+});
+
+describe("content digest and verification codes", () => {
+  it("canonical text ignores line-ending and edge-space noise but not content", () => {
+    const issued = letter({ numberFormatted: "001/SU", secretary: { uid: "s", at: now } });
+    const text = letterCanonical(issued, "SU");
+    expect(text.split("\x1f")).toEqual([
+      "number=001/SU",
+      "date=2026-11-02",
+      "type=SU",
+      "subject=Undangan rapat",
+      "recipient=Ketua PPI Jepang",
+      "body=<p>Isi</p>",
+      "secretary=s",
+      "coordinator=",
+    ]);
+    expect(letterCanonical({ ...issued, body: "  <p>Isi</p>\r\n" }, "SU")).toBe(text);
+    expect(letterCanonical({ ...issued, body: "<p>Isi!</p>" }, "SU")).not.toBe(text);
+    expect(letterCanonical(letter({ letterDate: null }), "SU")).toContain("number=\x1fdate=\x1f");
+  });
+
+  it("codes use a readable alphabet in two groups of five", () => {
+    let i = 0;
+    const code = makeVerificationCode((n) => (i++ * 7) % n);
+    expect(code).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    expect(code).not.toMatch(/[ILO01]/);
+    expect(makeVerificationCode(() => 0)).toBe("AAAAA-AAAAA");
+    expect(normalizeVerificationCode(" 8f3km-qrtvw ")).toBe("8F3KM-QRTVW");
+    for (const bad of ["8F3KMQRTVW", "8F3K1-QRTVW", "layanan", "8F3KM-QRTVWX"]) {
+      expect(normalizeVerificationCode(bad), bad).toBeNull();
+    }
+  });
+});
+
+describe("upload path (D3)", () => {
+  const NUMBER = "001/SOP/PPIDK-ASIANIA/2026";
+  const file = {
+    path: "letters/p1/l1_upload_x.pdf",
+    sha256: "a".repeat(64),
+    size: 10,
+    numberChecked: true,
+    uploadedBy: "author",
+    uploadedAt: now,
+  };
+  const waiting = letter({ source: "upload", status: "awaiting_file", numberFormatted: NUMBER });
+
+  it("the number must be in a PDF with text (spaces and case ignored); a scan is not checked", () => {
+    const text = (n: string) => `Standar Operasional Prosedur Sekretariat. Nomor: ${n}`;
+    expect(checkUploadedNumber(text("001 / sop / PPIDK-ASIANIA /\n2026"), NUMBER)).toBe(true);
+    expect(() => checkUploadedNumber(text("002/SOP/PPIDK-ASIANIA/2026"), NUMBER)).toThrow(
+      `Number ${NUMBER} is not in the file.`,
+    );
+    expect(checkUploadedNumber("  scanner v2  page 1 ", NUMBER)).toBe(false);
+  });
+
+  it("files and stamp positions only while waiting for the file; issue needs the stamped file", () => {
+    expect(letterUploadPath(waiting, "abcd-ef01-9")).toBe("letters/p1/l1_upload_abcdef01.pdf");
+    expect(() => attachUpload(letter({ status: "approved" }), file)).toThrow(
+      "This letter is not waiting for its file.",
+    );
+    const placement = UploadPlacementSchema.parse({
+      qr: { page: 1, xMm: 170, yMm: 250, sizeMm: 22 },
+      secretary: null,
+      coordinator: null,
+    });
+    expect(placeStamps(waiting, placement).placement).toEqual(placement);
+    expect(() => placeStamps(letter({ status: "issued" }), placement)).toThrow("not waiting");
+    expect(
+      UploadPlacementSchema.safeParse({ ...placement, qr: { page: 0, xMm: 1, yMm: 1, sizeMm: 20 } })
+        .success,
+    ).toBe(false);
+
+    const archive = { path: "letters/p1/l1_b.pdf", sha256: "b".repeat(64), size: 12 };
+    expect(() => issueUpload(waiting, archive, file.sha256, now)).toThrow(
+      "Upload the final PDF first.",
+    );
+    const uploaded = attachUpload(waiting, file);
+    expect(() => issueUpload(uploaded, archive, "c".repeat(64), now)).toThrow(
+      "The file changed meanwhile. Issue it again.",
+    );
+    expect(issueUpload(uploaded, archive, file.sha256, now)).toMatchObject({
+      status: "issued",
+      issuedAt: now,
+      archive,
+    });
+    expect(missingFields(letter({ source: "upload", body: "" }), type())).toEqual([]);
+  });
+});

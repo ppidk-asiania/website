@@ -1,0 +1,217 @@
+import { createHash } from "node:crypto";
+import type { Database } from "./store";
+import type { Contact, Message, MessageLogEntry, MessageLogStore } from "@website/domain/messaging";
+import {
+  can,
+  isSystemRoleId,
+  normalizePermissions,
+  type PagePermission,
+  type ResourceContext,
+  type RoleDefinition,
+} from "@website/permissions";
+import { safeId } from "@website/security/validation";
+import { toPrincipal } from "../users";
+import { getDocumentsByIds } from "./batch";
+import { createSqlRoleStore } from "./users";
+
+export const messageId = (key: string) => createHash("sha256").update(key).digest("hex");
+
+const toDate = (value: unknown): Date => (value as { toDate(): Date }).toDate();
+const toEntry = (id: string, data: Record<string, unknown>): MessageLogEntry =>
+  ({
+    ...data,
+    id,
+    createdAt: toDate(data["createdAt"]),
+    updatedAt: toDate(data["updatedAt"]),
+  }) as MessageLogEntry;
+
+export function createSqlMessageLog(db: Database) {
+  const collection = db.collection("messageLog");
+  const store: MessageLogStore = {
+    claim(key, message: Message, now) {
+      const ref = collection.doc(messageId(key));
+      return db.runTransaction(async (tx) => {
+        if ((await tx.get(ref)).exists) return "duplicate";
+        tx.create(ref, {
+          ...message,
+          key,
+          status: "queued",
+          attempts: 0,
+          providerId: null,
+          lastError: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return "new";
+      });
+    },
+
+    finish(key, { status, providerId, lastError, attempted }, now) {
+      const ref = collection.doc(messageId(key));
+      return db.runTransaction(async (tx) => {
+        const attempts = (await tx.get(ref)).get("attempts") as number;
+        tx.update(ref, {
+          status,
+          providerId: providerId ?? null,
+          lastError: lastError ?? null,
+          attempts: attempted ? attempts + 1 : attempts,
+          updatedAt: now,
+        });
+      });
+    },
+
+    claimRetry(id, now) {
+      const ref = collection.doc(safeId.parse(id));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists || snapshot.get("status") !== "failed") return null;
+        tx.update(ref, { status: "queued", updatedAt: now });
+        return toEntry(id, snapshot.data() as Record<string, unknown>);
+      });
+    },
+  };
+
+  return {
+    ...store,
+    async byKeys(keys: readonly string[]): Promise<Map<string, MessageLogEntry>> {
+      const found = await getDocumentsByIds<Record<string, unknown>>(
+        db,
+        "messageLog",
+        keys.map(messageId),
+      );
+      const entries = [...found].flatMap(([id, data]) => (data ? [toEntry(id, data)] : []));
+      return new Map(entries.map((entry) => [entry.key, entry]));
+    },
+
+    async listFailed({ cursor, limit }: { cursor?: string | undefined; limit: number }) {
+      let query = collection
+        .where("status", "==", "failed")
+        .orderBy("createdAt", "desc")
+        .orderBy("key", "desc");
+      if (cursor !== undefined) {
+        const [time = 0, key = ""] = JSON.parse(cursor) as [number, string];
+        query = query.startAfter(new Date(time), key);
+      }
+      const snapshot = await query.limit(limit + 1).get();
+      const items = snapshot.docs
+        .slice(0, limit)
+        .map((doc) => toEntry(doc.id, doc.data() as Record<string, unknown>));
+      const last = items.at(-1);
+      return {
+        items,
+        nextCursor:
+          snapshot.docs.length > limit && last
+            ? JSON.stringify([last.createdAt.getTime(), last.key])
+            : null,
+      };
+    },
+  };
+}
+
+export type SqlMessageLog = ReturnType<typeof createSqlMessageLog>;
+
+export function createSqlContactReader(db: Database) {
+  const roles = createSqlRoleStore(db);
+  return {
+    async contacts(uids: readonly string[]): Promise<Map<string, Contact>> {
+      const [users, profiles] = await Promise.all([
+        getDocumentsByIds<Record<string, unknown>>(db, "users", uids),
+        getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids),
+      ]);
+      const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+      return new Map(
+        [...users].map(([uid, user]) => [
+          uid,
+          {
+            email: text(user?.["email"]),
+            phone: text(profiles.get(uid)?.["whatsappNumber"]),
+            active: user?.["status"] === "active",
+            timeZone: text(profiles.get(uid)?.["timezone"]),
+          },
+        ]),
+      );
+    },
+
+    async holders(permission: PagePermission, resource: ResourceContext): Promise<string[]> {
+      const holding = (await roles.list()).filter(
+        (role) =>
+          !isSystemRoleId(role.id) && normalizePermissions(role.permissions).includes(permission),
+      );
+      if (holding.length === 0) return [];
+      const ids = holding.map((role) => role.id);
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+      const [period, ...snapshots] = await Promise.all([
+        db.collection("settings").doc("activePeriod").get(),
+        ...chunks.map((chunk) =>
+          db.collection("users").where("roleIds", "array-contains-any", chunk).get(),
+        ),
+      ]);
+      const periodId = period.get("periodId");
+      const map = new Map<string, RoleDefinition>(holding.map((role) => [role.id, role]));
+      const found = new Set<string>();
+      for (const doc of snapshots.flatMap((snapshot) => snapshot.docs)) {
+        const principal = toPrincipal(
+          doc.id,
+          doc.data(),
+          map,
+          typeof periodId === "string" ? periodId : null,
+        );
+        if (can(principal, permission, resource)) found.add(doc.id);
+      }
+      return [...found];
+    },
+  };
+}
+
+export type SqlContactReader = ReturnType<typeof createSqlContactReader>;
+
+/** Step 11.8: what a notice to the recruitment group needs about an applicant and the heads to mention. */
+export function createSqlGroupNoticeReader(db: Database) {
+  return {
+    async applicant(uid: string): Promise<{ name: string; campus: string } | null> {
+      const profile = (
+        await getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", [uid])
+      ).get(uid);
+      return profile
+        ? {
+            name: (profile["fullName"] as string | undefined) ?? "",
+            campus: (profile["university"] as string | undefined) ?? "",
+          }
+        : null;
+    },
+
+    /** Verified WhatsApp numbers of the active head of the unit and of its parent unit. */
+    async headNumbers(periodId: string, unitId: string): Promise<string[]> {
+      const unit = (await getDocumentsByIds<Record<string, unknown>>(db, "orgUnits", [unitId])).get(
+        unitId,
+      );
+      const parent = (unit?.["path"] as string[] | undefined)?.at(-1);
+      const wanted = new Set(parent ? [unitId, parent] : [unitId]);
+      const found = await db
+        .collection("appointments")
+        .where("periodId", "==", safeId.parse(periodId))
+        .where("status", "==", "active")
+        .get();
+      const uids = [
+        ...new Set(
+          found.docs
+            .filter((d) => d.get("seat") === "head" && wanted.has(String(d.get("orgUnitId"))))
+            .map((d) => String(d.get("userId"))),
+        ),
+      ];
+      const [users, profiles] = await Promise.all([
+        getDocumentsByIds<Record<string, unknown>>(db, "users", uids),
+        getDocumentsByIds<Record<string, unknown>>(db, "memberProfiles", uids),
+      ]);
+      return uids.flatMap((uid) => {
+        const profile = profiles.get(uid);
+        return users.get(uid)?.["status"] === "active" &&
+          profile?.["whatsappVerifiedAt"] &&
+          typeof profile["whatsappNumber"] === "string"
+          ? [profile["whatsappNumber"]]
+          : [];
+      });
+    },
+  };
+}

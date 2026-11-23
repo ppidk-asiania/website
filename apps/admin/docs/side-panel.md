@@ -2,10 +2,12 @@
 
 ## What it does
 
-The navigation column on every staff page: logo and organisation name, the MENU list, and the
-signed-in staff member with an account menu (Profile, Account, Emails, Log out). On screens
-narrower than 1024 px it becomes a drawer opened from a top bar, closed by the backdrop, Escape,
-or following a link.
+The navigation column on every staff page: logo and organisation name, the page menu in groups
+(Workspace, Content, Organization, Planning, Administration), and the signed-in staff member with
+an account menu (Profile, Account, Log out). Only the page menu scrolls (its scrollbar sits on the
+panel's right edge); the logo and the account stay in place. A click on a group's label collapses or
+opens that group (native `<details>`, open on load). Pages are 8 px apart, groups 12 px. On screens narrower than 1024 px it becomes a
+drawer opened from a top bar, closed by the backdrop, Escape, or following a link.
 
 ## Where it lives
 
@@ -16,21 +18,24 @@ or following a link.
 - Page gate: `requireAdminViewer` in `apps/admin/src/server/context.ts`, messages in
   `apps/admin/src/components/access-message.tsx`
 - Menu entries and permissions: `apps/admin/src/navigation.ts`
-- Logo: `apps/admin/public/icon.png` (placeholder until the PPIDK logo is supplied — replace the file,
-  keep the name)
+- Logo: `apps/admin/public/logo.webp` (shield and organisation name in one image, full width of
+  the panel; the same file as `apps/web/public/logo.webp`), linking to the public website
+  (`WEB_URL`; not a link when it is unset); also the optional QR-code centre logo in Tools
 - Tests: `tests/unit/admin-navigation.test.ts`
 
 ## How to use it
 
-Add a page to the menu by adding one entry to `ADMIN_NAVIGATION` (label, href, permission). Put the
+Add a page to the menu by adding one entry to `ADMIN_NAVIGATION` (group, label, href, permission),
+next to the other entries of its group (a test checks that each group's entries stay together). Put the
 page under `src/app/(panel)/` so it gets the panel, and gate its content in the page itself:
 
 ```tsx
 export const instant = false;
 
 export default async function Page() {
-  const viewer = await requireAdminViewer("/events", "events.read"); // signed out → web sign-in
-  if (typeof viewer === "string") return <AccessMessage reason={viewer} />; // "no-access"
+  // signed out → web sign-in; signed in without a staff role → restricted (403) page
+  const viewer = await requireAdminViewer("/events", "events.read");
+  if (typeof viewer === "string") return <AccessMessage reason={viewer} />; // no page permission
   // … check can(viewer.principal, …) for the data, then render
 }
 ```
@@ -43,14 +48,20 @@ export default async function Page() {
 - The layout always renders the page segment (in the prerendered fallback and after the session is
   known), otherwise Next.js cannot validate instant navigation ("instant-unrendered-segment"). So
   the layout is not the gate: each page calls `requireAdminViewer`, which redirects signed-out
-  visitors to `WEB_URL/login?next=ADMIN_URL/<path>` and returns `"no-access"` for accounts without
-  a staff role or without the page's permission. A unit test checks that every menu entry has a
+  visitors to `WEB_URL/login?next=ADMIN_URL/<path>`, shows the restricted (403) page
+  (`forbidden()`, `src/app/forbidden.tsx`) to signed-in accounts without any staff role, and returns
+  `"no-access"` for staff without the page's permission. Staff whose member profile is not
+  complete are sent to `WEB_URL/account/profile?next=ADMIN_URL/<path>` first, and their actions
+  are refused (`packages/domain/docs/members.md`). A unit test checks that every menu entry has a
   page calling `requireAdminViewer` with the same href and permission.
-- The pages Tools, Event, Gallery, Article, Newsletter, Organizations and Audit Log exist as blank
-  pages (heading only); each feature fills its page in its own phase.
+- The Audit Log tabs are built from this list (every page except Dashboard and Audit Log). Give an
+  entry `also: [...]` when other audited modules belong under it (Organizations: periods, structure,
+  appointments).
 - The name comes from the sign-in provider (Google); otherwise the email is shown.
-- Profile, Account and Emails link to `/profile`, `/account` and `/emails`; those pages are built in
-  later steps. Log out calls `DELETE /api/session`.
+- Profile and Account open the public website (`WEB_URL/account/profile`, `WEB_URL/account`;
+  same session cookie), so there is one profile and one account page. The web header has the
+  same menu (`apps/web/docs/public-site.md`). Log out calls `DELETE /api/session`.
+- E-mail lives in the MENU as **Email** (`/emails`, `messages.read`): see [messaging.md](messaging.md).
 - Accessibility: skip link, `aria-current` on the active page, 44 px targets, visible focus,
   keyboard menu (arrows, Escape), reduced-motion respected.
 

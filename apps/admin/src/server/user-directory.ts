@@ -1,16 +1,7 @@
-import type { Principal } from "@website/permissions";
+import "server-only";
+import { lazyEnv } from "@website/config/env";
+import type { UserDirectory } from "@website/db";
+import { createSqlUserStore } from "@website/db/sql";
+import { adminDb } from "./stores";
 
-/**
- * Port: maps a verified Firebase uid to the user's record + role assignments in Firestore
- * (`users/{uid}`). A valid Firebase login alone grants nothing in admin: without a staff
- * role (one that includes `admin.access`) the admin area is closed.
- * Implemented in @website/db in the next phase.
- */
-export interface UserDirectory {
-  findPrincipalByUid(uid: string): Promise<Principal | null>;
-}
-
-/** Until the directory is implemented, nobody resolves. Fails closed. */
-export const denyAllUserDirectory: UserDirectory = {
-  findPrincipalByUid: () => Promise.resolve(null),
-};
+export const userDirectory = lazyEnv((): UserDirectory => createSqlUserStore(adminDb()));

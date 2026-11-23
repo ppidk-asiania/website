@@ -1,0 +1,139 @@
+import "server-only";
+import { createFirebaseAccountAdmin } from "@website/auth/firebase-admin";
+import { lazyEnv } from "@website/config/env";
+import {
+  createDbFileStorage,
+  createSqlAccountStore,
+  createSqlApplicationStore,
+  createSqlAppointmentStore,
+  createSqlAuditStore,
+  createSqlAuditWriter,
+  createSqlCertificateStore,
+  createSqlVerificationReader,
+  createSqlCampaignStore,
+  createSqlChapterStore,
+  createSqlChapterRecordStore,
+  createSqlContentStore,
+  createSqlEventStore,
+  createSqlFinanceStore,
+  createSqlFormStore,
+  createSqlIncomingStore,
+  createSqlInterviewStore,
+  createSqlLetterSettingsStore,
+  createSqlLetterStore,
+  createSqlLetterArchive,
+  createSqlLetterTypeStore,
+  createSqlGalleryStore,
+  createSqlMemberProfileStore,
+  createSqlContactReader,
+  createSqlMessageLog,
+  createSqlOrgUnitStore,
+  createSqlPasskeyStore,
+  createSqlPeriodStore,
+  createSqlPersonalityStore,
+  createSqlRecruitmentStore,
+  createSqlSignatureStore,
+  createSqlRoleStore,
+  createSqlUniversityStore,
+  createSqlSubscriberReader,
+  createSqlSubscriberStore,
+  getDatabaseForRole,
+  createSqlObjectiveStore,
+  createSqlMeetingStore,
+  createSqlActionItemStore,
+  createSqlShortLinkStore,
+  createSqlAiStore,
+  createSqlAnalysisStore,
+  createSqlZoomStore,
+  createSqlSurveyStore,
+  createSqlConversationStore,
+  createSqlTaskShareStore,
+  createSqlCalendarStore,
+  createSqlProgramStore,
+  createSqlLpjStore,
+  createSqlPeriodReport,
+} from "@website/db/sql";
+import { createLogger } from "@website/observability";
+import { getAdminEnv } from "./env";
+
+export const adminDb = lazyEnv(() => {
+  const env = getAdminEnv();
+  return getDatabaseForRole({
+    role: "admin_rw",
+    url: env.DATABASE_URL,
+    connectionLimit: env.DATABASE_CONNECTION_LIMIT,
+  });
+});
+
+export const imageStorage = lazyEnv(() => {
+  const env = getAdminEnv();
+  return createDbFileStorage({
+    db: adminDb(),
+    baseUrl: env.WEB_URL ?? "",
+    secret: env.LINK_SIGNING_SECRET,
+  });
+});
+
+export const adminStores = lazyEnv(() => {
+  const env = getAdminEnv();
+  const db = adminDb();
+  return {
+    accounts: createSqlAccountStore(db),
+    roles: createSqlRoleStore(db),
+    passkeys: createSqlPasskeyStore(db),
+    audit: createSqlAuditWriter(db),
+    auditLog: createSqlAuditStore(db),
+    messageLog: createSqlMessageLog(db),
+    contacts: createSqlContactReader(db),
+    content: createSqlContentStore(db),
+    events: createSqlEventStore(db),
+    forms: createSqlFormStore(db),
+    recruitments: createSqlRecruitmentStore(db),
+    applications: createSqlApplicationStore(db),
+    interviews: createSqlInterviewStore(db),
+    personality: createSqlPersonalityStore(db),
+    letters: createSqlLetterStore(db),
+    letterTypes: createSqlLetterTypeStore(db),
+    letterSettings: createSqlLetterSettingsStore(db),
+    letterArchive: createSqlLetterArchive(db),
+    incoming: createSqlIncomingStore(db),
+    signatures: createSqlSignatureStore(db),
+    certificates: createSqlCertificateStore(db),
+    verification: createSqlVerificationReader(db),
+    galleries: createSqlGalleryStore(db),
+    chapters: createSqlChapterStore(db),
+    chapterRecords: createSqlChapterRecordStore(db),
+    periods: createSqlPeriodStore(db),
+    orgUnits: createSqlOrgUnitStore(db),
+    memberProfiles: createSqlMemberProfileStore(db),
+    universities: createSqlUniversityStore(db),
+    appointments: createSqlAppointmentStore(db),
+    campaigns: createSqlCampaignStore(db),
+    subscribers: {
+      ...createSqlSubscriberReader(db),
+      ...createSqlSubscriberStore(db),
+    },
+    authAdmin: createFirebaseAccountAdmin({
+      appEnv: env.APP_ENV,
+      projectId: env.FIREBASE_PROJECT_ID,
+      clientEmail: env.FIREBASE_CLIENT_EMAIL,
+      privateKey: env.FIREBASE_PRIVATE_KEY,
+    }),
+    logger: createLogger({ service: "admin", level: env.LOG_LEVEL }),
+    objectives: createSqlObjectiveStore(db),
+    meetings: createSqlMeetingStore(db),
+    actionItems: createSqlActionItemStore(db),
+    shortLinks: createSqlShortLinkStore(db),
+    zoom: createSqlZoomStore(db),
+    ai: createSqlAiStore(db),
+    analyses: createSqlAnalysisStore(db),
+    surveys: createSqlSurveyStore(db),
+    conversations: createSqlConversationStore(db),
+    taskShares: createSqlTaskShareStore(db),
+    calendar: createSqlCalendarStore(db),
+    programs: createSqlProgramStore(db),
+    lpj: createSqlLpjStore(db),
+    periodReport: createSqlPeriodReport(db),
+    finance: createSqlFinanceStore(db),
+  };
+});

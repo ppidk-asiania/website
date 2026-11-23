@@ -1,0 +1,244 @@
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import { signInUrl } from "@website/auth";
+import {
+  bookingOpen,
+  canBook,
+  DEFAULT_CUTOFF_HOURS,
+  lateUploadOpen,
+  nextAction,
+  slotOffered,
+  waitingFor,
+} from "@website/domain/recruitment";
+import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
+import { formatEventTime } from "@/lib/event-time";
+import { hasCompleteProfile, ownTimezone } from "@/server/profile-wiring";
+import { personalityResults, personalityTest, recruitmentStore } from "@/server/recruitment-wiring";
+import { getSignedInUser } from "@/server/session";
+import { InterviewTimes } from "./interview-times";
+import { LateUploads } from "./late-uploads";
+import { OfferButtons } from "./offer-buttons";
+import { PactUpload } from "./pact-upload";
+import { WithdrawButton } from "./withdraw-button";
+
+export const instant = false;
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/recruitment/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const r = await recruitmentStore().getVisible(id);
+  return r ? { title: r.title } : {};
+}
+
+export default async function RecruitmentPage({ params }: PageProps<"/recruitment/[id]">) {
+  const { id } = await params;
+  const [r, user, jar] = await Promise.all([
+    recruitmentStore().getVisible(id),
+    getSignedInUser(),
+    cookies(),
+  ]);
+  if (!r) notFound();
+  const language = languageFrom(jar.get(LANG_COOKIE)?.value);
+  const t = DICTIONARIES[language].recruitment;
+  const [application, complete, revisions] = user
+    ? await Promise.all([
+        recruitmentStore().ownApplication(r.id, user.uid),
+        hasCompleteProfile(user.uid),
+        recruitmentStore().ownRevisions(r.id, user.uid),
+      ])
+    : [null, false, []];
+  if (!r.published && !application) notFound();
+  const tested =
+    r.personalityTest && user && application && application.submittedAt
+      ? await personalityResults().get(user.uid)
+      : null;
+  const personalityLink =
+    r.personalityTest &&
+    user &&
+    application?.submittedAt &&
+    !tested &&
+    application.status !== "withdrawn"
+      ? `/test/personality/${personalityTest().linkFor(user.uid)}`
+      : null;
+  const p = DICTIONARIES[language].personality;
+  const now = new Date();
+  const waiting = application?.submittedAt
+    ? waitingFor(await recruitmentStore().questions(r), application.answers)
+    : [];
+  const uploadLater =
+    application !== null && waiting.length > 0 && lateUploadOpen(r, application.status, now);
+  const action = nextAction(r, application, now, uploadLater);
+  const [slots, zone, paths] =
+    user && action === "interview" && application
+      ? await Promise.all([
+          recruitmentStore().slots(r.id),
+          ownTimezone(user.uid),
+          recruitmentStore().unitPaths(application.choices),
+        ])
+      : [[], "UTC", new Map<string, readonly string[]>()];
+  const path = `/recruitment/${r.id}`;
+  const canApply = action === "start" || action === "complete" || action === "revise";
+
+  return (
+    <main className="ui-shell">
+      <h1 className="ui-shell-title">{r.title}</h1>
+      {r.description && <p className="site-pre">{r.description}</p>}
+      <p className="site-muted">
+        {t.window}: {formatEventTime(r.opensAt, "UTC", language)} {t.until}{" "}
+        {formatEventTime(r.closesAt, "UTC", language)} (UTC)
+      </p>
+      <h2>{t.units}</h2>
+      <ul>
+        {r.units.map((u) => (
+          <li key={u.orgUnitId}>
+            {u.name} — {u.quota} {t.seats}
+            {u.portfolioRequired ? ` · ${t.portfolio}` : ""}
+          </li>
+        ))}
+      </ul>
+      <h2>{t.yourApplication}</h2>
+      {!user ? (
+        <p>
+          <a className="ui-button" href={signInUrl("", path)}>
+            {t.signIn}
+          </a>
+        </p>
+      ) : !complete ? (
+        <p>
+          <a href={`${path}/apply`}>{t.profile}</a>
+        </p>
+      ) : (
+        <div className="ui-form">
+          {application && (
+            <p>
+              {t.statusLabel}: <strong>{t.statuses[application.status]}</strong>
+            </p>
+          )}
+          {action === "revise" && revisions.at(-1) && (
+            <p className="site-notice">
+              {t.revisionNote}: {revisions.at(-1)?.request}
+            </p>
+          )}
+          {action === "respond_offer" && application?.offer && (
+            <>
+              <p>
+                {t.offerUnit}:{" "}
+                <strong>
+                  {r.units.find((u) => u.orgUnitId === application.offer?.orgUnitId)?.name}
+                </strong>
+                <br />
+                {t.offerUntil} {formatEventTime(application.offer.expiresAt, "UTC", language)} (UTC)
+              </p>
+              <OfferButtons recruitmentId={r.id} labels={t} />
+            </>
+          )}
+          {action === "interview" && application && (
+            <InterviewTimes
+              recruitmentId={r.id}
+              zone={zone}
+              language={language}
+              choices={application.choices.map((id) => {
+                const booking = application.interviews[id];
+                const slot = slots.find((s) => s.id === booking?.slotId);
+                // a booking is changed or cancelled once, before its cut-off, until it is recorded
+                const changeable =
+                  booking !== undefined &&
+                  booking.attendance === null &&
+                  !application.interviewChanged.includes(id) &&
+                  bookingOpen(
+                    {
+                      startsAt: booking.startsAt,
+                      bookingCutoffHours: slot?.bookingCutoffHours ?? DEFAULT_CUTOFF_HOURS,
+                    },
+                    now,
+                  );
+                return {
+                  id,
+                  name: r.units.find((u) => u.orgUnitId === id)?.name ?? id,
+                  current: booking
+                    ? {
+                        startsAt: booking.startsAt.toISOString(),
+                        location: slot?.location ?? "",
+                        note: slot?.note ?? "",
+                        changeable,
+                      }
+                    : null,
+                  times:
+                    booking && !changeable
+                      ? []
+                      : slots
+                          .filter(
+                            (s) =>
+                              canBook(s, now) &&
+                              s.id !== booking?.slotId &&
+                              slotOffered(s, id, paths.get(id) ?? []),
+                          )
+                          .map((s) => ({
+                            id: s.id,
+                            startsAt: s.startsAt.toISOString(),
+                            minutes: s.durationMinutes,
+                          })),
+                };
+              })}
+              labels={t}
+            />
+          )}
+          {action === "upload_pact" && (
+            <>
+              {application?.pactNote && (
+                <p className="site-notice">
+                  {t.pactSentBack}: {application.pactNote}
+                </p>
+              )}
+              {r.pactTemplateUrl && (
+                <p>
+                  <a href={r.pactTemplateUrl} rel="noopener noreferrer" target="_blank">
+                    {t.pactTemplate}
+                  </a>
+                </p>
+              )}
+              <PactUpload recruitmentId={r.id} labels={t} />
+            </>
+          )}
+          {uploadLater && (
+            <>
+              {r.documentDeadline && (
+                <p className="site-muted">
+                  {t.uploadLaterUntil}: {formatEventTime(r.documentDeadline, "UTC", language)} (UTC)
+                </p>
+              )}
+              <LateUploads
+                recruitmentId={r.id}
+                questions={waiting.map((q) => ({ id: q.id, label: q.label }))}
+                labels={t}
+              />
+            </>
+          )}
+          {personalityLink && (
+            <p className="site-notice">
+              <a href={personalityLink}>{p.linkLabel}</a>
+            </p>
+          )}
+          {tested && (
+            <p className="site-muted">
+              {p.done}: {tested.full}
+            </p>
+          )}
+          {canApply ? (
+            <a className="ui-button" href={`${path}/apply`}>
+              {t.actions[action]}
+            </a>
+          ) : (
+            <p role="status">{t.actions[action]}</p>
+          )}
+          {application &&
+            ["draft", "submitted", "revision", "interview"].includes(application.status) && (
+              <WithdrawButton recruitmentId={r.id} labels={t} />
+            )}
+        </div>
+      )}
+    </main>
+  );
+}

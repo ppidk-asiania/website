@@ -7,7 +7,6 @@ import {
   type Principal,
 } from "@website/permissions";
 import { createGuardedAction } from "../../apps/admin/src/server/guarded-action";
-import { denyAllUserDirectory } from "../../apps/admin/src/server/user-directory";
 
 const publishNews = createGuardedAction({
   permission: "articles.publish",
@@ -15,7 +14,6 @@ const publishNews = createGuardedAction({
   handler: (input) => Promise.resolve({ published: input.id }),
 });
 
-// Custom roles as created in the admin Roles page.
 const roles = new Map([
   [
     "editor",
@@ -43,9 +41,11 @@ describe("admin guarded actions (server-side enforcement)", () => {
   });
 
   it("rejects signed-in members (same user pool, no staff role)", async () => {
-    expect(await publishNews(() => Promise.resolve(asUser("member")))({ id: "n1" })).toMatchObject({
-      error: "forbidden",
-    });
+    expect(await publishNews(() => Promise.resolve(asUser("visitor")))({ id: "n1" })).toMatchObject(
+      {
+        error: "forbidden",
+      },
+    );
   });
 
   it("rejects staff without the permission, ignoring payload role fields", async () => {
@@ -63,8 +63,36 @@ describe("admin guarded actions (server-side enforcement)", () => {
       data: { published: "n1" },
     });
   });
+});
 
-  it("a Firebase login alone grants nothing (no user record → no principal)", async () => {
-    expect(await denyAllUserDirectory.findPrincipalByUid("any-firebase-uid")).toBeNull();
+describe("permission in some scope (the handler checks the record's own rule)", () => {
+  const runMeeting = createGuardedAction({
+    permission: "articles.read",
+    inSomeScope: true,
+    input: z.object({ id: z.string() }),
+    handler: (input) => Promise.resolve(input.id),
+  });
+  const scoped = (permissions: string[]): Principal => ({
+    kind: "user",
+    userId: "u",
+    active: true,
+    assignments: [
+      {
+        roleId: "r",
+        scope: { type: "orgUnit", orgUnitId: "media" },
+        permissions: new Set(normalizePermissions(permissions)),
+      },
+    ],
+  });
+  it("passes with the permission in any scope and refuses without it", async () => {
+    expect(await runMeeting(() => Promise.resolve(scoped(["articles.read"])))({ id: "m" })).toEqual(
+      {
+        ok: true,
+        data: "m",
+      },
+    );
+    expect(
+      await runMeeting(() => Promise.resolve(scoped(["events.read"])))({ id: "m" }),
+    ).toMatchObject({ ok: false, error: "forbidden" });
   });
 });

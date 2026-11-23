@@ -107,3 +107,58 @@ describe("shared session cookie domain", () => {
     }
   });
 });
+
+describe("messaging env (MESSAGING_MODE, MESSAGING_TEST_RECIPIENTS)", () => {
+  it("defaults to log mode with no test recipients, and parses a comma-separated list", async () => {
+    const { messagingEnv } = await import("@website/config/env");
+    expect(messagingEnv.parse({})).toEqual({
+      MESSAGING_MODE: "log",
+      MESSAGING_TEST_RECIPIENTS: [],
+    });
+    expect(
+      messagingEnv.parse({
+        MESSAGING_MODE: "live",
+        MESSAGING_TEST_RECIPIENTS: " QA@example.org, dev@example.org ,",
+      }),
+    ).toEqual({
+      MESSAGING_MODE: "live",
+      MESSAGING_TEST_RECIPIENTS: ["qa@example.org", "dev@example.org"],
+    });
+    expect(
+      messagingEnv.parse({ MESSAGING_TEST_RECIPIENTS: "qa@example.org,+6281234567890" })
+        .MESSAGING_TEST_RECIPIENTS,
+    ).toEqual(["qa@example.org", "+6281234567890"]);
+    expect(messagingEnv.safeParse({ MESSAGING_TEST_RECIPIENTS: "not-an-email" }).success).toBe(
+      false,
+    );
+    expect(messagingEnv.safeParse({ MESSAGING_MODE: "send-everything" }).success).toBe(false);
+  });
+});
+
+describe("documents env (VERIFICATION_HOST)", () => {
+  it("takes a bare host name (lower-cased) or nothing", async () => {
+    const { documentsEnv } = await import("@website/config/env");
+    expect(documentsEnv.parse({})).toEqual({});
+    expect(documentsEnv.parse({ VERIFICATION_HOST: " Verif.PPIAsiania.id " })).toEqual({
+      VERIFICATION_HOST: "verif.ppiasiania.id",
+    });
+    for (const value of ["https://verif.ppiasiania.id", "verif.ppiasiania.id/x", "localhost"]) {
+      expect(documentsEnv.safeParse({ VERIFICATION_HOST: value }).success, value).toBe(false);
+    }
+  });
+});
+
+describe("files env (FILE_STORAGE_DIR)", () => {
+  it("takes an absolute folder on the cPanel host or a Windows development machine", async () => {
+    const { filesEnv } = await import("@website/config/env");
+    expect(filesEnv.parse({})).toEqual({});
+    for (const value of ["/home/asiaosea/ppidk-files", "C:\\ppidk-files", "D:/ppidk-files"]) {
+      expect(filesEnv.parse({ FILE_STORAGE_DIR: value }), value).toEqual({
+        FILE_STORAGE_DIR: value,
+      });
+    }
+    for (const value of ["ppidk-files", "./files", "C:files"]) {
+      expect(filesEnv.safeParse({ FILE_STORAGE_DIR: value }).success, value).toBe(false);
+    }
+  });
+});

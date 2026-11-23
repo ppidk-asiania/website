@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { hasTwoSignInMethods } from "@website/auth";
 import {
+  accountChangeRefusal,
   ADMIN_PAGES,
   can,
   canAccessAdmin,
+  canAppointInto,
+  canRatifyInto,
   canAssignRole,
   canDeleteRole,
   canInSomeScope,
   canSaveRole,
   DEFAULT_ROLE_ASSIGNMENTS,
   isPagePermission,
+  isSuperadmin,
   normalizePermissions,
   PAGE_PERMISSIONS,
   requirePermission,
   resolveAssignments,
+  scopedChapterIds,
+  scopedOrgUnitIds,
   SUPERADMIN_ROLE_ID,
   SYSTEM_ROLES,
   type Principal,
@@ -23,7 +30,6 @@ import {
 const global: Scope = { type: "global" };
 const jp: Scope = { type: "chapter", chapterId: "jp" };
 
-/** Custom roles as an admin would create them in the Roles page. */
 const roles: RoleDefinition[] = [
   {
     id: "editor",
@@ -106,6 +112,44 @@ describe("resolving role assignments", () => {
     expect(resolveAssignments([{ roleId: "deleted-role", scope: global }], lookup)).toEqual([]);
   });
 
+  it("keeps only live assignments: revoked ones and other periods are ignored (B6)", () => {
+    const stored = [
+      {
+        roleId: "editor",
+        scope: global,
+        periodId: null,
+        source: "manual" as const,
+        revokedAt: null,
+      },
+      {
+        roleId: "viewer",
+        scope: global,
+        periodId: "2026",
+        source: "appointment" as const,
+        revokedAt: null,
+      },
+      {
+        roleId: "chapter_admin",
+        scope: jp,
+        periodId: "2025",
+        source: "appointment" as const,
+        revokedAt: null,
+      },
+      {
+        roleId: "role_manager",
+        scope: global,
+        periodId: null,
+        source: "manual" as const,
+        revokedAt: new Date(),
+      },
+    ];
+    expect(resolveAssignments(stored, lookup, "2026").map((a) => a.roleId)).toEqual([
+      "editor",
+      "viewer",
+    ]);
+    expect(resolveAssignments(stored, lookup, null).map((a) => a.roleId)).toEqual(["editor"]);
+  });
+
   it("new accounts get the user role, which opens no admin page", () => {
     const fresh: Principal = {
       kind: "user",
@@ -140,6 +184,103 @@ describe("can()", () => {
     expect(can(admin, "members.pii")).toBe(false);
   });
 
+  it("org unit assignments cover the unit and its descendants, never siblings (DEC-2)", () => {
+    const director = principal([
+      { roleId: "chapter_admin", scope: { type: "orgUnit", orgUnitId: "dir-edu" } },
+    ]);
+    expect(can(director, "events.edit", { orgUnitPath: ["root", "dir-edu"] })).toBe(true);
+    expect(can(director, "events.edit", { orgUnitPath: ["root", "dir-edu", "div-lang"] })).toBe(
+      true,
+    );
+    expect(can(director, "events.edit", { orgUnitPath: ["root", "dir-media"] })).toBe(false);
+    expect(can(director, "events.edit", { orgUnitPath: ["root"] })).toBe(false);
+    expect(can(director, "events.edit")).toBe(false);
+    expect(can(director, "events.edit", { chapterId: "dir-edu" })).toBe(false);
+  });
+
+  it("lists are filtered to the chapters a principal covers; global means every chapter (A2)", () => {
+    const twoChapters = principal([
+      { roleId: "chapter_admin", scope: jp },
+      { roleId: "chapter_admin", scope: { type: "chapter", chapterId: "kr" } },
+      { roleId: "viewer", scope: { type: "orgUnit", orgUnitId: "media" } },
+    ]);
+    expect(scopedChapterIds(twoChapters, "events.edit")).toEqual(["jp", "kr"]);
+    expect(scopedChapterIds(twoChapters, "gallery.read")).toEqual([]);
+    expect(scopedChapterIds(twoChapters, "articles.read")).toEqual([]);
+    const national = principal([
+      { roleId: "chapter_admin", scope: jp },
+      { roleId: "chapter_admin" },
+    ]);
+    expect(scopedChapterIds(national, "events.edit")).toBe("all");
+    expect(scopedChapterIds(principal([{ roleId: "everything" }], false), "events.edit")).toEqual(
+      [],
+    );
+    expect(scopedChapterIds(null, "events.edit")).toEqual([]);
+  });
+
+  it("lists are filtered to the org units a principal covers (letters of a directorate, D1)", () => {
+    const director = principal([
+      { roleId: "chapter_admin", scope: { type: "orgUnit", orgUnitId: "media" } },
+      { roleId: "chapter_admin", scope: { type: "orgUnit", orgUnitId: "edu" } },
+      { roleId: "chapter_admin", scope: { type: "orgUnit", orgUnitId: "media" } },
+      { roleId: "chapter_admin", scope: jp },
+    ]);
+    expect(scopedOrgUnitIds(director, "events.edit")).toEqual(["media", "edu"]);
+    expect(scopedOrgUnitIds(director, "gallery.read")).toEqual([]);
+    expect(scopedOrgUnitIds(principal([{ roleId: "chapter_admin" }]), "events.edit")).toBe("all");
+    expect(scopedOrgUnitIds(principal([{ roleId: "everything" }], false), "events.edit")).toEqual(
+      [],
+    );
+    expect(scopedOrgUnitIds(null, "events.edit")).toEqual([]);
+  });
+
+  it("appointing gives only roles whose permissions the appointer holds, never built-in ones (B7)", () => {
+    const secretary: RoleDefinition = {
+      id: "secretary_general",
+      name: "Sekjen",
+      permissions: normalizePermissions(["appointments.edit", "events.edit"]),
+    };
+    const officer: RoleDefinition = {
+      id: "officer",
+      name: "Officer",
+      permissions: normalizePermissions(["events.read"]),
+    };
+    const director: RoleDefinition = {
+      id: "director",
+      name: "Director",
+      permissions: normalizePermissions(["gallery.edit"]),
+    };
+    lookup.set(secretary.id, secretary);
+    const sekjen = principal([{ roleId: "secretary_general" }]);
+    expect(canAppointInto(sekjen, officer)).toBe(true);
+    expect(canAppointInto(sekjen, director)).toBe(false);
+    expect(canAppointInto(sekjen, { id: "superadmin", name: "x", permissions: [] })).toBe(false);
+    expect(canAppointInto(principal([{ roleId: "viewer" }]), officer)).toBe(false);
+    lookup.delete(secretary.id);
+  });
+
+  it("ratifying gives only roles the ratifier holds, never built-in ones (C3 step 9)", () => {
+    const sekjenRole: RoleDefinition = {
+      id: "sekjen",
+      name: "Sekjen",
+      permissions: normalizePermissions(["recruitment.confirm", "events.read"]),
+    };
+    const officer: RoleDefinition = {
+      id: "officer",
+      name: "Officer",
+      permissions: normalizePermissions(["events.read"]),
+    };
+    lookup.set(sekjenRole.id, sekjenRole);
+    const sekjen = principal([{ roleId: "sekjen" }]);
+    expect(canRatifyInto(sekjen, officer)).toBe(true);
+    expect(
+      canRatifyInto(sekjen, { ...officer, permissions: normalizePermissions(["members.pii"]) }),
+    ).toBe(false);
+    expect(canRatifyInto(sekjen, { id: "visitor", name: "x", permissions: [] })).toBe(false);
+    expect(canRatifyInto(principal([{ roleId: "viewer" }]), officer)).toBe(false);
+    lookup.delete(sekjenRole.id);
+  });
+
   it("*_own permissions belong to every active account, for its own resources only", () => {
     const user = principal([]);
     expect(can(user, "profile.write_own", { ownerId: "u1" })).toBe(true);
@@ -153,12 +294,19 @@ describe("can()", () => {
     expect(() => requirePermission(principal([{ roleId: "viewer" }]), "articles.publish")).toThrow(
       /Missing permission/,
     );
+    expect(() => requirePermission(null, "articles.publish")).toThrow("Authentication required");
+    expect(() =>
+      requirePermission({ ...principal([{ roleId: "viewer" }]), active: false }, "articles.read"),
+    ).toThrow("Authentication required");
+    expect(() =>
+      requirePermission(principal([{ roleId: "viewer" }]), "articles.read"),
+    ).not.toThrow();
   });
 
   it("canAccessAdmin needs at least one admin-page permission", () => {
     expect(canAccessAdmin(principal([{ roleId: "viewer" }]))).toBe(true);
     expect(canAccessAdmin(principal([{ roleId: "nothing" }]))).toBe(false);
-    expect(canAccessAdmin(principal([{ roleId: "member" }]))).toBe(false);
+    expect(canAccessAdmin(principal([{ roleId: "visitor" }]))).toBe(false);
     expect(canAccessAdmin(null)).toBe(false);
   });
 
@@ -201,6 +349,11 @@ describe("no privilege escalation through the Roles page", () => {
     expect(canSaveRole(superadmin, updated, role("chapter_admin"))).toBe(true);
   });
 
+  it("has two built-in roles: superadmin and the default role, shown as Visitor", () => {
+    expect(Object.keys(SYSTEM_ROLES)).toEqual([SUPERADMIN_ROLE_ID, "visitor"]);
+    expect(SYSTEM_ROLES.visitor).toMatchObject({ name: "Visitor", permissions: [] });
+  });
+
   it("system roles can never be saved or deleted", () => {
     for (const id of Object.keys(SYSTEM_ROLES)) {
       expect(canSaveRole(superadmin, role(id))).toBe(false);
@@ -209,14 +362,14 @@ describe("no privilege escalation through the Roles page", () => {
   });
 
   it("deleting a custom role needs roles.edit and its permissions", () => {
-    expect(canDeleteRole(manager, role("viewer"))).toBe(false); // lacks events.read
+    expect(canDeleteRole(manager, role("viewer"))).toBe(false);
     expect(canDeleteRole(superadmin, role("viewer"))).toBe(true);
   });
 
   it("assigning a role needs users.edit and every permission of that role", () => {
-    expect(canAssignRole(manager, role("editor"))).toBe(false); // lacks gallery.edit / publish
-    expect(canAssignRole(manager, role("member"))).toBe(true);
-    expect(canAssignRole(principal([{ roleId: "viewer" }]), role("member"))).toBe(false);
+    expect(canAssignRole(manager, role("editor"))).toBe(false);
+    expect(canAssignRole(manager, role("visitor"))).toBe(true);
+    expect(canAssignRole(principal([{ roleId: "viewer" }]), role("visitor"))).toBe(false);
   });
 
   it("only a superadmin assigns superadmin, even if a custom role holds every permission", () => {
@@ -224,5 +377,61 @@ describe("no privilege escalation through the Roles page", () => {
       false,
     );
     expect(canAssignRole(superadmin, role(SUPERADMIN_ROLE_ID))).toBe(true);
+  });
+
+  it("isSuperadmin: only an active, global superadmin assignment counts", () => {
+    expect(isSuperadmin(superadmin)).toBe(true);
+    expect(isSuperadmin(principal([{ roleId: "everything" }]))).toBe(false);
+    expect(isSuperadmin(principal([{ roleId: SUPERADMIN_ROLE_ID, scope: jp }]))).toBe(false);
+    expect(isSuperadmin({ ...superadmin, active: false })).toBe(false);
+    expect(isSuperadmin(null)).toBe(false);
+  });
+});
+
+describe("Users page rules (accountChangeRefusal)", () => {
+  const superadmin = principal([{ roleId: SUPERADMIN_ROLE_ID }]);
+  const manager = principal([{ roleId: "role_manager" }]);
+
+  it("nobody changes their own account", () => {
+    expect(
+      accountChangeRefusal({ actor: superadmin, targetUserId: "u1", superadminsAfter: 2 }),
+    ).toBe("self");
+  });
+
+  it("adding or removing a role needs every permission of that role; superadmin only by a superadmin", () => {
+    const base = { targetUserId: "u2", superadminsAfter: 1 };
+    expect(accountChangeRefusal({ ...base, actor: manager, role: role("editor") })).toBe(
+      "forbidden",
+    );
+    expect(accountChangeRefusal({ ...base, actor: manager, role: role(SUPERADMIN_ROLE_ID) })).toBe(
+      "forbidden",
+    );
+    expect(
+      accountChangeRefusal({ ...base, actor: superadmin, role: role(SUPERADMIN_ROLE_ID) }),
+    ).toBeNull();
+    expect(accountChangeRefusal({ ...base, actor: superadmin, role: role("editor") })).toBeNull();
+  });
+
+  it("a status change needs users.edit; the last active superadmin is protected", () => {
+    const viewer = principal([{ roleId: "viewer" }]);
+    expect(accountChangeRefusal({ actor: viewer, targetUserId: "u2", superadminsAfter: 1 })).toBe(
+      "forbidden",
+    );
+    expect(accountChangeRefusal({ actor: null, targetUserId: "u2", superadminsAfter: 1 })).toBe(
+      "forbidden",
+    );
+    expect(accountChangeRefusal({ actor: manager, targetUserId: "u2", superadminsAfter: 0 })).toBe(
+      "last_superadmin",
+    );
+  });
+});
+
+describe("staff second sign-in method (hasTwoSignInMethods)", () => {
+  it("needs an MFA factor, or a passkey plus another sign-in method", () => {
+    const none = { providers: ["google.com"], mfaFactors: 0, passkeys: 0 };
+    expect(hasTwoSignInMethods(none)).toBe(false);
+    expect(hasTwoSignInMethods({ ...none, mfaFactors: 1 })).toBe(true);
+    expect(hasTwoSignInMethods({ ...none, passkeys: 1 })).toBe(true);
+    expect(hasTwoSignInMethods({ providers: [], mfaFactors: 0, passkeys: 2 })).toBe(false);
   });
 });

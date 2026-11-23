@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,9 +8,8 @@ import {
   type Principal,
   type Scope,
 } from "@website/permissions";
-import { ADMIN_NAVIGATION, initials, navigationFor } from "../../apps/admin/src/navigation";
+import { ADMIN_NAVIGATION, navigationFor } from "../../apps/admin/src/navigation";
 
-// Custom roles as created in the admin Roles page.
 const roles = new Map(
   [
     {
@@ -28,6 +27,7 @@ const roles = new Map(
         "newsletter.edit",
       ]),
     },
+    { id: "user_reader", name: "User reader", permissions: normalizePermissions(["users.read"]) },
     {
       id: "chapter_editor",
       name: "Chapter editor",
@@ -46,48 +46,59 @@ const staff = (roleId: string, scope: Scope = { type: "global" }, active = true)
 const labels = (principal: Principal) => navigationFor(principal).map((item) => item.label);
 
 describe("admin side panel navigation", () => {
-  it("lists every page, in the designed order, for a superadmin", () => {
-    expect(labels(staff(SUPERADMIN_ROLE_ID))).toEqual([
-      "Dashboard",
-      "Tools",
-      "Event",
-      "Gallery",
-      "Article",
-      "Newsletter",
-      "Organizations",
-      "Audit Log",
-    ]);
+  it("keeps each group's pages together (the side panel starts a group when it changes)", () => {
+    const order = ADMIN_NAVIGATION.map((entry) => entry.group).filter(
+      (group, i, all) => group !== all[i - 1],
+    );
+    expect(new Set(order).size).toBe(order.length);
   });
 
   it("shows only the pages a role may open", () => {
-    expect(labels(staff("viewer"))).toEqual(["Dashboard", "Event", "Gallery", "Article"]);
+    expect(labels(staff("viewer"))).toEqual([
+      "Dashboard",
+      "My Tasks",
+      "Event",
+      "Gallery",
+      "Article",
+    ]);
     expect(labels(staff("editor"))).toEqual([
       "Dashboard",
+      "My Tasks",
       "Event",
       "Gallery",
       "Article",
       "Newsletter",
     ]);
+  });
+
+  it("opens Role Manager (people and roles in one page) with users.read", () => {
+    expect(labels(staff("user_reader"))).toEqual(["Dashboard", "My Tasks", "Role Manager"]);
   });
 
   it("counts chapter-scoped roles (their pages filter data to the chapter)", () => {
     expect(labels(staff("chapter_editor", { type: "chapter", chapterId: "jp" }))).toEqual([
       "Dashboard",
+      "My Tasks",
       "Event",
       "Gallery",
       "Article",
     ]);
   });
 
+  it("adds My interview times only for people with an interview scope", () => {
+    const officer = staff("viewer");
+    expect(labels(officer)).not.toContain("My interview times");
+    expect(navigationFor(officer, true).map((item) => item.label)).toContain("My interview times");
+  });
+
   it("shows nothing to members, customers and inactive accounts", () => {
-    expect(navigationFor(staff("member"))).toEqual([]);
-    expect(navigationFor(staff("user"))).toEqual([]);
+    expect(navigationFor(staff("visitor"))).toEqual([]);
     expect(navigationFor(staff(SUPERADMIN_ROLE_ID, { type: "global" }, false))).toEqual([]);
   });
 
-  it("never sends permission names to the browser, only label and href", () => {
+  it("never sends permission names to the browser, only group, label and href", () => {
     for (const item of navigationFor(staff(SUPERADMIN_ROLE_ID))) {
-      expect(Object.keys(item).sort()).toEqual(["href", "label"]);
+      expect(Object.keys(item).sort()).toEqual(["group", "href", "label"]);
     }
   });
 
@@ -111,15 +122,14 @@ describe("admin side panel navigation", () => {
   });
 });
 
-describe("avatar initials", () => {
-  it("uses the first and last name", () => {
-    expect(initials("Nevyllo Zamuel Kalangi")).toBe("NK");
-    expect(initials("  ari   wibowo ")).toBe("AW");
-  });
-
-  it("falls back to two letters of a single word, or '?' when empty", () => {
-    expect(initials("nevyllokalangi")).toBe("NE");
-    expect(initials("A")).toBe("A");
-    expect(initials("   ")).toBe("?");
+describe("dashboard page views and setup check", () => {
+  it("live on the Dashboard (no separate page) and are loaded only for a superadmin", () => {
+    const panel = join(import.meta.dirname, "../../apps/admin/src/app/(panel)");
+    expect(existsSync(join(panel, "analytics"))).toBe(false);
+    expect(existsSync(join(panel, "settings"))).toBe(false);
+    const source = readFileSync(join(panel, "page.tsx"), "utf8");
+    expect(source).toMatch(/const superadmin = isSuperadmin\(viewer\.principal\);/);
+    expect(source).toMatch(/superadmin\s*\?\s*await pageViewReport\(/);
+    expect(source).toMatch(/superadmin \? integrationStatus\(/);
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { ORGANISATION_NAME } from "@website/domain/shared";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,19 +10,20 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  ViewTransition,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 import type { NavItem } from "../navigation";
 
-/** Display data only. Which items exist was decided on the server (see navigation.ts). */
 export interface SidebarUser {
   readonly name: string;
   readonly email: string | null;
   readonly initials: string;
 }
 
-const ORGANISATION = "PPI Dunia Kawasan Asia-Oseania";
+const ORGANISATION = ORGANISATION_NAME.id;
 /** Must match the desktop breakpoint in app/globals.css. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -35,13 +37,10 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/**
- * Admin side panel. Desktop: fixed column on the left. Mobile: off-canvas drawer opened from the
- * top bar, closed by the backdrop, Escape or following a link.
- */
 export function AdminSidebar(props: {
   items: readonly NavItem[];
   user: SidebarUser;
+  webUrl: string | undefined;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -55,10 +54,44 @@ export function AdminSidebar(props: {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const drawerVisible = isDesktop || drawerOpen;
+  const groups: { label: string; items: NavItem[] }[] = [];
+  for (const item of props.items) {
+    const last = groups.at(-1);
+    if (last?.label === item.group) last.items.push(item);
+    else groups.push({ label: item.group, items: [item] });
+  }
+  const logo = (
+    <Image
+      src="/logo.webp"
+      alt={ORGANISATION}
+      width={3286}
+      height={1024}
+      className="admin-logo"
+      unoptimized
+    />
+  );
+
+  useEffect(() => {
+    const grow = (event: Event) => {
+      const field = event.target;
+      if (!(field instanceof HTMLTextAreaElement)) return;
+      const from = field.offsetHeight;
+      field.style.height = "auto";
+      const to = field.scrollHeight + field.offsetHeight - field.clientHeight;
+      field.style.height = `${from}px`;
+      void field.offsetHeight;
+      field.style.height = `${to}px`;
+    };
+    document.addEventListener("input", grow);
+    document.addEventListener("focusin", grow);
+    return () => {
+      document.removeEventListener("input", grow);
+      document.removeEventListener("focusin", grow);
+    };
+  }, []);
 
   useEffect(() => {
     if (isDesktop || !drawerOpen) return;
-    // Move focus into the drawer and stop the page behind it from scrolling.
     panelRef.current?.querySelector<HTMLElement>("a, button")?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -113,46 +146,66 @@ export function AdminSidebar(props: {
         inert={!drawerVisible}
       >
         <div className="admin-brand">
-          <Image src="/icon.png" alt="" width={40} height={40} className="admin-logo" />
-          <span className="admin-brand-name">{ORGANISATION}</span>
+          {props.webUrl ? (
+            <a href={props.webUrl} className="admin-brand-link">
+              {logo}
+            </a>
+          ) : (
+            logo
+          )}
         </div>
 
-        <nav className="admin-nav" aria-labelledby={`${drawerId}-menu`}>
-          <p id={`${drawerId}-menu`} className="admin-menu-label">
-            Menu
-          </p>
-          <ul className="admin-nav-list">
-            {props.items.map((item) => {
-              const active = isActive(pathname, item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className="admin-nav-link"
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => setDrawerOpen(false)}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        <nav className="admin-nav" aria-label="Menu">
+          {groups.map((group, i) => (
+            <details key={group.label} className="admin-nav-group" open>
+              <summary id={`${drawerId}-group-${i}`} className="admin-menu-label">
+                {group.label}
+                <ChevronIcon />
+              </summary>
+              <ul className="admin-nav-list" aria-labelledby={`${drawerId}-group-${i}`}>
+                {group.items.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="admin-nav-link"
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => setDrawerOpen(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          ))}
         </nav>
 
         <div className="admin-footer">
-          <UserMenu user={props.user} onNavigate={() => setDrawerOpen(false)} />
+          <UserMenu
+            user={props.user}
+            webUrl={props.webUrl}
+            onNavigate={() => setDrawerOpen(false)}
+          />
         </div>
       </aside>
 
-      <main id="main" className="admin-main">
-        {props.children}
-      </main>
+      <ViewTransition>
+        <main id="main" className="admin-main admin-dark-page">
+          {props.children}
+        </main>
+      </ViewTransition>
     </div>
   );
 }
 
-function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
+function UserMenu(props: {
+  user: SidebarUser;
+  webUrl: string | undefined;
+  onNavigate: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
   const router = useRouter();
@@ -175,7 +228,7 @@ function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
     const items = [...(menuRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
     const index = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === "Escape") {
-      event.stopPropagation(); // close the menu, not the whole drawer
+      event.stopPropagation();
       setOpen(false);
       buttonRef.current?.focus();
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -192,8 +245,8 @@ function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
     try {
       const response = await fetch("/api/session", { method: "DELETE" });
       if (!response.ok) throw new Error(String(response.status));
-      router.push("/"); // the page sends signed-out visitors to the web sign-in
-      router.refresh(); // drop server components rendered with the old session
+      router.push("/");
+      router.refresh();
     } catch {
       setSignOutFailed(true);
     }
@@ -203,6 +256,7 @@ function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
     setOpen(false);
     props.onNavigate();
   };
+  const webPath = (path: string) => `${props.webUrl?.replace(/\/$/, "") ?? ""}${path}`;
 
   return (
     <div ref={rootRef} className="admin-user-menu">
@@ -215,20 +269,29 @@ function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
           className="admin-popup"
           onKeyDown={onMenuKeyDown}
         >
-          <Link role="menuitem" href="/profile" className="admin-popup-item" onClick={close}>
+          <a
+            role="menuitem"
+            href={webPath("/account/profile")}
+            className="admin-popup-item"
+            style={{ "--i": 0 } as CSSProperties}
+            onClick={close}
+          >
             <UserIcon /> Profile
-          </Link>
-          <Link role="menuitem" href="/account" className="admin-popup-item" onClick={close}>
+          </a>
+          <a
+            role="menuitem"
+            href={webPath("/account")}
+            className="admin-popup-item"
+            style={{ "--i": 1 } as CSSProperties}
+            onClick={close}
+          >
             <GearIcon /> Account
-          </Link>
-          <Link role="menuitem" href="/emails" className="admin-popup-item" onClick={close}>
-            <MailIcon /> Emails
-          </Link>
-          <div role="separator" className="admin-popup-separator" />
+          </a>
           <button
             role="menuitem"
             type="button"
             className="admin-popup-item"
+            style={{ "--i": 2 } as CSSProperties}
             onClick={() => void signOut()}
           >
             <LogOutIcon /> Log out
@@ -261,7 +324,6 @@ function UserMenu(props: { user: SidebarUser; onNavigate: () => void }) {
   );
 }
 
-// Inline icons (no icon dependency). Decorative: the visible text is the label.
 function Svg(props: { children: ReactNode }) {
   return (
     <svg
@@ -289,6 +351,14 @@ function MenuIcon() {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <Svg>
+      <path d="m6 9 6 6 6-6" />
+    </Svg>
+  );
+}
+
 function UserIcon() {
   return (
     <Svg>
@@ -303,15 +373,6 @@ function GearIcon() {
     <Svg>
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-    </Svg>
-  );
-}
-
-function MailIcon() {
-  return (
-    <Svg>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="m3 7 9 6 9-6" />
     </Svg>
   );
 }

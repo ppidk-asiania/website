@@ -67,7 +67,6 @@ describe("origin restriction (requests must come from our own site)", () => {
   });
 
   it("behind a reverse proxy (cPanel/Passenger) compares against the Host header, not the internal URL", async () => {
-    // Next.js standalone behind Passenger sees http://localhost:<port> as request.url.
     const proxied = (headers: Record<string, string>) =>
       new Request("http://localhost:3000/api/session", {
         method: "POST",
@@ -118,6 +117,26 @@ describe("per-IP rate limiting", () => {
       message: "Too many requests. Try again later.",
     });
     expect((await guardRequest(from("198.51.100.7"), o)).blocked).toBeNull();
+  });
+
+  it("extra limits count only their own requests (verification: 20/minute)", async () => {
+    const o = opts({
+      now: () => new Date("2026-10-07T10:00:45Z"),
+      extraLimits: [
+        {
+          name: "verify",
+          policy: { perMinute: 20, perDay: 10_000, throttleDelayMs: 500 },
+          applies: (_request, path) => path.startsWith("/verify"),
+        },
+      ],
+    });
+    const from = (path: string) => req(path, { headers: { "x-real-ip": "203.0.113.9" } });
+    for (let i = 0; i < 20; i++)
+      expect((await guardRequest(from("/verify/8F3KM-QRTVW"), o)).blocked).toBeNull();
+    const limited = await guardRequest(from("/verify/8F3KM-QRTVW"), o);
+    expect(limited.blocked?.status).toBe(429);
+    expect(limited.blocked?.headers.get("retry-after")).toBe("15");
+    expect((await guardRequest(from("/news"), o)).blocked).toBeNull();
   });
 
   it("after the daily quota each request is delayed (slowed down), not refused", async () => {
@@ -238,7 +257,7 @@ describe("createRequestGuard (environment wiring)", () => {
     });
     await prod(req("/news"));
     await prod(req("/news"));
-    expect(shared).toHaveBeenCalledOnce(); // created once, reused
+    expect(shared).toHaveBeenCalledOnce();
 
     const devShared = vi.fn(() => createMemoryRateLimitStore());
     const dev = createRequestGuard({

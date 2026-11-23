@@ -22,7 +22,7 @@ const styleSources = [
 
 describe("design tokens (one global stylesheet shared by every app)", () => {
   it("defines the brand palette", () => {
-    for (const hex of ["#220709", "#551d22", "#a63232", "#e8d8cb", "#fbf3ec"]) {
+    for (const hex of ["#1f0006", "#3a000c", "#a8173a", "#e6b15a", "#ecd7d6", "#fcf4f3"]) {
       expect(tokens.toLowerCase()).toContain(hex);
     }
   });
@@ -66,6 +66,69 @@ describe("design tokens (one global stylesheet shared by every app)", () => {
         const value = (match[match.length - 1] ?? "").trim();
         if (allowed.test(value) || value.includes("var(")) continue;
         throw new Error(`${path}: "${match[0].trim()}" must use a design token (var(--…))`);
+      }
+    }
+  });
+});
+
+describe("admin accessibility and native forms", () => {
+  const tsx = files("apps/admin/src", [".tsx"]).map((path) => ({
+    path,
+    source: readFileSync(join(ROOT, path), "utf8").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/[^\n]*/gm, ""),
+  }));
+
+  it("uses real buttons: every <button> has a type, nothing pretends to be one", () => {
+    for (const { path, source } of tsx) {
+      for (const match of source.matchAll(/<button\b([^>]*?)>/gs)) {
+        expect(match[1], path).toMatch(/\btype=/);
+      }
+      expect(source, path).not.toContain('role="button"');
+    }
+    const button = readFileSync(join(ROOT, "apps/admin/src/components/ui/button.tsx"), "utf8");
+    expect(button).toContain('type = "button"');
+    expect(button).toContain("aria-busy={busy || undefined}");
+    expect(button).toContain("reportValidity()");
+  });
+
+  it("puts every editor in a <form> whose action button submits (native validation)", () => {
+    const editors = [
+      "articles-page.tsx",
+      "events-page.tsx",
+      "finance-page.tsx",
+      "forms-page.tsx",
+      "gallery-page.tsx",
+      "incoming-page.tsx",
+      "letter-types-page.tsx",
+      "letters-page.tsx",
+      "newsletter-page.tsx",
+      "recruitment-page.tsx",
+      "participants-page.tsx",
+      "certificate-send-panel.tsx",
+    ];
+    for (const name of editors) {
+      const source = readFileSync(join(ROOT, "apps/admin/src/components", name), "utf8");
+      expect(source, name).toMatch(/<form\b/);
+      expect(source, name).toMatch(/<Button\s+type="submit"/);
+    }
+    for (const { path, source } of tsx) {
+      if (!/type="submit"/.test(source)) continue;
+      expect(source, path).toMatch(/<form\b|\basForm\b|\bform="/);
+    }
+  });
+
+  it("connects a label to every field", () => {
+    for (const { path, source } of tsx) {
+      for (const match of source.matchAll(
+        /<(input|textarea|Select)\b((?:=>|[^<>=]|=(?!>)|\{(?:=>|[^{}]|\{[^{}]*\})*\})*?)\/?>/gs,
+      )) {
+        const attrs = match[2] ?? "";
+        if (/type="(hidden|file)"|\shidden\b/.test(attrs)) continue;
+        const before = source.slice(Math.max(0, (match.index ?? 0) - 600), match.index);
+        const insideLabel = before.lastIndexOf("<label") > before.lastIndexOf("</label>");
+        expect(
+          /\bid=|aria-label/.test(attrs) || insideLabel,
+          `${path}: ${attrs.slice(0, 60)}`,
+        ).toBe(true);
       }
     }
   });

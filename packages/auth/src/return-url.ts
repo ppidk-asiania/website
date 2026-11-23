@@ -1,17 +1,16 @@
-/**
- * Where to send the browser after sign-in (`/login?next=…`), without becoming an open redirect.
- * Allowed: a same-site path ("/account"), or an absolute URL whose origin is exactly one of our
- * apps (WEB_URL, ADMIN_URL, SHOP_URL). Everything else returns null.
- */
+const RELATIVE_BASE = "https://relative.invalid";
+// eslint-disable-next-line no-control-regex -- matching control characters is the purpose
+const UNSAFE_IN_PATH = /[\u0000-\u001F\u007F\\]/;
+
 export function safeReturnUrl(
   value: string | null | undefined,
   allowedOrigins: readonly string[],
 ): string | null {
   if (!value || value.length > 2048) return null;
 
-  // Relative path on the same site. "//host" and "/\host" are protocol-relative to browsers.
   if (value.startsWith("/")) {
-    return value.startsWith("//") || value.startsWith("/\\") ? null : value;
+    if (UNSAFE_IN_PATH.test(value)) return null;
+    return new URL(value, RELATIVE_BASE).origin === RELATIVE_BASE ? value : null;
   }
 
   let url: URL;
@@ -33,10 +32,6 @@ export function safeReturnUrl(
   return origins.has(url.origin) ? url.href : null;
 }
 
-/**
- * The web sign-in page with the page to come back to. Every app sends a signed-out visitor of a
- * login-required page here (one session is shared by all apps, so they return signed in).
- */
 export function signInUrl(webUrl: string, returnTo: string): string {
   return `${webUrl.replace(/\/+$/, "")}/login?next=${encodeURIComponent(returnTo)}`;
 }
