@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  addTransitionType,
   Children,
   Fragment,
   isValidElement,
+  startTransition,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,12 +20,14 @@ import {
   countText,
   emptyText,
   filterRows,
+  mobileTabs,
   nextSort,
   pageSlice,
   runEach,
   sortRows,
   shownSelection,
   sortSummary,
+  tabTarget,
   toggled,
   withIds,
   type ColumnFilters,
@@ -32,6 +37,7 @@ import { Button } from "./button";
 import { Card, CardBody } from "./card";
 import { DataTable, Pagination, SortHeader, sortChoices, type Column } from "./data-table";
 import { Icon, type IconName } from "./icon";
+import { Modal } from "./modal";
 
 export function useListTable<T extends { id: string }, K extends string>(
   rows: readonly T[],
@@ -191,51 +197,176 @@ export function Tabs<K extends string>({
   active: K;
   onSelect: (key: K) => void;
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const current = tabs.find((tab) => tab.key === active) ?? tabs[0];
+  const layoutKey = tabs.map((tab) => `${tab.key}:${tab.count ?? ""}`).join();
+
+  // The content swap runs as a view transition of type "admin-tab" (see the admin main area).
+  const select = (key: K) => {
+    if (key === active) return;
+    startTransition(() => {
+      addTransitionType("admin-tab");
+      onSelect(key);
+    });
+  };
+
+  // Indicator position and edge fades are written to the DOM, not state: scrolling never re-renders.
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const list = listRef.current;
+    if (!wrap || !list) return;
+    const update = () => {
+      const tab = list.querySelector<HTMLElement>("[aria-selected='true']");
+      if (tab) {
+        list.style.setProperty("--tab-x", `${tab.offsetLeft}px`);
+        list.style.setProperty("--tab-w", `${tab.offsetWidth}px`);
+      }
+      wrap.dataset["start"] = String(list.scrollLeft > 1);
+      wrap.dataset["end"] = String(list.scrollWidth - list.clientWidth - list.scrollLeft > 1);
+    };
+    update();
+    const tab = list.querySelector<HTMLElement>("[aria-selected='true']");
+    if (
+      tab &&
+      (tab.offsetLeft < list.scrollLeft ||
+        tab.offsetLeft + tab.offsetWidth > list.scrollLeft + list.clientWidth)
+    ) {
+      list.scrollTo({ left: tab.offsetLeft - list.clientWidth / 3, behavior: "smooth" });
+    }
+    const frame = requestAnimationFrame(() => (list.dataset["ready"] = ""));
+    const resize = new ResizeObserver(update);
+    resize.observe(list);
+    list.addEventListener("scroll", update, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      list.removeEventListener("scroll", update);
+    };
+  }, [active, layoutKey]);
+
+  const scrollBy = (direction: 1 | -1) =>
+    listRef.current?.scrollBy({
+      left: direction * listRef.current.clientWidth * 0.8,
+      behavior: "smooth",
+    });
+
   return (
-    <div
-      className="admin-tabs"
-      role="tablist"
-      aria-label={label}
-      onPointerDown={(event) => {
-        if (event.pointerType !== "mouse" || event.button !== 0) return;
-        drag.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
-      }}
-      onPointerMove={(event) => {
-        const state = drag.current;
-        if (!state || event.buttons !== 1) return;
-        const dx = event.clientX - state.x;
-        if (!state.moved && Math.abs(dx) < 5) return;
-        if (!state.moved) {
-          state.moved = true;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          event.currentTarget.classList.add("admin-tabs--dragging");
-        }
-        event.currentTarget.scrollLeft = state.left - dx;
-      }}
-      onPointerUp={(event) => {
-        event.currentTarget.classList.remove("admin-tabs--dragging");
-        if (!drag.current?.moved) drag.current = null;
-      }}
-      onClickCapture={(event) => {
-        if (!drag.current?.moved) return;
-        drag.current = null;
-        event.stopPropagation();
-      }}
-    >
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          role="tab"
-          aria-selected={active === tab.key}
-          className={`admin-tabs__btn${active === tab.key ? " admin-tabs__btn--active" : ""}`}
-          onClick={() => onSelect(tab.key)}
-        >
-          {tab.label}
-          {tab.count !== undefined ? <span className="admin-tabs__count">{tab.count}</span> : null}
-        </button>
-      ))}
+    <div ref={wrapRef} className={`admin-tabs admin-tabs--${mobileTabs(tabs.length)}`}>
+      <button
+        type="button"
+        className="admin-tabs__arrow admin-tabs__arrow--start"
+        aria-label="Scroll tabs left"
+        tabIndex={-1}
+        onClick={() => scrollBy(-1)}
+      >
+        <Icon name="chevronLeft" size={16} />
+      </button>
+      <div
+        ref={listRef}
+        className="admin-tabs__list"
+        role="tablist"
+        aria-label={label}
+        onKeyDown={(event) => {
+          const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']")];
+          const from = buttons.indexOf(document.activeElement as HTMLElement);
+          const to = tabTarget(event.key, from, buttons.length);
+          if (from < 0 || to === null) return;
+          event.preventDefault();
+          buttons[to]?.focus();
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "mouse" || event.button !== 0) return;
+          drag.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
+        }}
+        onPointerMove={(event) => {
+          const state = drag.current;
+          if (!state || event.buttons !== 1) return;
+          const dx = event.clientX - state.x;
+          if (!state.moved && Math.abs(dx) < 5) return;
+          if (!state.moved) {
+            state.moved = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.currentTarget.classList.add("admin-tabs--dragging");
+          }
+          event.currentTarget.scrollLeft = state.left - dx;
+        }}
+        onPointerUp={(event) => {
+          event.currentTarget.classList.remove("admin-tabs--dragging");
+          if (!drag.current?.moved) drag.current = null;
+        }}
+        onClickCapture={(event) => {
+          if (!drag.current?.moved) return;
+          drag.current = null;
+          event.stopPropagation();
+        }}
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active === tab.key}
+            tabIndex={active === tab.key ? 0 : -1}
+            className={`admin-tabs__btn${active === tab.key ? " admin-tabs__btn--active" : ""}`}
+            onClick={() => select(tab.key)}
+          >
+            {tab.label}
+            {tab.count !== undefined ? (
+              <span className="admin-tabs__count">{tab.count}</span>
+            ) : null}
+          </button>
+        ))}
+        <span className="admin-tabs__indicator" aria-hidden="true" />
+      </div>
+      <button
+        type="button"
+        className="admin-tabs__arrow admin-tabs__arrow--end"
+        aria-label="Scroll tabs right"
+        tabIndex={-1}
+        onClick={() => scrollBy(1)}
+      >
+        <Icon name="chevronRight" size={16} />
+      </button>
+      <button
+        type="button"
+        className="admin-tabs__trigger"
+        aria-haspopup="dialog"
+        aria-label={`${label}: ${current?.label ?? ""}`}
+        onClick={() => setSheetOpen(true)}
+      >
+        {current?.label}
+        {current?.count !== undefined ? (
+          <span className="admin-tabs__count">{current.count}</span>
+        ) : null}
+        <Icon name="chevronDown" size={16} />
+      </button>
+      <Modal
+        open={sheetOpen}
+        title={label}
+        onClose={() => setSheetOpen(false)}
+        className="admin-tabs-sheet"
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className="admin-tabs-sheet__option"
+            aria-current={active === tab.key ? "true" : undefined}
+            onClick={() => {
+              setSheetOpen(false);
+              select(tab.key);
+            }}
+          >
+            {tab.label}
+            {tab.count !== undefined ? (
+              <span className="admin-tabs__count">{tab.count}</span>
+            ) : null}
+          </button>
+        ))}
+      </Modal>
     </div>
   );
 }

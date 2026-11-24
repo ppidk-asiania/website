@@ -9,6 +9,11 @@
   --admin-leading-label: 1.3;
   --admin-leading-badge: 1.6;
   --admin-control-height: calc(var(--size-control-sm) + var(--space-1-5));
+  /* Tab switch: content fades out, pauses, fades in; the indicator slides for the whole span. */
+  --tab-out: 120ms;
+  --tab-pause: 80ms;
+  --tab-in: 180ms;
+  --tab-swap: calc(var(--tab-out) + var(--tab-pause) + var(--tab-in));
   --admin-ease-spring: linear(0, 0.55 10%, 1.12 30%, 0.98 55%, 1.01 75%, 1);
   --admin-page-dark: color-mix(in srgb, var(--color-brand-950) 60%, var(--color-black));
 }
@@ -1981,22 +1986,46 @@ a.admin-stat-card:hover {
 }
 
 .admin-tabs {
+  position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+.admin-tabs__list {
+  --fade-start: var(--color-black);
+  --fade-end: var(--color-black);
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
   gap: var(--space-1-5);
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
   mask-image: linear-gradient(
     to right,
+    var(--fade-start),
+    var(--color-black) var(--space-8),
     var(--color-black) calc(100% - var(--space-8)),
-    transparent
+    var(--fade-end)
   );
+  view-transition-name: match-element;
+  view-transition-class: admin-tabs;
 }
 
-.admin-tabs::-webkit-scrollbar {
+.admin-tabs[data-start="true"] .admin-tabs__list {
+  --fade-start: transparent;
+}
+
+.admin-tabs[data-end="true"] .admin-tabs__list {
+  --fade-end: transparent;
+}
+
+.admin-tabs__list::-webkit-scrollbar {
   display: none;
 }
 
@@ -2007,6 +2036,7 @@ a.admin-stat-card:hover {
 
 .admin-tabs__btn {
   position: relative;
+  z-index: 1;
   border: 0;
   background: transparent;
   padding: var(--space-2) var(--space-1);
@@ -2020,25 +2050,7 @@ a.admin-stat-card:hover {
   white-space: nowrap;
 }
 
-.admin-tabs__btn::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-}
-
-.admin-tabs__btn--active {
-  color: var(--color-text);
-}
-
-.admin-tabs__btn--active::after {
-  background: var(--color-primary);
-}
-
+.admin-tabs__btn--active,
 .admin-tabs__btn:hover:not(.admin-tabs__btn--active) {
   color: var(--color-text);
 }
@@ -2047,6 +2059,103 @@ a.admin-stat-card:hover {
   color: var(--color-text-muted);
   font-size: var(--text-2xs);
   margin-left: var(--space-0-5);
+}
+
+.admin-tabs__indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--tab-w, 0);
+  height: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  translate: var(--tab-x, 0) 0;
+  pointer-events: none;
+}
+
+.admin-tabs__list[data-ready] .admin-tabs__indicator {
+  transition:
+    translate var(--tab-swap) var(--ease-out),
+    width var(--tab-swap) var(--ease-out);
+}
+
+/* Arrows sit over the faded edges (no layout shift); only for a mouse, only when there is more. */
+.admin-tabs__arrow,
+.admin-tabs__trigger {
+  display: none;
+}
+
+.admin-tabs__arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-control-sm);
+  height: var(--size-control-sm);
+  padding: 0;
+  border: 1px solid var(--color-panel-line);
+  border-radius: var(--radius-full);
+  background: var(--color-brand-950);
+  color: var(--color-brand-50);
+  translate: 0 -50%;
+  cursor: pointer;
+}
+
+.admin-tabs__arrow--start {
+  left: 0;
+}
+
+.admin-tabs__arrow--end {
+  right: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-tabs[data-start="true"] .admin-tabs__arrow--start,
+  .admin-tabs[data-end="true"] .admin-tabs__arrow--end {
+    display: inline-flex;
+  }
+}
+
+/* Content swap of a tab click (transition type "admin-tab"): the tab bar stays live, only the
+   content fades; the group does not resize, so nothing is cut while heights differ. */
+::view-transition-group(.admin-tab-swap) {
+  animation: none;
+}
+
+::view-transition-old(.admin-tab-swap) {
+  animation: admin-tab-out var(--tab-out) var(--ease-out) both;
+}
+
+::view-transition-new(.admin-tab-swap) {
+  animation: admin-tab-in var(--tab-in) var(--ease-out) calc(var(--tab-out) + var(--tab-pause)) both;
+}
+
+:root:active-view-transition-type(admin-tab)::view-transition-old(.admin-tabs) {
+  display: none;
+}
+
+:root:active-view-transition-type(admin-tab)::view-transition-group(.admin-tabs),
+:root:active-view-transition-type(admin-tab)::view-transition-new(.admin-tabs) {
+  animation: none;
+}
+
+@keyframes admin-tab-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes admin-tab-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-tabs__list[data-ready] .admin-tabs__indicator {
+    transition: none;
+  }
 }
 
 .admin-event-avatar {
@@ -3253,8 +3362,12 @@ form.admin-toolbar::before {
 }
 
 .admin-dark-page .admin-tabs {
-  gap: var(--space-8);
   margin-bottom: var(--space-4);
+}
+
+/* The line is on the list so it stays put while the content swaps. */
+.admin-dark-page .admin-tabs__list {
+  gap: var(--space-8);
   padding: 0 var(--space-8) 0 0;
   border-bottom: 1px solid var(--color-panel-line);
 }
@@ -3271,11 +3384,7 @@ form.admin-toolbar::before {
   color: var(--color-brand-50);
 }
 
-.admin-dark-page .admin-tabs__btn--active {
-  font-weight: var(--font-semibold);
-}
-
-.admin-dark-page .admin-tabs__btn--active::after {
+.admin-dark-page .admin-tabs__indicator {
   background: var(--color-brand-50);
 }
 
@@ -3283,6 +3392,117 @@ form.admin-toolbar::before {
   margin-left: var(--space-3);
   color: inherit;
   font-size: inherit;
+}
+
+/* Phones: up to 4 tabs are a segmented control, more open a bottom sheet (mobileTabs). */
+@media (max-width: 767px) {
+  .admin-dark-page .admin-tabs--segmented .admin-tabs__list {
+    gap: 0;
+    padding: var(--space-1);
+    border-bottom: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-panel-hover);
+    mask-image: none;
+  }
+
+  .admin-dark-page .admin-tabs--segmented .admin-tabs__btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--space-1-5) var(--space-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+  }
+
+  .admin-dark-page .admin-tabs--segmented .admin-tabs__btn--active {
+    color: var(--color-on-panel-active);
+  }
+
+  .admin-dark-page .admin-tabs--segmented .admin-tabs__count {
+    margin-left: var(--space-1);
+  }
+
+  .admin-dark-page .admin-tabs--segmented .admin-tabs__indicator {
+    top: var(--space-1);
+    bottom: var(--space-1);
+    height: auto;
+    border-radius: var(--radius-full);
+    background: var(--color-panel-active);
+  }
+
+  .admin-dark-page .admin-tabs--sheet .admin-tabs__list,
+  .admin-dark-page .admin-tabs--sheet .admin-tabs__arrow {
+    display: none;
+  }
+
+  .admin-dark-page .admin-tabs--sheet .admin-tabs__trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--size-control);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-panel-line);
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--color-brand-50);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    cursor: pointer;
+  }
+
+  .admin-tabs__trigger > svg {
+    margin-left: auto;
+  }
+
+  .admin-modal-overlay:has(> .admin-tabs-sheet) {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .admin-modal.admin-tabs-sheet {
+    max-width: none;
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      translate var(--duration-base) var(--ease-out);
+  }
+
+  @starting-style {
+    .admin-modal.admin-tabs-sheet {
+      scale: 1;
+      translate: 0 100%;
+    }
+  }
+}
+
+.admin-tabs-sheet__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--size-control);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-on-panel-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-tabs-sheet__option[aria-current="true"] {
+  background: var(--color-panel-hover);
+  color: var(--color-brand-50);
+  font-weight: var(--font-semibold);
+}
+
+.admin-tabs-sheet__option .admin-tabs__count {
+  margin-left: auto;
+  color: inherit;
 }
 
 .admin-dark-page .admin-event-avatar {
@@ -3541,7 +3761,7 @@ form.admin-toolbar::before {
     margin-left: auto;
   }
 
-  .admin-dark-page .admin-tabs {
+  .admin-dark-page .admin-tabs__list {
     gap: var(--space-2);
   }
 }
@@ -4087,6 +4307,9 @@ form.admin-toolbar::before {
   flex: 1;
   min-width: 0;
   margin-bottom: 0;
+}
+
+.admin-audit-tabbar .admin-tabs__list {
   border-bottom: 0;
 }
 

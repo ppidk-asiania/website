@@ -171,3 +171,16 @@ export function moveItem<T>(items: readonly T[], from: number, to: number): T[] 
   next.splice(to, 0, moved);
   return next;
 }
+
+/** Tab index a key moves focus to: arrows wrap around, Home/End jump to the ends. */
+export function tabTarget(key: string, index: number, count: number): number | null {
+  if (key === "ArrowRight") return (index + 1) % count;
+  if (key === "ArrowLeft") return (index - 1 + count) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
+
+/** On phones up to 4 tabs fit a segmented control; more open a bottom sheet. */
+export const mobileTabs = (count: number): "segmented" | "sheet" =>
+  count <= 4 ? "segmented" : "sheet";

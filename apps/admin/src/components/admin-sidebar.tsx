@@ -192,7 +192,7 @@ export function AdminSidebar(props: {
         </div>
       </aside>
 
-      <ViewTransition>
+      <ViewTransition update={{ "admin-tab": "admin-tab-swap", default: "auto" }}>
         <main id="main" className="admin-main admin-dark-page">
           {props.children}
         </main>

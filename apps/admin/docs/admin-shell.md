@@ -162,9 +162,16 @@ router.push("/things"); router.refresh();
 - **No emoji.** Use `Icon` (`ui/icon.tsx`) or words instead.
 - **Tabs.** Every tab row is `Tabs` (`ui/list-controls.tsx`). It scrolls sideways with no
   scrollbar (touch, trackpad, or mouse drag; a drag does not select a tab), its tabs stay inside
-  its height, and its end fades into the background (`.admin-tabs`). Page CSS
-  may change gaps and margins, not the row's overflow. Hover changes only a tab's colour (only the
-  active tab is bold), so tabs never change width on hover.
+  its height, and an edge fades only while there are more tabs that way (`.admin-tabs`). With a
+  mouse, arrow buttons appear over a faded edge and scroll the row. One indicator slides under the
+  active tab; tabs never change width (no bold, hover changes only colour). Keyboard: arrow keys
+  move focus between tabs (wrapping), Home/End jump to the first/last, Enter/Space selects. On
+  phones (≤767px) up to 4 tabs are a segmented control and 5 or more a button that opens a bottom
+  sheet (`mobileTabs` in `list-model.ts`). A click switches the content as a view transition of
+  type `admin-tab`: the content fades out, pauses 80ms and fades in (`--tab-out`, `--tab-pause`,
+  `--tab-in`), the tab row stays live, and the content box keeps its size while it swaps; tabs
+  that navigate with `router.push` keep the default crossfade. Page CSS may change gaps and
+  margins, not the row's overflow.
 - **Scrollbar.** Every scrollbar (page, side panel, popups, menus, tables, code blocks) is a slim
   rounded thumb on a transparent track (`*::-webkit-scrollbar` in `globals.css`); the tab row has none (see Tabs). Only the page reserves its gutter
   (`html:has(.admin-dark-page)`, `scrollbar-gutter: stable`), so content keeps its width when a page

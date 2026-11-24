@@ -6,6 +6,7 @@ import {
   emptyText,
   filterRows,
   matchesDate,
+  mobileTabs,
   moveItem,
   nextSort,
   PAGE_SIZE_OPTIONS,
@@ -13,6 +14,7 @@ import {
   runEach,
   sortRows,
   sortSummary,
+  tabTarget,
   toggled,
   shownSelection,
   withIds,
@@ -189,5 +191,22 @@ describe("admin list pages: phone card layout", () => {
       filterRows(rows, { title: new Set(["Beta"]), n: new Set(["1"]) }, text).map((r) => r.id),
     ).toEqual(["b"]);
     expect(filterRows(rows, { title: new Set<string>() }, text)).toEqual(rows);
+  });
+});
+
+describe("tabs", () => {
+  it("arrow keys wrap around, Home and End jump to the ends, other keys do nothing", () => {
+    expect(tabTarget("ArrowRight", 0, 3)).toBe(1);
+    expect(tabTarget("ArrowRight", 2, 3)).toBe(0);
+    expect(tabTarget("ArrowLeft", 0, 3)).toBe(2);
+    expect(tabTarget("Home", 2, 3)).toBe(0);
+    expect(tabTarget("End", 0, 3)).toBe(2);
+    expect(tabTarget("Enter", 1, 3)).toBeNull();
+  });
+
+  it("phones get a segmented control for up to 4 tabs and a bottom sheet from 5", () => {
+    expect(mobileTabs(2)).toBe("segmented");
+    expect(mobileTabs(4)).toBe("segmented");
+    expect(mobileTabs(5)).toBe("sheet");
   });
 });
