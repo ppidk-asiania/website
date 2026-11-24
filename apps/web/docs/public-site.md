@@ -286,7 +286,10 @@ per-unit public pages.
   social profile URLs are constants at the top), `site-nav.tsx` (header links, current section).
   Logo: `public/logo.webp` (shield and name in one image; the admin app has the same file).
 - Header account (`src/components/site-account.tsx`): Log in chip, or photo/initials, short name
-  and a menu (Profile, Account, Log out); streamed, never prerendered. Tests:
+  and a menu (Profile, Account, Log out); streamed, never prerendered. While the session check
+  streams in, the header shows the last signed-in account kept in this browser
+  (`src/lib/remembered-account.ts`, `localStorage` key `site-account`: name, initials, photo URL);
+  a signed-out answer from the server replaces it with the Log in chip and forgets it. Tests:
   `tests/unit/account-menu.test.ts`.
 - Pages: `src/app/{page,about,terms,privacy,news}/…`, styles `src/app/globals.css`.
 - Events: cached reads and registration wiring `src/server/events.ts`, rules

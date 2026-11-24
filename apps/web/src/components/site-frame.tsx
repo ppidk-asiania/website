@@ -6,7 +6,7 @@ import type { Dictionary } from "@/i18n/dictionaries";
 import { LEGAL_VERSION } from "@/i18n/dictionaries";
 import { getAppUrls } from "@/server/env";
 import { getSignedInUser } from "@/server/session";
-import { LoginChip, SiteAccount } from "./site-account";
+import { AccountFallback, LoginChip, SiteAccount } from "./site-account";
 import { SocialLinks } from "./social-links";
 import { SiteNav } from "./site-nav";
 
@@ -42,7 +42,7 @@ export function SiteHeader({ t }: { t: Dictionary }) {
       <div className="site-frame__inner site-header__inner">
         <Logo t={t} />
         <SiteNav label={t.nav.label} links={links} />
-        <Suspense fallback={<LoginChip t={t.account} />}>
+        <Suspense fallback={<AccountFallback t={t.account} />}>
           <HeaderAccount t={t} />
         </Suspense>
       </div>
@@ -52,7 +52,7 @@ export function SiteHeader({ t }: { t: Dictionary }) {
 
 async function HeaderAccount({ t }: { t: Dictionary }) {
   const user = await getSignedInUser();
-  if (!user) return <LoginChip t={t.account} />;
+  if (!user) return <LoginChip t={t.account} forget />;
   const name = user.name ?? user.email ?? t.account.menu;
   return (
     <SiteAccount

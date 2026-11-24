@@ -1,18 +1,43 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from "react";
 import { shortName } from "@website/ui";
 import type { Dictionary } from "@/i18n/dictionaries";
+import { parseAccount, readAccount, rememberAccount } from "@/lib/remembered-account";
 
 type Labels = Dictionary["account"];
 
-export function LoginChip(props: { t: Labels }) {
+/** `forget` is set when the server answered "signed out": the remembered account is dropped. */
+export function LoginChip(props: { t: Labels; forget?: boolean }) {
+  useEffect(() => {
+    if (props.forget) rememberAccount(null);
+  }, [props.forget]);
   return (
     <a className="site-account-chip" href="/login">
       {props.t.login}
     </a>
   );
+}
+
+const onStorage = (change: () => void) => {
+  window.addEventListener("storage", change);
+  return () => window.removeEventListener("storage", change);
+};
+
+/** Shown while the server checks the session: the last signed-in account, else the login chip. */
+export function AccountFallback(props: { t: Labels }) {
+  const raw = useSyncExternalStore(onStorage, readAccount, () => null);
+  const account = useMemo(() => parseAccount(raw), [raw]);
+  return account ? <SiteAccount {...account} t={props.t} /> : <LoginChip t={props.t} />;
 }
 
 export function SiteAccount(props: {
@@ -28,6 +53,9 @@ export function SiteAccount(props: {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { name, initials, picture } = props;
+
+  useEffect(() => rememberAccount({ name, initials, picture }), [name, initials, picture]);
 
   useEffect(() => {
     if (!open) return;

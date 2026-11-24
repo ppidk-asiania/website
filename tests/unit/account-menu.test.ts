@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initials, shortName } from "../../packages/ui/src/user-name";
+import { parseAccount } from "../../apps/web/src/lib/remembered-account";
 
 describe("avatar initials", () => {
   it("uses the first and last name", () => {
@@ -23,5 +24,19 @@ describe("short name in the header", () => {
   it("cuts longer names to 13 characters and three dots", () => {
     expect(shortName("Muhammad Muflih Naufal Kamil")).toBe("Muhammad Mufl...");
     expect(shortName("Seventeen chars!!")).toBe("Seventeen cha...");
+  });
+});
+
+describe("remembered account in the header", () => {
+  it("reads back what was saved, and drops anything malformed or unsafe", () => {
+    const saved = { name: "Ari Wibowo", initials: "AW", picture: "https://lh3.example/a.jpg" };
+    expect(parseAccount(JSON.stringify(saved))).toEqual(saved);
+    expect(parseAccount(JSON.stringify({ ...saved, picture: "javascript:alert(1)" }))).toEqual({
+      ...saved,
+      picture: null,
+    });
+    expect(parseAccount(null)).toBeNull();
+    expect(parseAccount("{not json")).toBeNull();
+    expect(parseAccount(JSON.stringify({ name: 1, initials: "AW" }))).toBeNull();
   });
 });
