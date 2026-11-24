@@ -263,3 +263,30 @@ describe("unit boards (G1)", () => {
     ).toMatchObject({ error: "forbidden" });
   });
 });
+
+describe("My Tasks: unit lookups", () => {
+  it("looks up the units of all dispositions at once, not one after another", async () => {
+    let open = 0;
+    let most = 0;
+    const slow = createTasks({
+      activePeriod: () => Promise.resolve(period),
+      actionItemsOf: () => Promise.resolve([]),
+      actionItemsOfPeriod: () => Promise.resolve([]),
+      incoming: () => Promise.resolve(letters),
+      programs: () => Promise.resolve([]),
+      pendingRevisions: () => Promise.resolve([]),
+      unitsOf: () => Promise.resolve(["media", "other"]),
+      unitPath: async (id) => {
+        most = Math.max(most, ++open);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        open -= 1;
+        return paths[id] ?? null;
+      },
+      shares: createSqlTaskShareStore(fake.db as unknown as Db),
+      findUserId: () => Promise.resolve(null),
+      now: () => now,
+    });
+    await slow.mine("rina");
+    expect(most).toBeGreaterThan(1);
+  });
+});

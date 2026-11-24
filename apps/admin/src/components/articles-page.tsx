@@ -362,7 +362,9 @@ function ArticleList({
       render: (r) => (
         <div className="admin-event-title">
           <span className="admin-article-thumb" aria-hidden="true">
-            {r.image ? <img className="admin-article-thumb__img" src={r.image} alt="" /> : null}
+            {r.image ? (
+              <img className="admin-article-thumb__img" src={r.image} alt="" loading="lazy" />
+            ) : null}
           </span>
           <div>
             <div className="admin-table__title">{r.title}</div>

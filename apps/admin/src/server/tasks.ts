@@ -38,11 +38,12 @@ export const visibleTask = (principal: Principal, task: Task) => ({
 
 export function createTasks(deps: TaskDeps) {
   const today = () => deps.now().toISOString().slice(0, 10);
-  const paths = async (ids: readonly string[]) => {
-    const map = new Map<string, readonly string[]>();
-    for (const id of new Set(ids)) map.set(id, (await deps.unitPath(id)) ?? [id]);
-    return map;
-  };
+  const paths = async (ids: readonly string[]) =>
+    new Map(
+      await Promise.all(
+        [...new Set(ids)].map(async (id) => [id, (await deps.unitPath(id)) ?? [id]] as const),
+      ),
+    );
 
   /** With the viewer's principal, approvers also get the plan revisions waiting for them. */
   async function mine(uid: string, principal?: Principal): Promise<Task[]> {

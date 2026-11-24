@@ -66,7 +66,12 @@ async function AboutContent() {
           <h2 className="site-about__heading">{t.about.structureHeading}</h2>
           <div className="site-about__structure-frame">
             {/* eslint-disable-next-line @next/next/no-img-element -- organization chart asset, sized by CSS */}
-            <img className="site-about__structure-img" src="/organization.png" alt="" />
+            <img
+              className="site-about__structure-img"
+              src="/organization.png"
+              alt=""
+              loading="lazy"
+            />
           </div>
         </section>
       </div>

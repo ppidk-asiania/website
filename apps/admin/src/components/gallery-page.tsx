@@ -681,7 +681,7 @@ function PhotoGrid({
             onClick={() => refs.current[i]?.click()}
           />
           {/* eslint-disable-next-line @next/next/no-img-element -- Storage thumbnail (WebP) */}
-          <img src={photo.thumbUrl} alt="" className="admin-gallery-tile__img" />
+          <img src={photo.thumbUrl} alt="" className="admin-gallery-tile__img" loading="lazy" />
           <button
             type="button"
             className="admin-gallery-tile__clear"

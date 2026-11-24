@@ -113,7 +113,14 @@ export default function HomePage() {
             <div className="home-welcome__inner">
               <div className="home-welcome__photo">
                 {/* eslint-disable-next-line @next/next/no-img-element -- anonymous placeholder until the real photo exists */}
-                <img src="/home/welcome.svg" alt="" aria-hidden="true" width={600} height={800} />
+                <img
+                  src="/home/welcome.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width={600}
+                  height={800}
+                  loading="lazy"
+                />
               </div>
               <div className="home-welcome__text">
                 <h2>{t.home.welcomeHeading}</h2>
@@ -165,6 +172,7 @@ export default function HomePage() {
                       className={`home-logos__mark home-logos__mark--${logo.alt.toLowerCase()}`}
                       src={logo.src}
                       alt={logo.alt}
+                      loading="lazy"
                     />
                   ) : (
                     <span className="home-logos__mark home-logos__mark--text">{logo.alt}</span>
