@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AuditEvent } from "@website/audit";
-import { createSqlEventStore, createSqlRegistrationStore } from "@website/db/sql";
+import {
+  createSqlCommitteeStore,
+  createSqlEventStore,
+  createSqlRegistrationStore,
+} from "@website/db/sql";
 import type { EventEntity } from "@website/domain/events";
 import { normalizePermissions, type Principal } from "@website/permissions";
+import { createCommitteeRoles } from "../../apps/admin/src/server/event-committee";
 import { createCheckInActions, ticketHash } from "../../apps/admin/src/server/event-checkin";
 import { fakeDb } from "../support/fake-db";
 
@@ -87,6 +92,7 @@ const base: Omit<EventEntity, "id" | "version" | "createdAt" | "updatedAt"> = {
 let fake: ReturnType<typeof fakeDb>;
 let events: ReturnType<typeof createSqlEventStore>;
 let registrations: ReturnType<typeof createSqlRegistrationStore>;
+let committees: ReturnType<typeof createSqlCommitteeStore>;
 let eventId = "";
 let clock = eventDay;
 const db = () => fake.db as unknown as Db;
@@ -96,6 +102,7 @@ const actions = () =>
     registrations,
     users: (uids) =>
       Promise.resolve(new Map(uids.map((u) => [u, { name: `Name of ${u}`, email: `${u}@x.org` }]))),
+    committeeRole: createCommitteeRoles({ events, committees, now: () => clock }),
     now: () => clock,
   });
 const token = (uid: string) => `token-of-${uid}`;
@@ -113,6 +120,7 @@ beforeEach(async () => {
   clock = eventDay;
   events = createSqlEventStore(db());
   registrations = createSqlRegistrationStore(db());
+  committees = createSqlCommitteeStore(db());
   eventId = (await events.write(null, null, () => base, auditStub, registered)).id;
 });
 
@@ -263,5 +271,49 @@ describe("ticket check-in (N1.4)", () => {
     await scan(door1, "u2");
     await registrations.register(eventId, "u3", registered);
     expect(await registrations.checkedInCounts()).toEqual(new Map([[eventId, 2]]));
+  });
+});
+
+describe("check-in by committee seat (N1.5)", () => {
+  const helper = staff("helper-1", ["events.read"]);
+  const seatOf = (userId: string, divisionId: string) => ({
+    userId,
+    name: "",
+    divisionId,
+    seat: "member" as const,
+  });
+  const seed = (members: ReturnType<typeof seatOf>[]) =>
+    committees.save(
+      eventId,
+      null,
+      {
+        divisions: [
+          { id: "board", name: "Board", parentId: null, quota: null, description: "" },
+          { id: "door", name: "Door", parentId: null, quota: null, description: "" },
+        ],
+        members,
+      },
+      () => auditStub(),
+      registered,
+    );
+
+  it("a seat holder without staff rights scans on this event only", async () => {
+    await ticketFor("u1");
+    await seed([seatOf("helper-1", "door")]);
+    expect(await scan(helper, "u1")).toMatchObject({ ok: true, data: { outcome: "checked_in" } });
+    expect(await scan(outsider, "u2")).toMatchObject({ ok: false, error: "forbidden" });
+  });
+
+  it("someone without a seat cannot scan", async () => {
+    await ticketFor("u1");
+    await seed([seatOf("someone-else", "door")]);
+    expect(await scan(helper, "u1")).toMatchObject({ ok: false, error: "forbidden" });
+  });
+
+  it("the seat stops working 14 days after the event", async () => {
+    await ticketFor("u1");
+    await seed([seatOf("helper-1", "door")]);
+    clock = new Date(eventDay.getTime() + 15 * 86_400_000);
+    expect(await scan(helper, "u1")).toMatchObject({ ok: false, error: "forbidden" });
   });
 });

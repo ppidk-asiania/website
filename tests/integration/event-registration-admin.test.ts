@@ -78,6 +78,7 @@ const formInput = (respondents: string) => ({
   version: null,
 });
 
+let seat: "board" | "member" | null = null;
 let fake: ReturnType<typeof fakeDb>;
 let events: ReturnType<typeof createSqlEventStore>;
 let formStore: ReturnType<typeof createSqlFormStore>;
@@ -94,6 +95,7 @@ const registrationActions = () =>
         new Map(uids.map((uid) => [uid, { name: `Name ${uid}`, email: `${uid}@example.org` }])),
       ),
     shorten,
+    committeeRole: () => Promise.resolve(seat),
     storage: {
       signedReadUrl: (path) => Promise.resolve(`https://web.test/private-files?t=${path}`),
     },
@@ -123,6 +125,7 @@ const ref = async () => ({ id: eventId, version: (await events.get(eventId))?.ve
 
 beforeEach(async () => {
   shorten.mockClear();
+  seat = null;
   fake = fakeDb();
   events = createSqlEventStore(fake.db as unknown as Db);
   formStore = createSqlFormStore(fake.db as unknown as Db);
@@ -260,6 +263,37 @@ describe("the questions of an event (admin, N1.2)", () => {
           { userId: "u2", status: "waitlisted", attendanceMode: null, answers: [""] },
         ],
       },
+    });
+  });
+
+  it("a committee seat sees the short list; only the event board sees everything (N1.5)", async () => {
+    await registrationActions().save(...as(editor))({
+      ...(await ref()),
+      setup: setup(accountForm),
+    });
+    fake.docs.set(`eventRegistrations/${eventId}_u1`, {
+      eventId,
+      userId: "u1",
+      status: "confirmed",
+      attendanceMode: "online",
+      createdAt: now,
+    });
+    const noRights = staff(["events.read"]);
+    seat = "member";
+    const short = await registrationActions().registrants(...as(noRights))({ eventId });
+    expect(short).toMatchObject({
+      ok: true,
+      data: { columns: [], rows: [{ userId: "u1", name: "Name u1", email: "" }] },
+    });
+    expect(JSON.stringify(short)).not.toContain("example.org");
+    seat = "board";
+    expect(await registrationActions().registrants(...as(noRights))({ eventId })).toMatchObject({
+      ok: true,
+      data: { rows: [{ userId: "u1", email: "u1@example.org" }] },
+    });
+    seat = null;
+    expect(await registrationActions().registrants(...as(noRights))({ eventId })).toMatchObject({
+      error: "forbidden",
     });
   });
 

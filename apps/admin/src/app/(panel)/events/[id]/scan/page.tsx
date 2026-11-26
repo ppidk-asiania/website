@@ -1,4 +1,3 @@
-import { can } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { EventScanPage } from "@/components/event-scan-page";
 import { getAuditContext, getPrincipal, requireAdminViewer } from "@/server/context";
@@ -11,10 +10,6 @@ export default async function AdminEventScanPage({ params }: { params: Promise<{
   const { id } = await params;
   const viewer = await requireAdminViewer(`/events/${id}/scan`, "events.read");
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
-  const { principal } = viewer;
-  if (!can(principal, "events.checkin") && !can(principal, "registrants.edit")) {
-    return <AccessMessage reason="no-access" />;
-  }
   const attendance = await checkInActions().attendance(
     getPrincipal,
     getAuditContext,

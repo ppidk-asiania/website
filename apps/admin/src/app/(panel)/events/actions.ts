@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
-import { eventActions, eventRegistrationActions } from "@/server/wiring";
+import { committeeActions, eventActions, eventRegistrationActions } from "@/server/wiring";
 
 export async function saveEventAction(input: unknown) {
   const result = await eventActions().save(getPrincipal, getAuditContext)(input);
@@ -80,4 +80,16 @@ export async function verifyEventPaymentAction(input: unknown) {
 
 export async function rejectEventPaymentAction(input: unknown) {
   return eventRegistrationActions().reject(getPrincipal, getAuditContext)(input);
+}
+
+export async function loadCommitteeAction(input: unknown) {
+  return committeeActions().load(getPrincipal, getAuditContext)(input);
+}
+
+export async function saveCommitteeAction(input: unknown) {
+  return committeeActions().save(getPrincipal, getAuditContext)(input);
+}
+
+export async function findCommitteePeopleAction(input: unknown) {
+  return committeeActions().findPeople(getPrincipal, getAuditContext)(input);
 }

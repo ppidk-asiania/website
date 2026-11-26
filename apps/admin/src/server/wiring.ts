@@ -78,6 +78,8 @@ import { createNewsActions } from "./news";
 import { createOrgUnitActions } from "./org-units";
 import { createPeriodActions } from "./periods";
 import { createCheckInActions } from "./event-checkin";
+import { createCommitteeActions, createCommitteeRoles } from "./event-committee";
+import { committeeRole } from "@website/domain/events";
 import { createDonationActions } from "./donations";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
@@ -145,6 +147,7 @@ export const newsActions = lazyEnv(() =>
 
 export const eventRegistrationActions = lazyEnv(() =>
   createEventRegistrationActions({
+    committeeRole: (userId, eventId) => committeeRoleOf()(userId, eventId),
     events: adminStores().events,
     forms: adminStores().forms,
     registrations: adminStores().eventRegistrations,
@@ -161,8 +164,32 @@ export const eventRegistrationActions = lazyEnv(() =>
   }),
 );
 
+export const committeeActions = lazyEnv(() =>
+  createCommitteeActions({
+    events: adminStores().events,
+    committees: adminStores().committees,
+    users: (uids) => adminStores().accounts.getMany(uids),
+    findPeople: async (query) =>
+      (await adminStores().accounts.searchByPrefix(query, 8)).map(({ uid, name, email }) => ({
+        uid,
+        name,
+        email,
+      })),
+    now: () => new Date(),
+  }),
+);
+
+export const committeeRoleOf = lazyEnv(() =>
+  createCommitteeRoles({
+    events: adminStores().events,
+    committees: adminStores().committees,
+    now: () => new Date(),
+  }),
+);
+
 export const checkInActions = lazyEnv(() =>
   createCheckInActions({
+    committeeRole: (userId, eventId) => committeeRoleOf()(userId, eventId),
     events: adminStores().events,
     registrations: adminStores().eventRegistrations,
     users: (uids) => adminStores().accounts.getMany(uids),
@@ -1195,6 +1222,25 @@ export const adminReads = {
   listNews: () => adminStores().content.listForAdmin("news"),
   getContent: (id: string) => adminStores().content.get(id),
   listEvents: () => adminStores().events.listForAdmin(),
+  // The events an account serves on through a committee seat, with its role there (N1.5).
+  servingEvents: async (userId: string) => {
+    const [events, committees] = await Promise.all([
+      adminStores().events.listForAdmin(),
+      adminStores().committees.listAll(),
+    ]);
+    const now = new Date();
+    const serving: Record<string, "board" | "member"> = {};
+    for (const event of events) {
+      const role = committeeRole(
+        committees.find((c) => c.eventId === event.id) ?? null,
+        userId,
+        event,
+        now,
+      );
+      if (role) serving[event.id] = role;
+    }
+    return serving;
+  },
   // Forms an event may ask at registration: public ones answered with an account.
   listRegistrationForms: async () =>
     (await adminStores().forms.listForAdmin()).filter(

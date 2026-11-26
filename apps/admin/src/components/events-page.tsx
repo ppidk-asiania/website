@@ -50,6 +50,7 @@ import {
   type EventTab,
 } from "./events-model";
 import { Select } from "@/components/ui/select";
+import { EventCommitteePanel } from "./event-committee-panel";
 import { EventRegistrationPanel, type RegistrationFormChoice } from "./event-registration-panel";
 import { downloadCsv } from "@/components/csv";
 
@@ -148,6 +149,8 @@ interface EventsListProps {
   canEdit: boolean;
   canPublish: boolean;
   canSeeRegistrants: boolean;
+  /** The events the viewer serves on through a committee seat (N1.5): their role there. */
+  serving: Record<string, "board" | "member">;
   canCheckPayments: boolean;
   forms: readonly RegistrationFormChoice[];
   publicBase: string;
@@ -184,6 +187,7 @@ function EventsList({
   canEdit,
   canPublish,
   canSeeRegistrants,
+  serving,
   canCheckPayments,
   forms,
   publicBase,
@@ -1141,13 +1145,20 @@ function EventsList({
           {["timezone", "schedule", "speakers", "sponsors"].map((field) => (
             <FieldError key={field} id={`event-${field}-error`} message={fieldErrors[field]} />
           ))}
+          {editing && canEdit ? (
+            <EventCommitteePanel
+              key={`committee:${editing.id}`}
+              eventId={editing.id}
+              show={toast.show}
+            />
+          ) : null}
           {editing ? (
             <EventRegistrationPanel
               key={`${editing.id}:${editing.version}`}
               event={editing}
               forms={forms}
               canEdit={canEdit}
-              canSeeRegistrants={canSeeRegistrants}
+              canSeeRegistrants={canSeeRegistrants || serving[editing.id] !== undefined}
               canCheckPayments={canCheckPayments}
               publicBase={publicBase}
               show={toast.show}

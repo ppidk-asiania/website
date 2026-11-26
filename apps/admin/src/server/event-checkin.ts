@@ -8,6 +8,7 @@ import {
   registrationId,
   type CheckInMethod,
   type CheckInOutcome,
+  type CommitteeRole,
 } from "@website/domain/events";
 import { RuleViolationError } from "@website/domain/shared";
 import { can, type Principal } from "@website/permissions";
@@ -24,6 +25,8 @@ export interface CheckInDeps {
   readonly users: (
     uids: readonly string[],
   ) => Promise<ReadonlyMap<string, { name: string | null; email: string | null }>>;
+  /** The seat of an account on this event now (N1.5): any seat may scan and check people in. */
+  readonly committeeRole: (userId: string, eventId: string) => Promise<CommitteeRole | null>;
   readonly now: () => Date;
 }
 
@@ -50,12 +53,6 @@ export interface Card {
   readonly practice: boolean;
 }
 
-/** Door staff hold the extra `events.checkin`; `registrants.edit` can do it all, and undo at any time. */
-const gate = {
-  permission: "events.checkin",
-  orIf: (principal: Principal) => Promise.resolve(can(principal, "registrants.edit")),
-} as const;
-
 const checkInAudit =
   (audit: AuditBuilder, eventId: string, userId: string, title: string): CheckInAudit =>
   (before, after) =>
@@ -73,6 +70,14 @@ const checkInAudit =
     });
 
 export function createCheckInActions(deps: CheckInDeps) {
+  /** Door staff hold `events.checkin` or sit on the event's committee; `registrants.edit` can do it all. */
+  const gate = {
+    permission: "events.checkin",
+    orIf: async (principal: Principal, input: { eventId: string }) =>
+      can(principal, "registrants.edit") ||
+      (await deps.committeeRole(principal.userId, input.eventId)) !== null,
+  } as const;
+
   const liveEvent = async (eventId: string) => {
     const event = await deps.events.get(eventId);
     if (!event || event.deletedAt !== null) {

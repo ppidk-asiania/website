@@ -309,3 +309,9 @@ export {
   type SqlDonationStore,
   type SqlDonationWebStore,
 } from "./donations";
+export {
+  createSqlCommitteeStore,
+  type CommitteeAudit,
+  type SqlCommitteeStore,
+  type StoredCommittee,
+} from "./event-committees";

@@ -11,6 +11,7 @@ import {
   EventRegistrationSetupSchema,
   feeAmount,
   registrationId,
+  type CommitteeRole,
   type EventEntity,
   type PaymentState,
   type RegistrationStatus,
@@ -48,6 +49,8 @@ export interface EventRegistrationDeps {
   /** Silent mode of the links module: returns the long URL again when no provider answers. */
   readonly shorten: (longUrl: string, title: string) => Promise<string>;
   readonly webUrl: string;
+  /** The seat of an account on this event now (N1.5). */
+  readonly committeeRole: (userId: string, eventId: string) => Promise<CommitteeRole | null>;
   readonly now: () => Date;
 }
 
@@ -176,14 +179,44 @@ export function createEventRegistrationActions(deps: EventRegistrationDeps) {
 
   const registrants = createGuardedAction({
     permission: "registrants.read",
-    // Whoever checks payments needs to see who paid.
-    orIf: (principal: Principal) => Promise.resolve(can(principal, "events.payments")),
+    // Whoever checks payments needs to see who paid; the committee sees the event's own people (N1.5).
+    orIf: async (principal: Principal, { eventId }) =>
+      can(principal, "events.payments") ||
+      (await deps.committeeRole(principal.userId, eventId)) !== null,
     input: z.object({ eventId: safeId }).strict(),
-    handler: async ({ eventId }) => {
+    handler: async ({ eventId }, principal) => {
       const event = await deps.events.get(eventId);
       if (!event || event.deletedAt !== null)
         throw new RuleViolationError("This event does not exist.");
       const rows = await deps.registrations.listForEvent(eventId);
+      const full =
+        can(principal, "registrants.read") ||
+        can(principal, "events.payments") ||
+        (await deps.committeeRole(principal.userId, eventId)) === "board";
+      if (!full) {
+        // The short list is cut here: no e-mail, answers, payment or proof ever leaves the server.
+        const people = await deps.users(rows.map((r) => r.userId));
+        return {
+          columns: [],
+          rows: rows
+            .filter((r) => r.status !== "cancelled")
+            .map((r): RegistrantRow => ({
+              userId: r.userId,
+              name: people.get(r.userId)?.name ?? "",
+              email: "",
+              status: r.status,
+              attendanceMode: r.attendanceMode,
+              registeredAt: r.registeredAt.toISOString(),
+              answers: [],
+              registrationId: registrationId(eventId, r.userId),
+              payment: "not_required",
+              category: event.fee?.categories.find((c) => c.id === r.feeCategory)?.label ?? "",
+              amount: "",
+              hasProof: false,
+              paymentNote: null,
+            })),
+        };
+      }
       const formId = event.registration?.formId ?? null;
       const [versions, responses, users] = await Promise.all([
         formId ? deps.forms.listVersions(formId) : [],

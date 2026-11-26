@@ -136,7 +136,7 @@ Rules in `packages/domain/src/events/payment.ts`; store in `packages/db/src/sql/
   not available and the door staff use the name search. Rotating the secret makes every open ticket page store
   a new hash on its next view; printed or saved tickets of the old token stop working.
 - Scanner: admin `/events/[id]/scan` (link "Door scanner" in the event's registration panel). Allowed for the
-  extra `events.checkin` or `registrants.edit`. Present / registered is on top; the camera (getUserMedia +
+  extra `events.checkin`, `registrants.edit` or a committee seat of this event (N1.5). Present / registered is on top; the camera (getUserMedia +
   `jsqr`; the Permissions-Policy of this route alone allows `camera=(self)`) or a name search gives one card:
   checked in, already checked in at (time), not paid, on the waiting list, cancelled, or "not a ticket for this
   event" (one neutral answer for a wrong, old or other-event token).
@@ -147,11 +147,33 @@ manual` (self check-in, main plan 9.4/2, is not built yet). Manual check-in show
   and undo are in the Audit Log ("Check-in", "Check-in undone").
 - Practice: before the event day (in the event's time zone) a scan shows its result and stores nothing.
 - Sponsorship reach uses `finalAttendance`, else the number checked in.
-- Not built: separate committee tickets (N1.5), the check-in notice to the registrant (N4.1),
+- Not built: separate committee tickets, the check-in notice to the registrant (N4.1),
   an offline mode of the scanner.
 - Code: `packages/domain/src/events/checkin.ts`, `packages/db/src/sql/events.ts`,
   `apps/admin/src/server/event-checkin.ts`, `apps/admin/src/components/event-scan-page.tsx`. Tests:
   `tests/unit/event-checkin.test.ts`, `tests/integration/events-checkin.test.ts`.
+
+## Event committee (N1.5)
+
+- One document per event, `eventCommittees/{eventId}`: divisions (name, one level under a top-level division,
+  people wanted, short description) and people with a seat (`head | deputy | secretary | treasurer | member`)
+  in one division. The first division is the event board. A person is on a committee once; a helper without an
+  account is typed in by name. Three templates (small, seminar, festival) fill the divisions.
+- Edited in the event's form in the admin (button "Open the committee"), only with `events.edit`; saves are
+  versioned and audited ("Event committee").
+- Rights come from the seat, for THIS event only, and are recomputed on every request (removed today = no
+  access today): any seat may scan tickets and see the short list of registrants (name, status, attendance
+  mode; no e-mail, answers or payment); a seat in the event board sees the full registrant list. Nothing else
+  (no edit, no payment check). The seat gives no `events.read`; the page and the scanner link need the extra
+  `events.checkin`, `registrants.edit` or a seat (the guarded action decides, see `orIf` in
+  `apps/admin/src/server/guarded-action.ts`).
+- Lock: 14 days after the event ends (its start when it has no end), the seat gives no rights any more.
+- Not built: the board managing its own committee, board editing the event, album upload, responsible units of
+  an event, the SK draft from this list, the registrants table with column filters.
+- Code: `packages/domain/src/events/committee.ts`, `packages/db/src/sql/event-committees.ts`,
+  `apps/admin/src/server/event-committee.ts`, `apps/admin/src/components/event-committee-panel.tsx`. Tests:
+  `tests/unit/events-committee.test.ts`, `tests/integration/events-committee.test.ts`, seat cases in
+  `tests/integration/events-checkin.test.ts` and `tests/integration/event-registration-admin.test.ts`.
 
 ## Public pages and registration
 

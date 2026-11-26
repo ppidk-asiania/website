@@ -144,6 +144,7 @@ const actions = () =>
     registrations,
     users: () => Promise.resolve(new Map()),
     shorten: (url) => Promise.resolve(url),
+    committeeRole: () => Promise.resolve(null),
     storage: {
       signedReadUrl: (path) => Promise.resolve(`https://web.test/private-files?t=${path}`),
     },
