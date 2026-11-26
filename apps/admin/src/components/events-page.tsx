@@ -50,6 +50,7 @@ import {
   type EventTab,
 } from "./events-model";
 import { Select } from "@/components/ui/select";
+import { EventRegistrationPanel, type RegistrationFormChoice } from "./event-registration-panel";
 import { downloadCsv } from "@/components/csv";
 
 const EVENT_PATH = "/events/";
@@ -146,6 +147,8 @@ interface EventsListProps {
   initial: EventItem[];
   canEdit: boolean;
   canPublish: boolean;
+  canSeeRegistrants: boolean;
+  forms: readonly RegistrationFormChoice[];
   publicBase: string;
 }
 
@@ -175,7 +178,14 @@ function formFrom(ev: EventItem): EventForm {
   };
 }
 
-function EventsList({ initial: events, canEdit, canPublish, publicBase }: EventsListProps) {
+function EventsList({
+  initial: events,
+  canEdit,
+  canPublish,
+  canSeeRegistrants,
+  forms,
+  publicBase,
+}: EventsListProps) {
   const toast = useToastMessage();
   const router = useRouter();
   const bannerUpload = useImageUpload("banner");
@@ -1129,6 +1139,17 @@ function EventsList({ initial: events, canEdit, canPublish, publicBase }: Events
           {["timezone", "schedule", "speakers", "sponsors"].map((field) => (
             <FieldError key={field} id={`event-${field}-error`} message={fieldErrors[field]} />
           ))}
+          {editing ? (
+            <EventRegistrationPanel
+              key={`${editing.id}:${editing.version}`}
+              event={editing}
+              forms={forms}
+              canEdit={canEdit}
+              canSeeRegistrants={canSeeRegistrants}
+              publicBase={publicBase}
+              show={toast.show}
+            />
+          ) : null}
           {editing && (editing.stage === "after" || editing.stage === "locked") ? (
             <fieldset className="admin-form-grid__full admin-event-after">
               <legend className="admin-field__label">

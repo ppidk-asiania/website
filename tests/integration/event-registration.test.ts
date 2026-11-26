@@ -65,6 +65,7 @@ const base: Omit<EventEntity, "id" | "version" | "createdAt" | "updatedAt"> = {
   finalAttendance: null,
   attendanceNote: null,
   recapUrl: null,
+  registration: null,
 };
 const create = (fields: Partial<typeof base>) =>
   events.write(null, null, () => ({ ...base, ...fields }), auditStub, now);

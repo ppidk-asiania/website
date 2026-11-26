@@ -33,6 +33,7 @@ import { createCronRoute, CRON_JOBS } from "./cron";
 import { createChapterRecords } from "./chapter-records";
 import { createDashboard } from "./dashboard";
 import { createEventActions } from "./events";
+import { createEventRegistrationActions } from "./event-registration";
 import { createFinanceActions } from "./finance";
 import { createFormActions } from "./forms";
 import { createGalleryActions } from "./gallery";
@@ -137,6 +138,18 @@ export const roleActions = lazyEnv(() =>
 
 export const newsActions = lazyEnv(() =>
   createNewsActions({ content: adminStores().content, now: () => new Date() }),
+);
+
+export const eventRegistrationActions = lazyEnv(() =>
+  createEventRegistrationActions({
+    events: adminStores().events,
+    forms: adminStores().forms,
+    registrations: adminStores().eventRegistrations,
+    users: (uids) => adminStores().accounts.getMany(uids),
+    shorten: (url, title) => linkActions().shorten(url, title, "events"),
+    webUrl: getAppUrls().WEB_URL ?? "",
+    now: () => new Date(),
+  }),
 );
 
 export const eventActions = lazyEnv(() =>
@@ -1135,6 +1148,11 @@ export const adminReads = {
   listNews: () => adminStores().content.listForAdmin("news"),
   getContent: (id: string) => adminStores().content.get(id),
   listEvents: () => adminStores().events.listForAdmin(),
+  // Forms an event may ask at registration: public ones answered with an account.
+  listRegistrationForms: async () =>
+    (await adminStores().forms.listForAdmin()).filter(
+      (f) => f.usage === "public" && f.respondents === "account" && f.deletedAt === null,
+    ),
   listForms: () => adminStores().forms.listForAdmin(),
   listLetters: (query: LetterListQuery) => adminStores().letters.list(query),
   getLetter: (id: string) => adminStores().letters.get(id),

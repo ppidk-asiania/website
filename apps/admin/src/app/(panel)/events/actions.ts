@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
-import { eventActions } from "@/server/wiring";
+import { eventActions, eventRegistrationActions } from "@/server/wiring";
 
 export async function saveEventAction(input: unknown) {
   const result = await eventActions().save(getPrincipal, getAuditContext)(input);
@@ -50,4 +50,20 @@ export async function saveEventAfterAction(input: unknown) {
   const result = await eventActions().saveAfter(getPrincipal, getAuditContext)(input);
   if (result.ok) revalidatePath("/events", "layout");
   return result;
+}
+
+export async function saveEventRegistrationAction(input: unknown) {
+  const result = await eventRegistrationActions().save(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/events", "layout");
+  return result;
+}
+
+export async function createEventShortLinkAction(input: unknown) {
+  const result = await eventRegistrationActions().shortLink(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/events", "layout");
+  return result;
+}
+
+export async function listEventRegistrantsAction(input: unknown) {
+  return eventRegistrationActions().registrants(getPrincipal, getAuditContext)(input);
 }

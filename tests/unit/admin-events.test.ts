@@ -49,6 +49,7 @@ const entity: EventEntity = {
   finalAttendance: null,
   attendanceNote: null,
   recapUrl: null,
+  registration: null,
 };
 
 describe("Event page rows (server mapping)", () => {

@@ -1,15 +1,19 @@
-import type { Database } from "./store";
+import type { Database, Transaction } from "./store";
 import type { Snapshot } from "@website/audit";
 import {
+  assertAttendanceMode,
   isLive,
   isRegistrationOpen,
   nextRegistrationStatus,
   registrationId,
   toPublicEvent,
   type EventEntity,
+  type AttendanceMode,
   type EventImage,
+  type EventRegistrationSetup,
   type EventType,
   type PublicEvent,
+  type RegistrationDetails,
   type RegistrationStatus,
   type ScheduleRow,
   type Speaker,
@@ -19,6 +23,13 @@ import { RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { getDocumentsByIds } from "./batch";
 import { createSluggedStore, toDate } from "./slugged";
+
+export interface RegistrantRow {
+  readonly userId: string;
+  readonly status: RegistrationStatus;
+  readonly attendanceMode: AttendanceMode | null;
+  readonly registeredAt: Date;
+}
 
 export type EventFields = Omit<EventEntity, "id" | "version" | "createdAt" | "updatedAt">;
 
@@ -54,6 +65,7 @@ function toEvent(id: string, data: Record<string, unknown>): EventEntity {
     finalAttendance: (data["finalAttendance"] as number | undefined) ?? null,
     attendanceNote: (data["attendanceNote"] as string | undefined) ?? null,
     recapUrl: (data["recapUrl"] as string | undefined) ?? null,
+    registration: (data["registration"] as EventRegistrationSetup | null | undefined) ?? null,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
     updatedAt: toDate(data["updatedAt"]) as Date,
@@ -93,6 +105,14 @@ export function eventSnapshot(e: EventFields): Snapshot {
     finalAttendance: e.finalAttendance,
     attendanceNote: e.attendanceNote,
     recapUrl: e.recapUrl,
+    registration: e.registration
+      ? {
+          formId: e.registration.formId,
+          attendanceModes: [...e.registration.attendanceModes],
+          showOnTicket: e.registration.showOnTicket,
+          shortUrl: e.registration.shortUrl,
+        }
+      : null,
   };
 }
 
@@ -147,37 +167,83 @@ export type SqlEventReader = ReturnType<typeof createSqlEventReader>;
 
 export function createSqlRegistrationStore(db: Database) {
   const registrationsRef = db.collection("eventRegistrations");
-  return {
+  const store = {
+    /**
+     * The registration itself, inside a transaction of the caller: the wizard writes the form response in
+     * the same one (N1.2). An event that asks questions refuses a registration without them.
+     */
+    async registerIn(
+      tx: Transaction,
+      eventId: string,
+      userId: string,
+      now: Date,
+      details: RegistrationDetails | null = null,
+    ): Promise<{ status: RegistrationStatus; created: boolean }> {
+      const eventSnap = await tx.get(db.collection("events").doc(safeId.parse(eventId)));
+      const event = eventSnap.exists ? toEvent(eventSnap.id, eventSnap.data()!) : null;
+      if (!event || !isRegistrationOpen(event, now)) {
+        throw new RuleViolationError("Registration is closed.");
+      }
+      if (event.registration && details === null) {
+        throw new RuleViolationError("This event asks questions: register on its form page.");
+      }
+      if (!event.registration && details !== null) {
+        throw new RuleViolationError("This event has no registration form.");
+      }
+      if (event.registration) assertAttendanceMode(event.registration, details!.attendanceMode);
+      const ref = registrationsRef.doc(safeId.parse(registrationId(eventId, userId)));
+      const existing = await tx.get(ref);
+      if (existing.exists) {
+        return { status: existing.get("status") as RegistrationStatus, created: false };
+      }
+      const counterRef = db.collection("eventCounters").doc(eventId);
+      const counter = await tx.get(counterRef);
+      const confirmed = (counter.get("confirmed") as number | undefined) ?? 0;
+      const waitlisted = (counter.get("waitlisted") as number | undefined) ?? 0;
+      const status = nextRegistrationStatus(event, confirmed);
+      tx.set(ref, {
+        eventId,
+        userId,
+        status,
+        createdAt: now,
+        updatedAt: now,
+        ...(details ?? {}),
+      });
+      tx.set(
+        counterRef,
+        status === "confirmed"
+          ? { confirmed: confirmed + 1, waitlisted }
+          : { confirmed, waitlisted: waitlisted + 1 },
+      );
+      return { status, created: true };
+    },
+
     register(
       eventId: string,
       userId: string,
       now: Date,
     ): Promise<{ status: RegistrationStatus; created: boolean }> {
-      return db.runTransaction(async (tx) => {
-        const eventSnap = await tx.get(db.collection("events").doc(safeId.parse(eventId)));
-        const event = eventSnap.exists ? toEvent(eventSnap.id, eventSnap.data()!) : null;
-        if (!event || !isRegistrationOpen(event, now)) {
-          throw new RuleViolationError("Registration is closed.");
-        }
-        const ref = registrationsRef.doc(safeId.parse(registrationId(eventId, userId)));
-        const existing = await tx.get(ref);
-        if (existing.exists) {
-          return { status: existing.get("status") as RegistrationStatus, created: false };
-        }
-        const counterRef = db.collection("eventCounters").doc(eventId);
-        const counter = await tx.get(counterRef);
-        const confirmed = (counter.get("confirmed") as number | undefined) ?? 0;
-        const waitlisted = (counter.get("waitlisted") as number | undefined) ?? 0;
-        const status = nextRegistrationStatus(event, confirmed);
-        tx.set(ref, { eventId, userId, status, createdAt: now, updatedAt: now });
-        tx.set(
-          counterRef,
-          status === "confirmed"
-            ? { confirmed: confirmed + 1, waitlisted }
-            : { confirmed, waitlisted: waitlisted + 1 },
-        );
-        return { status, created: true };
-      });
+      return db.runTransaction((tx) => store.registerIn(tx, eventId, userId, now));
+    },
+
+    /** The questions an event asks, for the wizard (null = one-click registration). */
+    async setupOf(eventId: string): Promise<EventRegistrationSetup | null> {
+      if (!safeId.safeParse(eventId).success) return null;
+      const snap = await db.collection("events").doc(eventId).get();
+      return snap.exists ? toEvent(snap.id, snap.data()!).registration : null;
+    },
+
+    /** Everyone registered for an event, oldest first, for the admin registrants list. */
+    async listForEvent(eventId: string): Promise<RegistrantRow[]> {
+      const snapshot = await registrationsRef.where("eventId", "==", safeId.parse(eventId)).get();
+      return snapshot.docs
+        .map((doc) => ({
+          userId: doc.get("userId") as string,
+          status: doc.get("status") as RegistrationStatus,
+          attendanceMode: (doc.get("attendanceMode") as AttendanceMode | undefined) ?? null,
+          registeredAt: toDate(doc.get("createdAt")) as Date,
+        }))
+        .sort((a, b) => a.registeredAt.getTime() - b.registeredAt.getTime());
     },
 
     /** Who is told when an event is cancelled: everyone who still holds a place or a waitlist spot. */
@@ -212,6 +278,7 @@ export function createSqlRegistrationStore(db: Database) {
         .sort((a, b) => b.event.startsAt.getTime() - a.event.startsAt.getTime());
     },
   };
+  return store;
 }
 
 export type SqlRegistrationStore = ReturnType<typeof createSqlRegistrationStore>;

@@ -41,7 +41,7 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
   );
   const past = isPast(event, now);
   const [user, album] = await Promise.all([
-    open && !event.registrationUrl ? getSignedInUser() : null,
+    open && !event.registrationUrl && !event.registration ? getSignedInUser() : null,
     open ? null : publicAlbumForEvent(event.id),
   ]);
   const hasRecap = event.finalAttendance !== null || event.attendanceNote || event.recapUrl;
@@ -99,6 +99,10 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
                 target="_blank"
                 rel="noopener noreferrer"
               >
+                {t.events.register}
+              </a>
+            ) : event.registration ? (
+              <a className="site-event__button" href={`/events/${event.slug}/register`}>
                 {t.events.register}
               </a>
             ) : user ? (

@@ -470,14 +470,20 @@ export function answerText(value: AnswerValue | undefined): string {
   return String(value);
 }
 
-export function responseTable(
-  versions: readonly FormVersion[],
-  responses: readonly FormResponse[],
-): { header: string[]; rows: string[][] } {
+/** One column per question over all versions, newest label first; a changed form keeps old answers. */
+export function answerColumns(versions: readonly FormVersion[]): Map<string, string> {
   const columns = new Map<string, string>();
   for (const v of [...versions].sort((a, b) => b.number - a.number)) {
     for (const q of v.questions) if (!columns.has(q.id)) columns.set(q.id, q.label);
   }
+  return columns;
+}
+
+export function responseTable(
+  versions: readonly FormVersion[],
+  responses: readonly FormResponse[],
+): { header: string[]; rows: string[][] } {
+  const columns = answerColumns(versions);
   const ids = [...columns.keys()];
   const named = responses.some((r) => r.name !== undefined);
   const profile = PROFILE_FIELDS.filter((f) => responses.some((r) => r.profile?.[f] !== undefined));

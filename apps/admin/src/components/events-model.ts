@@ -5,6 +5,7 @@ import {
   eventStage,
   sortedSponsors,
   type ApprovalState,
+  type AttendanceMode,
   type EventEntity,
   type EventStage,
   type EventImage,
@@ -50,6 +51,12 @@ export interface EventItem {
   finalAttendance: number | null;
   attendanceNote: string;
   recapUrl: string;
+  registration: {
+    formId: string;
+    attendanceModes: readonly AttendanceMode[];
+    showOnTicket: string;
+    shortUrl: string | null;
+  } | null;
 }
 
 export interface StageRow {
@@ -147,6 +154,7 @@ export function toEventItem(
     finalAttendance: e.finalAttendance,
     attendanceNote: e.attendanceNote ?? "",
     recapUrl: e.recapUrl ?? "",
+    registration: e.registration,
   };
 }
 

@@ -4,6 +4,7 @@ import { FeaturedImageSchema, type FeaturedImage } from "../content";
 import { TimezoneSchema } from "../members/profile";
 import { isValidSlug, type EntityMeta } from "../shared";
 import { isLive } from "./lifecycle";
+import type { AttendanceMode, EventRegistrationSetup } from "./registration";
 
 export const EVENT_TYPES = [
   "general",
@@ -69,6 +70,8 @@ export interface EventEntity extends EntityMeta {
   readonly finalAttendance: number | null;
   readonly attendanceNote: string | null;
   readonly recapUrl: string | null;
+  /** The form asked at registration; null = one-click registration. */
+  readonly registration: EventRegistrationSetup | null;
 }
 
 export function sortedSponsors(sponsors: readonly Sponsor[]): Sponsor[] {
@@ -97,6 +100,8 @@ export interface PublicEvent {
   readonly finalAttendance: number | null;
   readonly attendanceNote: string | null;
   readonly recapUrl: string | null;
+  /** Set when the event asks questions: the register button leads to the wizard page. */
+  readonly registration: { readonly attendanceModes: readonly AttendanceMode[] } | null;
 }
 
 export function toPublicEvent(e: EventEntity): PublicEvent {
@@ -122,6 +127,7 @@ export function toPublicEvent(e: EventEntity): PublicEvent {
     finalAttendance: e.finalAttendance,
     attendanceNote: e.attendanceNote,
     recapUrl: e.recapUrl,
+    registration: e.registration && { attendanceModes: e.registration.attendanceModes },
   };
 }
 
@@ -260,3 +266,4 @@ export interface CalendarFeed {
 }
 
 export * from "./lifecycle";
+export * from "./registration";

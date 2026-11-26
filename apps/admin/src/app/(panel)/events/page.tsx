@@ -14,9 +14,11 @@ const AUTHOR_HISTORY = 500;
 export default async function AdminEventsPage() {
   const viewer = await requireAdminViewer("/events", "events.read");
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
-  const [events, history] = await Promise.all([
+  const canEdit = can(viewer.principal, "events.edit");
+  const [events, history, forms] = await Promise.all([
     adminReads.listEvents(),
     adminReads.listAudit({ module: "events", limit: AUTHOR_HISTORY }),
+    canEdit ? adminReads.listRegistrationForms() : [],
   ]);
   const editors = lastEditors(history.items, "event");
   const users = await adminReads.getUsers([...new Set([...editors.values()].map((a) => a.id))]);
@@ -24,8 +26,10 @@ export default async function AdminEventsPage() {
   return (
     <EventsPage
       initial={events.map((e) => toEventItem(e, authors.get(e.id) ?? null))}
-      canEdit={can(viewer.principal, "events.edit")}
+      canEdit={canEdit}
       canPublish={can(viewer.principal, "events.publish")}
+      canSeeRegistrants={can(viewer.principal, "registrants.read")}
+      forms={forms.map((f) => ({ id: f.id, title: f.title, status: f.status }))}
       publicBase={getAppUrls().WEB_URL ?? ""}
     />
   );

@@ -31,6 +31,7 @@ const event = (slug: string, start: string, extra: Partial<PublicEvent> = {}): P
   finalAttendance: null,
   attendanceNote: null,
   recapUrl: null,
+  registration: null,
   ...extra,
 });
 

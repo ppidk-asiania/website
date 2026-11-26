@@ -51,7 +51,7 @@ const reason = safeText(500, { multiline: true }).pipe(
 
 type Action = "CREATE" | "UPDATE" | "PUBLISH" | "UNPUBLISH" | "DELETE";
 
-const eventAudit =
+export const eventAudit =
   (audit: AuditBuilder, action: Action, revertible = true) =>
   (
     before: Parameters<AuditBuilder>[0]["before"],
@@ -84,6 +84,7 @@ const kept = (current: EventEntity | null) => ({
   finalAttendance: current?.finalAttendance ?? null,
   attendanceNote: current?.attendanceNote ?? null,
   recapUrl: current?.recapUrl ?? null,
+  registration: current?.registration ?? null,
 });
 
 export function createEventActions(deps: EventDeps) {

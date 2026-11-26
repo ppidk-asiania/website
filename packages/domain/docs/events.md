@@ -76,6 +76,27 @@ Rules live in `packages/domain/src/events/lifecycle.ts`; actions in `apps/admin/
 - **Dashboard**: the queue "Events waiting for approval" (holders of `events.publish`, in the event's
   chapter), `apps/admin/src/server/dashboard.ts`.
 
+## Registration form (N1.2)
+
+An event may link a **public Form answered with an account** (`events.registration`: `formId`,
+`attendanceModes` online/on site, `showOnTicket` note, `shortUrl`). Rules in
+`packages/domain/src/events/registration.ts`; admin actions in `apps/admin/src/server/event-registration.ts`.
+
+- **Setup** (`events.edit`): the form must be public, account-only and not deleted. Unlinking returns to
+  one-click registration. While a form is linked, the one-click `register` is refused ("register on its
+  form page"), and the form page refuses an event with no form.
+- **One submit, one transaction**: `/events/{slug}/register` saves the form response (the Forms engine:
+  token, version check, validation) and the registration (capacity, deadline, attendance mode) together;
+  if the event closed or filled in the meantime nothing is saved. The registration keeps `attendanceMode`,
+  `responseId` and `formVersion`.
+- **Try the form**: `?practice=1` runs the whole check and stores nothing (the event must be public).
+- **Short link and QR**: one link per event through the existing short-link service (made once, reused);
+  the QR is drawn in the browser.
+- **Registrants** (`registrants.read`): name, email, status, mode and the form's answers next to each
+  person (for example T-shirt size), from `listForEvent` and the form responses.
+- Known limits: changing the linked form after people registered leaves their answers on the old form;
+  a re-submit updates the answers but not the attendance mode.
+
 ## Public pages and registration
 
 `toPublicEvent` is what the website shows (no version or capacity). The web reader

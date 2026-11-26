@@ -284,6 +284,13 @@ export interface OwnFormData {
   readonly answers: Answers | null;
 }
 
+export interface SavedResponse {
+  readonly formId: string;
+  readonly version: number;
+  /** `{formId}_{uid}` on account forms; null on guest and anonymous forms. */
+  readonly responseId: string | null;
+}
+
 export interface FormSubmitter {
   readonly user: SignedInAccount | null;
   readonly guest?: unknown;
@@ -326,6 +333,13 @@ export function createSqlFormWebStore(db: Database) {
   }
 
   return {
+    /** The public token of a published form, for the page that answers it on behalf of an event. */
+    async tokenOf(formId: string): Promise<string | null> {
+      if (!safeId.safeParse(formId).success) return null;
+      const doc = await forms.doc(formId).get();
+      return doc.exists ? ((doc.get("publicToken") as string | null | undefined) ?? null) : null;
+    },
+
     async listPublished(): Promise<Form[]> {
       const snapshot = await forms
         .where("usage", "==", "public")
@@ -367,6 +381,7 @@ export function createSqlFormWebStore(db: Database) {
       raw: unknown,
       now: Date,
       who: FormSubmitter = { user: null },
+      alongside?: (tx: Transaction, saved: SavedResponse) => Promise<void>,
     ): Promise<SubmitOutcome> {
       if (!isPublicToken(token)) return Promise.resolve({ ok: false, error: "not_found" });
       return db.runTransaction(async (tx): Promise<SubmitOutcome> => {
@@ -401,6 +416,15 @@ export function createSqlFormWebStore(db: Database) {
         };
         const ownRef = respondent.responseId ? responses.doc(respondent.responseId) : null;
         const earlier = ownRef ? await tx.get(ownRef) : null;
+        // The caller's own reads and writes (an event registration) share this transaction: all or
+        // nothing. They run before this function writes, because a transaction reads first.
+        if (alongside) {
+          await alongside(tx, {
+            formId: form.id,
+            version: form.currentVersion,
+            responseId: ownRef?.id ?? null,
+          });
+        }
         if (ownRef && earlier?.exists) {
           // One response per account: a later submit replaces the answers and the profile copy.
           tx.set(ownRef, { ...fields, submittedAt: earlier.get("submittedAt"), updatedAt: now });
