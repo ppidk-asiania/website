@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  addCommitteeParticipantsAction,
   addEventParticipantsAction,
   addParticipantsAction,
   removeParticipantAction,
@@ -63,9 +64,12 @@ export function ParticipantsPage({ batch, sheets, canEdit, send, events }: Props
 
   const [eventId, setEventId] = useState("");
   const [leftOut, setLeftOut] = useState<Array<{ name: string; reason: string }> | null>(null);
-  const addFromEvent = async () => {
+  const addFromEvent = async (committee: boolean) => {
     setBusy(true);
-    const result = await addEventParticipantsAction({ batchId: batch.id, eventId });
+    const result = await (committee ? addCommitteeParticipantsAction : addEventParticipantsAction)({
+      batchId: batch.id,
+      eventId,
+    });
     setBusy(false);
     if (!result.ok) return toast.show(actionMessage(result));
     setLeftOut(result.data.leftOut);
@@ -224,9 +228,18 @@ export function ParticipantsPage({ batch, sheets, canEdit, send, events }: Props
             size="sm"
             icon="plus"
             disabled={busy || eventId === ""}
-            onClick={() => void addFromEvent()}
+            onClick={() => void addFromEvent(false)}
           >
             Add registrants
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            icon="plus"
+            disabled={busy || eventId === ""}
+            onClick={() => void addFromEvent(true)}
+          >
+            Add committee
           </Button>
           {leftOut && leftOut.length > 0 ? (
             <ul aria-label="Left out">

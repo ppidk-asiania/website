@@ -222,6 +222,16 @@ manual` (self check-in, main plan 9.4/2, is not built yet). Manual check-in show
   `tests/unit/events-evaluation.test.ts`, `tests/integration/event-certificates.test.ts`,
   `tests/integration/events-committee.test.ts`, `tests/integration/public-forms.test.ts`.
 
+### Committee certificates (N1.8)
+
+- Certificates: on a batch (Letters > participants) "Add committee" adds one sheet per committee member of the
+  chosen event. The role text comes from ONE function, `committeeTitle` ("Head of Logistics, <event>"), and is
+  printed as the sheet's note. Accounts keep their e-mail for pickup, typed helpers get a sheet without one; a
+  person already on the batch with the same role is skipped. Same rights as "Add registrants".
+- Not built: the officer assessment input (9.3), My Tasks "events I serve on".
+- Code: `packages/domain/src/events/committee-title.ts`, `apps/admin/src/server/event-certificates.ts`
+  (`addCommittee`). Tests: `tests/unit/events-committee.test.ts`, `tests/integration/event-certificates.test.ts`.
+
 ## Public pages and registration
 
 `toPublicEvent` is what the website shows (no version or capacity). The web reader

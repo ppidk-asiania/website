@@ -4,6 +4,7 @@ import {
   committeeGaps,
   committeeLocked,
   committeeRole,
+  committeeTitle,
 } from "@website/domain/events";
 
 const division = (id: string, parentId: string | null = null, quota: number | null = null) => ({
@@ -86,5 +87,12 @@ describe("committee input", () => {
       }),
     ).toBe(true);
     expect(refused({ divisions: [division("a", "b"), division("b")], members: [] })).toBe(true);
+  });
+});
+
+describe("committee certificate title (N1.8)", () => {
+  it("builds the role text of a committee certificate in one place", () => {
+    expect(committeeTitle("head", "Logistics", "Simposium")).toBe("Head of Logistics, Simposium");
+    expect(committeeTitle("member", "Program", "Simposium")).toBe("Member of Program, Simposium");
   });
 });

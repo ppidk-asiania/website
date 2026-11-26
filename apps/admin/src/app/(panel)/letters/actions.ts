@@ -68,3 +68,6 @@ export async function removeParticipantAction(input: unknown) {
 export async function addEventParticipantsAction(input: unknown) {
   return done(await eventCertificateActions().addFromEvent(getPrincipal, getAuditContext)(input));
 }
+export async function addCommitteeParticipantsAction(input: unknown) {
+  return done(await eventCertificateActions().addCommittee(getPrincipal, getAuditContext)(input));
+}

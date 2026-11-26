@@ -10,6 +10,7 @@ import type {
 import type { Letter } from "@website/domain/documents";
 import {
   DEFAULT_EVALUATION,
+  committeeTitle,
   entitledToCertificate,
   type CertificateGap,
 } from "@website/domain/events";
@@ -21,6 +22,8 @@ import { participantAudit } from "./certificates";
 import { createGuardedAction } from "./guarded-action";
 
 export type LeftOut = CertificateGap | "no_name" | "already_on_batch";
+
+const Source = z.object({ batchId: safeId, eventId: safeId }).strict();
 
 export interface EventCertificateDeps {
   readonly certificates: Pick<SqlCertificateStore, "add" | "list">;
@@ -42,7 +45,7 @@ const MAX_ANSWERS = 5000;
 export function createEventCertificateActions(deps: EventCertificateDeps) {
   const addFromEvent = createGuardedAction({
     permission: "letters.edit",
-    input: z.object({ batchId: safeId, eventId: safeId }).strict(),
+    input: Source,
     resource: async ({ batchId }): Promise<ResourceContext> => ({
       orgUnitPath: (await deps.getLetter(batchId))?.orgUnitPath ?? [],
     }),
@@ -100,5 +103,58 @@ export function createEventCertificateActions(deps: EventCertificateDeps) {
     },
   });
 
-  return { addFromEvent };
+  /**
+   * "Add committee" (N1.8): one sheet per committee member with a role text built from seat, division and
+   * event. Accounts keep their e-mail for pickup; typed helpers get a sheet without one. A person already on
+   * the batch with the same role is skipped.
+   */
+  const addCommittee = createGuardedAction({
+    permission: "letters.edit",
+    input: Source,
+    resource: async ({ batchId }): Promise<ResourceContext> => ({
+      orgUnitPath: (await deps.getLetter(batchId))?.orgUnitPath ?? [],
+    }),
+    handler: async ({ batchId, eventId }, principal, audit) => {
+      if (!can(principal, "events.edit") && !can(principal, "registrants.read")) {
+        throw new RuleViolationError("You need access to this event.");
+      }
+      const event = await deps.events.get(eventId);
+      if (!event || event.deletedAt !== null)
+        throw new RuleViolationError("This event does not exist.");
+      const committee = await deps.committees.get(eventId);
+      if (!committee || committee.members.length === 0) {
+        throw new RuleViolationError("This event has no committee yet.");
+      }
+      const [accounts, already] = await Promise.all([
+        deps.users(committee.members.flatMap((m) => (m.userId ? [m.userId] : []))),
+        deps.certificates.list(batchId),
+      ]);
+      const taken = new Set(already.map((c) => `${c.emailHash ?? c.name}|${c.note ?? ""}`));
+      const people: Array<{ name: string; note: string | null; emailHash: string | null }> = [];
+      const leftOut: Array<{ name: string; reason: LeftOut }> = [];
+      for (const m of committee.members) {
+        const account = m.userId ? accounts.get(m.userId) : null;
+        const name = account ? account.name : m.name;
+        const division = committee.divisions.find((d) => d.id === m.divisionId)?.name ?? "";
+        if (!name) {
+          leftOut.push({ name: account?.email ?? "(unknown account)", reason: "no_name" });
+          continue;
+        }
+        const emailHash = account?.email ? deps.hashEmail(account.email) : null;
+        const note = committeeTitle(m.seat, division, event.title);
+        if (taken.has(`${emailHash ?? name}|${note}`)) {
+          leftOut.push({ name, reason: "already_on_batch" });
+        } else {
+          people.push({ name, note, emailHash });
+        }
+      }
+      const added =
+        people.length === 0
+          ? 0
+          : await deps.certificates.add(batchId, people, participantAudit(audit), deps.now());
+      return { added, leftOut };
+    },
+  });
+
+  return { addFromEvent, addCommittee };
 }

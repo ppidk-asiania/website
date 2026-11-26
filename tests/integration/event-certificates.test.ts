@@ -31,7 +31,8 @@ let rows: Row[] = [];
 let settings = { formId: "ev", certificateNeedsAttendance: true } as Record<string, unknown>;
 let evaluationForm: Partial<Form> = { respondents: "account", deletedAt: null };
 let answered: string[] = [];
-let onBatch: Array<{ emailHash: string | null }> = [];
+let onBatch: Array<{ emailHash: string | null; name?: string; note?: string | null }> = [];
+let members: Array<{ userId: string | null; name: string; divisionId: string; seat: string }> = [];
 const add = vi.fn((_batch: string, people: readonly { name: string }[]) =>
   Promise.resolve(people.length),
 );
@@ -41,11 +42,20 @@ const actions = () =>
     certificates: { add, list: () => Promise.resolve(onBatch as never) },
     getLetter: () => Promise.resolve(null),
     hashEmail: (email) => `h:${email}`,
-    events: { get: () => Promise.resolve({ id: "e1", deletedAt: null } as unknown as EventEntity) },
+    events: {
+      get: () =>
+        Promise.resolve({
+          id: "e1",
+          title: "Simposium",
+          deletedAt: null,
+        } as unknown as EventEntity),
+    },
     registrations: { listForEvent: () => Promise.resolve(rows as never) },
     committees: {
       get: () =>
         Promise.resolve({
+          divisions: [{ id: "logi", name: "Logistics" }],
+          members,
           evaluation: {
             committeeFormId: null,
             committeeOpensAt: null,
@@ -75,6 +85,7 @@ beforeEach(() => {
   evaluationForm = { respondents: "account", deletedAt: null };
   answered = ["done"];
   onBatch = [];
+  members = [];
   rows = [
     { userId: "done", status: "confirmed", checkedIn: true },
     { userId: "absent", status: "confirmed", checkedIn: false },
@@ -146,5 +157,45 @@ describe("certificate batch from an event (N1.7)", () => {
   it("needs the registrants' rights next to letters.edit", async () => {
     expect(await run(staff(["letters.edit"]))).toMatchObject({ error: "refused" });
     expect(await run(staff(["events.edit"]))).toMatchObject({ error: "forbidden" });
+  });
+});
+
+describe("committee certificates (N1.8)", () => {
+  const addCommittee = (who: Principal = writer) =>
+    actions().addCommittee(...as(who))({ batchId: "b1", eventId: "e1" });
+  beforeEach(() => {
+    members = [
+      { userId: "u1", name: "", divisionId: "logi", seat: "head" },
+      { userId: null, name: "Pak Budi", divisionId: "logi", seat: "member" },
+      { userId: "noname", name: "", divisionId: "logi", seat: "member" },
+    ];
+  });
+
+  it("makes one sheet per member with the role text; helpers get no e-mail", async () => {
+    const result = await addCommittee();
+    expect(result).toMatchObject({
+      ok: true,
+      data: { added: 2, leftOut: [{ name: "noname@x.org", reason: "no_name" }] },
+    });
+    expect(add.mock.calls[0]?.[1]).toEqual([
+      { name: "Name u1", note: "Head of Logistics, Simposium", emailHash: "h:u1@x.org" },
+      { name: "Pak Budi", note: "Member of Logistics, Simposium", emailHash: null },
+    ]);
+  });
+
+  it("skips a person who already has the same role on the batch", async () => {
+    onBatch = [
+      { emailHash: "h:u1@x.org", name: "Name u1", note: "Head of Logistics, Simposium" },
+      { emailHash: null, name: "Pak Budi", note: "Member of Logistics, Simposium" },
+    ];
+    const result = await addCommittee();
+    expect(add).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ data: { added: 0 } });
+  });
+
+  it("refuses an event without a committee and a caller without the event's rights", async () => {
+    members = [];
+    expect(await addCommittee()).toMatchObject({ error: "refused" });
+    expect(await addCommittee(staff(["letters.edit"]))).toMatchObject({ error: "refused" });
   });
 });
