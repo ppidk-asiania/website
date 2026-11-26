@@ -60,6 +60,7 @@ export const ADMIN_PAGES = {
     extras: { dispose: "Dispose letters and complete dispositions" },
   },
   organizations: { label: "Organizations" },
+  documents: { label: "Unit documents (working files per unit)" },
   periods: { label: "Board periods" },
   structure: { label: "Organisation structure" },
   universities: { label: "Universities (campus proposals)" },

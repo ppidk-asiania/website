@@ -41,6 +41,7 @@ export {
   type SqlOrgDocumentReader,
   type SqlOrgDocumentStore,
 } from "./org-documents";
+export { createSqlUnitDocumentStore, type SqlUnitDocumentStore } from "./unit-documents";
 export {
   createSqlIncomingStore,
   incomingSnapshot,

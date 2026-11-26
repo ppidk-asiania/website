@@ -14,7 +14,7 @@ import {
   type FinanceListQuery,
 } from "@website/db/sql";
 import { CERTIFICATE_EMAIL_PURPOSE, type Letter } from "@website/domain/documents";
-import { orgUnitPath } from "@website/domain/organizations";
+import { DEFAULT_UNIT_CAP_BYTES, orgUnitPath } from "@website/domain/organizations";
 import sharp from "sharp";
 import { trackingLinkData, unsubscribeLinkData } from "@website/domain/newsletter";
 import { logSecurityEvent } from "@website/observability";
@@ -37,6 +37,7 @@ import { createFinanceActions } from "./finance";
 import { createFormActions } from "./forms";
 import { createGalleryActions } from "./gallery";
 import { createOrgDocumentActions } from "./org-documents";
+import { createUnitDocumentActions } from "./unit-documents";
 import { getAdminEnv, getAppUrls } from "./env";
 import { createImageUploads } from "./images";
 import { createIncomingActions } from "./incoming";
@@ -146,6 +147,25 @@ export const orgDocumentActions = lazyEnv(() =>
   createOrgDocumentActions({
     documents: adminStores().orgDocuments,
     storage: imageStorage(),
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);
+
+export const unitDocumentActions = lazyEnv(() =>
+  createUnitDocumentActions({
+    documents: adminStores().unitDocuments,
+    storage: imageStorage(),
+    activePeriod,
+    seats: (uid) => adminStores().appointments.activeSeats(uid),
+    unitPeriod: async (id) => {
+      const unit = await adminStores().orgUnits.get(id);
+      return unit && !unit.deletedAt ? unit.periodId : null;
+    },
+    capBytes: async () => {
+      const mb = (await adminDb().collection("settings").doc("documents").get()).get("unitCapMb");
+      return typeof mb === "number" && mb > 0 ? mb * 1024 * 1024 : DEFAULT_UNIT_CAP_BYTES;
+    },
     now: () => new Date(),
     uuid: randomUUID,
   }),
@@ -516,7 +536,10 @@ export const cronRoute = lazyEnv(() =>
     jobs: {
       ...CRON_JOBS,
       "newsletter-send": () => newsletterActions().runBatch(),
-      expire: () => deleteExpired(adminDb(), new Date()),
+      expire: async () => ({
+        ...(await deleteExpired(adminDb(), new Date())),
+        unitDocuments: await unitDocumentActions().purge(),
+      }),
       "meeting-reminders": async () => ({
         ...(await meetingActions().sendReminders()),
         ...(await interviewReminders()()),
@@ -1127,6 +1150,8 @@ export const adminReads = {
     adminStores().forms.currentVersions(forms),
   listAlbums: () => adminStores().galleries.listForAdmin(),
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
+  seats: (uid: string) => adminStores().appointments.activeSeats(uid),
+  listUnitDocuments: (periodId: string) => adminStores().unitDocuments.listForPeriod(periodId),
   listChapters: () => adminStores().chapters.listForAdmin(),
   getChapter: (id: string) => adminStores().chapters.get(id),
   chapterOfficers: (id: string) => adminStores().chapterRecords.officers(id),

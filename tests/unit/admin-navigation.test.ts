@@ -85,6 +85,13 @@ describe("admin side panel navigation", () => {
     ]);
   });
 
+  it("shows Documents to seat holders and to holders of documents.read only", () => {
+    const officer = staff("viewer");
+    expect(labels(officer)).not.toContain("Documents");
+    expect(navigationFor(officer, false, true).map((item) => item.label)).toContain("Documents");
+    expect(labels(staff(SUPERADMIN_ROLE_ID))).toContain("Documents");
+  });
+
   it("adds My interview times only for people with an interview scope", () => {
     const officer = staff("viewer");
     expect(labels(officer)).not.toContain("My interview times");

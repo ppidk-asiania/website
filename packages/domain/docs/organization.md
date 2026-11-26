@@ -199,6 +199,21 @@ of each title and folds the older ones (`groupOrgDocuments`). Code: `packages/do
 `packages/db/src/sql/org-documents.ts` (`orgDocuments`), `apps/admin/src/server/org-documents.ts`.
 Tests: `tests/unit/org-documents.test.ts`, `tests/integration/org-documents.test.ts`.
 
+## Unit documents (admin Documents page)
+
+Working files per unit (`unitDocuments`, private files under `unit-documents/{periodId}/`).
+Everything goes through one rule, `unitDocumentRights`: a holder of an active seat in the unit
+reads and writes that unit's folder; any other officer of the active period reads; the
+period-level folder, every folder and other periods need `documents.edit` (global). The period is
+read on the server (`activePeriod`), never from the request, so a forged period is ignored. The
+page is in the menu for every seat holder and for `documents.read`. Files: up to 10 MB; PDF, Word,
+Excel, PowerPoint or images, the extension must match the real bytes; a per-unit cap
+(`settings/documents.unitCapMb`, default 200 MB). Open = the 15-minute signed link. Delete is soft;
+`expire` removes the file and the row after 30 days. The next board reads last period's folders
+through `documents.edit`. Code: `packages/domain/src/organizations/unit-documents.ts`,
+`packages/db/src/sql/unit-documents.ts`, `apps/admin/src/server/unit-documents.ts`. Tests:
+`tests/unit/unit-documents.test.ts`, `tests/integration/unit-documents.test.ts`.
+
 ## Configuration
 
 Logo and member-photo uploads need `FILE_STORAGE_DIR`.
