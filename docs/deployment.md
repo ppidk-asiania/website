@@ -180,6 +180,15 @@ big PDFs or send in batches must stay inside them.
 | Passenger processes per app           | _tbd_                                                                |
 | MySQL                                 | 8.0.46; databases 7.94 GB of the 12 GB disk; I/O 150 MB/s, 6000 IOPS |
 
+## Maintenance mode
+
+Set `MAINTENANCE_MODE=true` on the **web** app and restart it (cPanel variables are read at start)
+before a deployment that changes data or a database copy: every page answers `503` with
+`Retry-After: 3600` and a static bilingual page that touches no database; `/health`, `/verify/*`,
+`/files/*`, `/api/session/*` and the verification host keep working so printed QR codes and
+images do not break, and uptime checks still get `200` on `/health`. Admin is not affected. Remove
+the variable and restart to go back.
+
 ## Migrations
 
 Collections are MySQL tables with a JSON `data` column, created on first use from

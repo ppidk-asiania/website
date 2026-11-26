@@ -223,3 +223,39 @@ describe("admin page gate (requireAdminViewer)", () => {
     expect(await getPrincipal()).toBeNull();
   });
 });
+
+describe("web maintenance mode", () => {
+  const proxyAt = async (url: string, maintenance: "true" | undefined) => {
+    vi.stubEnv("APP_ENV", "test");
+    if (maintenance) vi.stubEnv("MAINTENANCE_MODE", maintenance);
+    vi.resetModules();
+    const { proxy } = await import("../../apps/web/src/proxy");
+    const { NextRequest } = await import("../../apps/web/node_modules/next/server.js");
+    return proxy(new NextRequest(url));
+  };
+
+  it("answers a page with 503, Retry-After and no database call", async () => {
+    const page = await proxyAt("https://site.example/events", "true");
+    expect(page.status).toBe(503);
+    expect(page.headers.get("Retry-After")).toBe("3600");
+    expect(await page.text()).toContain("maintenance");
+    const api = await proxyAt("https://site.example/api/account/profile", "true");
+    expect(api.status).toBe(503);
+  });
+
+  it("keeps /health, /verify, /files and the session routes working", async () => {
+    for (const path of [
+      "/health",
+      "/verify/ABCDE-FGHJK",
+      "/files/documents/x.pdf",
+      "/api/session",
+    ]) {
+      // The request guard may still answer (the session route wants a same-site call); never 503.
+      expect((await proxyAt(`https://site.example${path}`, "true")).status).not.toBe(503);
+    }
+  });
+
+  it("does nothing when the switch is off", async () => {
+    expect((await proxyAt("https://site.example/events", undefined)).status).toBe(200);
+  });
+});
