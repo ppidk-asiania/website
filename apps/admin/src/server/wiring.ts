@@ -140,7 +140,17 @@ export const newsActions = lazyEnv(() =>
 );
 
 export const eventActions = lazyEnv(() =>
-  createEventActions({ events: adminStores().events, now: () => new Date(), uuid: randomUUID }),
+  createEventActions({
+    events: adminStores().events,
+    notify: {
+      approvalAsked: (event) => notices().eventApprovalAsked(event),
+      approvalDecided: (event, approved, askedBy) =>
+        notices().eventApprovalDecided(event, approved, askedBy),
+      cancelled: (event) => notices().eventCancelled(event),
+    },
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
 );
 
 export const orgDocumentActions = lazyEnv(() =>
@@ -581,6 +591,7 @@ export const notices = lazyEnv(() =>
   createNotices({
     contacts: adminStores().contacts,
     send: (message, key) => messenger().send(message, key),
+    eventRegistrants: (id) => adminStores().eventRegistrations.activeUserIds(id),
     letterType: (id) => adminStores().letterTypes.get(id),
     webUrl: getAppUrls().WEB_URL ?? "",
     adminUrl: getAppUrls().ADMIN_URL ?? "",
@@ -764,6 +775,7 @@ export const dashboard = lazyEnv(() =>
     zoom: (from) =>
       adminStores().zoom.listBetween(from, new Date(from.getTime() + 365 * 86_400_000)),
     revisions: (periodId) => adminStores().programs.listPendingRevisions(periodId),
+    events: () => adminStores().events.listForAdmin(),
     myTasks: (uid) => tasks().mine(uid),
     now: () => new Date(),
   }),

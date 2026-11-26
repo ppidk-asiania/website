@@ -1,6 +1,7 @@
 import type { Database } from "./store";
 import type { Snapshot } from "@website/audit";
 import {
+  isLive,
   isRegistrationOpen,
   nextRegistrationStatus,
   registrationId,
@@ -42,6 +43,17 @@ function toEvent(id: string, data: Record<string, unknown>): EventEntity {
     schedule: data["schedule"] as ScheduleRow[],
     speakers: data["speakers"] as Speaker[],
     sponsors: data["sponsors"] as Sponsor[],
+    publishAt: toDate(data["publishAt"]),
+    approvalRequestedAt: toDate(data["approvalRequestedAt"]),
+    approvalRequestedBy: (data["approvalRequestedBy"] as string | undefined) ?? null,
+    approvedAt: toDate(data["approvedAt"]),
+    approvedBy: (data["approvedBy"] as string | undefined) ?? null,
+    rejectionNote: (data["rejectionNote"] as string | undefined) ?? null,
+    cancelledAt: toDate(data["cancelledAt"]),
+    cancelReason: (data["cancelReason"] as string | undefined) ?? null,
+    finalAttendance: (data["finalAttendance"] as number | undefined) ?? null,
+    attendanceNote: (data["attendanceNote"] as string | undefined) ?? null,
+    recapUrl: (data["recapUrl"] as string | undefined) ?? null,
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
     updatedAt: toDate(data["updatedAt"]) as Date,
@@ -70,6 +82,17 @@ export function eventSnapshot(e: EventFields): Snapshot {
     schedule: e.schedule.map((row) => ({ ...row })),
     speakers: e.speakers.map((s) => ({ ...s, photo: s.photo ? { ...s.photo } : null })),
     sponsors: e.sponsors.map((s) => ({ ...s, logo: s.logo ? { ...s.logo } : null })),
+    publishAt: iso(e.publishAt),
+    approvalRequestedAt: iso(e.approvalRequestedAt),
+    approvalRequestedBy: e.approvalRequestedBy,
+    approvedAt: iso(e.approvedAt),
+    approvedBy: e.approvedBy,
+    rejectionNote: e.rejectionNote,
+    cancelledAt: iso(e.cancelledAt),
+    cancelReason: e.cancelReason,
+    finalAttendance: e.finalAttendance,
+    attendanceNote: e.attendanceNote,
+    recapUrl: e.recapUrl,
   };
 }
 
@@ -100,7 +123,7 @@ export type SqlEventStore = ReturnType<typeof createSqlEventStore>;
 export function createSqlEventReader(db: Database) {
   const store = createSqlEventStore(db);
   return {
-    async listPublished(limit = 300): Promise<PublicEvent[]> {
+    async listPublished(limit = 300, now = new Date()): Promise<PublicEvent[]> {
       const snapshot = await db
         .collection("events")
         .where("published", "==", true)
@@ -109,13 +132,13 @@ export function createSqlEventReader(db: Database) {
         .get();
       return snapshot.docs
         .map((doc) => toEvent(doc.id, doc.data()))
-        .filter((e) => e.deletedAt === null)
+        .filter((e) => isLive(e, now))
         .map(toPublicEvent);
     },
 
-    async findPublishedBySlug(slug: string): Promise<PublicEvent | null> {
+    async findPublishedBySlug(slug: string, now = new Date()): Promise<PublicEvent | null> {
       const event = await store.findBySlug(slug);
-      return event?.published ? toPublicEvent(event) : null;
+      return event && isLive(event, now) ? toPublicEvent(event) : null;
     },
   };
 }
@@ -155,6 +178,14 @@ export function createSqlRegistrationStore(db: Database) {
         );
         return { status, created: true };
       });
+    },
+
+    /** Who is told when an event is cancelled: everyone who still holds a place or a waitlist spot. */
+    async activeUserIds(eventId: string): Promise<string[]> {
+      const snapshot = await registrationsRef.where("eventId", "==", safeId.parse(eventId)).get();
+      return snapshot.docs
+        .filter((doc) => doc.get("status") !== "cancelled")
+        .map((doc) => doc.get("userId") as string);
     },
 
     async listByUser(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { EventEntity } from "@website/domain/events";
 import type { FinanceRequest } from "@website/domain/finance";
 import type { LpjReport, ProgramRevision } from "@website/domain/programs";
 import type { Task } from "@website/domain/tasks";
@@ -36,6 +37,7 @@ describe("admin dashboard: only what needs the viewer", () => {
     lpj: () => Promise.resolve(lpj),
     zoom: () => Promise.resolve(zoom),
     revisions: () => Promise.resolve(revisions),
+    events: () => Promise.resolve(events),
     myTasks: () => Promise.resolve(tasks),
     now: () => now,
   });
@@ -67,6 +69,16 @@ describe("admin dashboard: only what needs the viewer", () => {
     expect((await dashboard(staff(["events.read"]))).noLpjSecretariat).toBe(false);
     secretariatHolders = 1;
     expect((await dashboard(staff(["lpj.read"]))).noLpjSecretariat).toBe(false);
+  });
+
+  it("events waiting for approval go to the holders of events.publish in the event's chapter", async () => {
+    const counts = async (principal: Principal) =>
+      (await dashboard(principal)).queues.map((q) => [q.label, q.count]);
+    expect(await counts(staff(["events.publish"]))).toEqual([["Events waiting for approval", 2]]);
+    expect(await counts(staff(["events.publish"], { type: "chapter", chapterId: "jp" }))).toEqual([
+      ["Events waiting for approval", 1],
+    ]);
+    expect(await counts(staff(["events.edit"]))).toEqual([]);
   });
 
   it("queues count only what waits at my desks, in my units, that the module would let me do", async () => {
@@ -105,6 +117,18 @@ describe("admin dashboard: only what needs the viewer", () => {
 });
 
 const now = new Date("2026-11-05T00:00:00Z");
+const waiting = {
+  approvalRequestedAt: now,
+  approvedAt: null,
+  deletedAt: null,
+  rejectionNote: null,
+};
+const events = [
+  { id: "e1", chapterId: null, ...waiting },
+  { id: "e2", chapterId: "jp", ...waiting },
+  { id: "e3", chapterId: null, ...waiting, approvedAt: now },
+  { id: "e4", chapterId: null, ...waiting, deletedAt: now },
+] as unknown as EventEntity[];
 const revisions = [
   { id: "r1", requestedBy: "x", orgUnitPath: ["dirs", "media"] },
   { id: "r2", requestedBy: "u", orgUnitPath: ["dirs", "media"] },

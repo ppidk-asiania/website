@@ -3,6 +3,7 @@ import { safeText } from "@website/security/validation";
 import { FeaturedImageSchema, type FeaturedImage } from "../content";
 import { TimezoneSchema } from "../members/profile";
 import { isValidSlug, type EntityMeta } from "../shared";
+import { isLive } from "./lifecycle";
 
 export const EVENT_TYPES = [
   "general",
@@ -56,6 +57,18 @@ export interface EventEntity extends EntityMeta {
   readonly schedule: readonly ScheduleRow[];
   readonly speakers: readonly Speaker[];
   readonly sponsors: readonly Sponsor[];
+  /** A published event stays hidden until this time (a read-time rule, no job). */
+  readonly publishAt: Date | null;
+  readonly approvalRequestedAt: Date | null;
+  readonly approvalRequestedBy: string | null;
+  readonly approvedAt: Date | null;
+  readonly approvedBy: string | null;
+  readonly rejectionNote: string | null;
+  readonly cancelledAt: Date | null;
+  readonly cancelReason: string | null;
+  readonly finalAttendance: number | null;
+  readonly attendanceNote: string | null;
+  readonly recapUrl: string | null;
 }
 
 export function sortedSponsors(sponsors: readonly Sponsor[]): Sponsor[] {
@@ -79,6 +92,11 @@ export interface PublicEvent {
   readonly schedule: readonly ScheduleRow[];
   readonly speakers: readonly Speaker[];
   readonly sponsors: readonly Sponsor[];
+  readonly cancelledAt: Date | null;
+  readonly cancelReason: string | null;
+  readonly finalAttendance: number | null;
+  readonly attendanceNote: string | null;
+  readonly recapUrl: string | null;
 }
 
 export function toPublicEvent(e: EventEntity): PublicEvent {
@@ -99,6 +117,11 @@ export function toPublicEvent(e: EventEntity): PublicEvent {
     schedule: e.schedule,
     speakers: e.speakers,
     sponsors: sortedSponsors(e.sponsors),
+    cancelledAt: e.cancelledAt,
+    cancelReason: e.cancelReason,
+    finalAttendance: e.finalAttendance,
+    attendanceNote: e.attendanceNote,
+    recapUrl: e.recapUrl,
   };
 }
 
@@ -163,11 +186,24 @@ export const EventInputSchema = z
   });
 export type EventInput = z.infer<typeof EventInputSchema>;
 
+/** What the organiser types after the event; shown on the public page. */
+export const EventAfterSchema = z
+  .object({
+    finalAttendance: z.number().int().min(0).max(1_000_000).nullable(),
+    attendanceNote: safeText(200, { allowEmpty: true }).transform((value) => value || null),
+    recapUrl: linkSchema,
+  })
+  .strict();
+export type EventAfterInput = z.infer<typeof EventAfterSchema>;
+
 export function isRegistrationOpen(
-  event: Pick<EventEntity, "published" | "deletedAt" | "startsAt" | "registrationClosesAt">,
+  event: Pick<
+    EventEntity,
+    "published" | "deletedAt" | "publishAt" | "cancelledAt" | "startsAt" | "registrationClosesAt"
+  >,
   now: Date,
 ): boolean {
-  if (!event.published || event.deletedAt !== null) return false;
+  if (!isLive(event, now) || event.cancelledAt !== null) return false;
   const closesAt = event.registrationClosesAt ?? event.startsAt;
   return now < closesAt;
 }
@@ -222,3 +258,5 @@ export interface MeetingProvider {
 export interface CalendarFeed {
   render(events: readonly EventEntity[]): string;
 }
+
+export * from "./lifecycle";

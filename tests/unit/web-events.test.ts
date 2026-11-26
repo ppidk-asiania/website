@@ -26,6 +26,11 @@ const event = (slug: string, start: string, extra: Partial<PublicEvent> = {}): P
   schedule: [],
   speakers: [],
   sponsors: [],
+  cancelledAt: null,
+  cancelReason: null,
+  finalAttendance: null,
+  attendanceNote: null,
+  recapUrl: null,
   ...extra,
 });
 

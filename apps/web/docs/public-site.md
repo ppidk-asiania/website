@@ -54,7 +54,10 @@ an external registration link opens in a new tab; without one, a signed-in membe
 (confirmed or waitlisted by capacity, one registration per member, reCAPTCHA v3 action
 `event_register`, confirmation e-mail key `event:{id}:registered:{uid}`) and a guest is sent to
 sign in first. After the deadline the page says registration is closed. `/account` lists the
-member's own registrations.
+member's own registrations. An event with a future publish time is hidden until then. A cancelled
+event stays reachable and says so (with the reason). Once an event is past the register button gives way
+to "This event has ended", with the final attendance, its note, the recap link and the album's first
+photos when they are filled in (step N1.1).
 
 **Gallery**: `/gallery` shows one card per published album (cover, event title, photo count);
 `/gallery/[slug]` shows the featured images with a native `<dialog>` lightbox and **See all

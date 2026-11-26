@@ -5,8 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { EVENT_TYPES, type EventImage, type EventType } from "@website/domain/events";
 import { utcToWallTime, wallTimeToUtc } from "@website/domain/shared";
 import {
+  approveEventAction,
+  cancelEventAction,
+  rejectEventAction,
   removeEventAction,
+  requestEventApprovalAction,
   saveEventAction,
+  saveEventAfterAction,
   setEventPublishedAction,
 } from "@/app/(panel)/events/actions";
 import { actionMessage } from "@/components/action-message";
@@ -40,6 +45,7 @@ import {
   countdownLabel,
   eventsCsv,
   matchesTab,
+  statusLabel,
   type EventItem,
   type EventTab,
 } from "./events-model";
@@ -71,9 +77,7 @@ const filterText = (e: EventItem, key: SortKey): string =>
     : key === "date"
       ? formatInZone(e.startsAt, e.timezone, false)
       : key === "status"
-        ? e.status === "published"
-          ? "Public"
-          : "Private"
+        ? statusLabel(e, new Date().toISOString())
         : formatInZone(e.modifiedAt, "UTC", false);
 
 const TABS = [
@@ -111,6 +115,7 @@ interface EventForm {
   description: string;
   registrationLink: string;
   banner: EventImage | null;
+  publishAt: string;
   guests: GuestSpeakerItem[];
   rundown: RundownItem[];
   sponsors: SponsorItem[];
@@ -127,16 +132,20 @@ const EMPTY_FORM: EventForm = {
   description: "",
   registrationLink: "",
   banner: null,
+  publishAt: "",
   guests: [],
   rundown: [],
   sponsors: [],
 };
 
 type DeleteConfirm = { kind: "one"; event: EventItem } | { kind: "many"; count: number };
+/** A decision that needs a written reason: reject a request, or cancel an event. */
+type ReasonDialog = { kind: "reject" | "cancel"; event: EventItem };
 
 interface EventsListProps {
   initial: EventItem[];
   canEdit: boolean;
+  canPublish: boolean;
   publicBase: string;
 }
 
@@ -159,13 +168,14 @@ function formFrom(ev: EventItem): EventForm {
     description: ev.description,
     registrationLink: ev.registrationUrl ?? "",
     banner: ev.banner,
+    publishAt: ev.publishAt ? utcToWallTime(new Date(ev.publishAt), ev.timezone) : "",
     guests: ev.speakers.map((s) => ({ ...s })),
     rundown: ev.schedule.map((r) => ({ ...r })),
     sponsors: ev.sponsors.map((s) => ({ photo: s.logo, tip: s.caption })),
   };
 }
 
-function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
+function EventsList({ initial: events, canEdit, canPublish, publicBase }: EventsListProps) {
   const toast = useToastMessage();
   const router = useRouter();
   const bannerUpload = useImageUpload("banner");
@@ -177,6 +187,9 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
   const [query, setQuery] = useState("");
   const [searchKey, setSearchKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
+  const [reasonDialog, setReasonDialog] = useState<ReasonDialog | null>(null);
+  const [reason, setReason] = useState("");
+  const [after, setAfter] = useState({ finalAttendance: "", attendanceNote: "", recapUrl: "" });
 
   const [view, setView] = useState<"list" | "form">("list");
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -218,16 +231,86 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
   const { busy, setBusy } = bulk;
   const eventsWith = (ids: readonly string[]) => events.filter((e) => ids.includes(e.id));
 
+  // Only the board (events.publish) or an approved event can go public; anyone else asks (DEC-25).
+  const mayPublish = (e: EventItem) => canPublish || e.approval === "approved";
+
   const setPublishedFor = (ids: readonly string[], published: boolean) => {
     if (ids.length === 0) {
       toast.show("Select events first");
       return;
     }
+    const chosen = eventsWith(ids);
+    const asking = published && chosen.every((e) => !mayPublish(e));
     void bulk.run(
-      eventsWith(ids),
-      (e) => setEventPublishedAction({ id: e.id, version: e.version, published }),
-      published ? "published" : "made private",
+      chosen,
+      (e) =>
+        published && !mayPublish(e)
+          ? requestEventApprovalAction({ id: e.id, version: e.version })
+          : setEventPublishedAction({ id: e.id, version: e.version, published }),
+      published ? (asking ? "sent for approval" : "published") : "made private",
     );
+  };
+
+  const decide = async (
+    run: () => Promise<Awaited<ReturnType<typeof setEventPublishedAction>>>,
+    done: string,
+  ) => {
+    setBusy(true);
+    const result = await run();
+    setBusy(false);
+    if (!result.ok) {
+      fail(result);
+      return;
+    }
+    toast.show(done);
+    router.refresh();
+  };
+
+  const askApproval = (e: EventItem) =>
+    decide(() => requestEventApprovalAction({ id: e.id, version: e.version }), "Sent for approval");
+  const approve = (e: EventItem) =>
+    decide(() => approveEventAction({ id: e.id, version: e.version }), "Event approved");
+
+  const confirmReason = async () => {
+    if (!reasonDialog) return;
+    const { kind, event: target } = reasonDialog;
+    const input = {
+      id: target.id,
+      version: target.version,
+      ...(kind === "reject" ? { note: reason } : { reason }),
+    };
+    setBusy(true);
+    const result = await (kind === "reject" ? rejectEventAction(input) : cancelEventAction(input));
+    setBusy(false);
+    if (!result.ok) {
+      fail(result);
+      return;
+    }
+    setReasonDialog(null);
+    setReason("");
+    toast.show(kind === "reject" ? "Request returned" : "Event cancelled, registrants told");
+    router.refresh();
+  };
+
+  const saveAfterEvent = async () => {
+    const current = events.find((e) => e.id === editingId);
+    if (!current) return;
+    setBusy(true);
+    const result = await saveEventAfterAction({
+      id: current.id,
+      version: current.version,
+      finalAttendance: after.finalAttendance === "" ? null : Number(after.finalAttendance),
+      attendanceNote: after.attendanceNote,
+      recapUrl: after.recapUrl,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      fail(result);
+      return;
+    }
+    toast.show("Results saved");
+    router.refresh();
+    setView("list");
   };
 
   const deleteSelected = () => {
@@ -259,10 +342,17 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
     setEditingId(ev?.id ?? null);
     setFieldErrors({});
     setForm(ev ? formFrom(ev) : { ...EMPTY_FORM, timezone: browserZone() });
+    setAfter({
+      finalAttendance: ev?.finalAttendance?.toString() ?? "",
+      attendanceNote: ev?.attendanceNote ?? "",
+      recapUrl: ev?.recapUrl ?? "",
+    });
     setView("form");
   };
 
-  const save = async (publish: boolean) => {
+  const editing = events.find((e) => e.id === editingId) ?? null;
+
+  const save = async (publish: boolean, ask = false) => {
     const current = events.find((e) => e.id === editingId);
     setBusy(true);
     const result = await saveEventAction({
@@ -277,6 +367,9 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
       location: form.location,
       description: form.description,
       bannerImage: form.banner,
+      publishAt: publish
+        ? (wallTimeToUtc(form.publishAt, form.timezone)?.toISOString() ?? null)
+        : null,
       registrationUrl: form.registrationLink,
       slug: form.url.trim(),
       schedule: form.rundown,
@@ -289,7 +382,25 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
       return;
     }
     setFieldErrors({});
-    toast.show(publish ? "Event published" : "Draft saved");
+    if (ask) {
+      const asked = await requestEventApprovalAction({
+        id: result.data.id,
+        version: result.data.version,
+      });
+      if (!asked.ok) {
+        fail(asked);
+        return;
+      }
+    }
+    toast.show(
+      ask
+        ? "Saved and sent for approval"
+        : publish
+          ? form.publishAt
+            ? "Event scheduled"
+            : "Event published"
+          : "Draft saved",
+    );
     router.refresh();
     if (publish) switchTab("all");
     setView("list");
@@ -443,8 +554,8 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
       width: "12%",
       render: (r) => (
         <span className="admin-status-badge">
-          <Icon name={r.status === "published" ? "globe" : "lock"} size={12} />
-          {r.status === "published" ? "Public" : "Private"}
+          <Icon name={r.status === "published" && !r.cancelledAt ? "globe" : "lock"} size={12} />
+          {statusLabel(r, today)}
         </span>
       ),
     },
@@ -481,14 +592,39 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
           <RowMenu>
             {canEdit ? (
               <>
-                <MenuItem
-                  icon="globeSimple"
-                  className="admin-row-menu__item--wide"
-                  disabled={busy || r.status === "published"}
-                  onClick={() => setPublishedFor([r.id], true)}
-                >
-                  Publish
-                </MenuItem>
+                {mayPublish(r) ? (
+                  <MenuItem
+                    icon="globeSimple"
+                    className="admin-row-menu__item--wide"
+                    disabled={busy || r.status === "published" || r.approval === "pending"}
+                    onClick={() => setPublishedFor([r.id], true)}
+                  >
+                    Publish
+                  </MenuItem>
+                ) : (
+                  <MenuItem
+                    icon="send"
+                    className="admin-row-menu__item--wide"
+                    disabled={busy || r.approval === "pending"}
+                    onClick={() => void askApproval(r)}
+                  >
+                    Ask for approval
+                  </MenuItem>
+                )}
+                {canPublish && r.approval === "pending" ? (
+                  <>
+                    <MenuItem icon="check" disabled={busy} onClick={() => void approve(r)}>
+                      Approve
+                    </MenuItem>
+                    <MenuItem
+                      icon="x"
+                      disabled={busy}
+                      onClick={() => setReasonDialog({ kind: "reject", event: r })}
+                    >
+                      Reject
+                    </MenuItem>
+                  </>
+                ) : null}
                 <MenuItem
                   icon="lock"
                   className="admin-row-menu__item--wide"
@@ -513,6 +649,14 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
             {canEdit ? (
               <>
                 <MenuDivider />
+                <MenuItem
+                  icon="x"
+                  danger
+                  disabled={busy || r.cancelledAt !== null}
+                  onClick={() => setReasonDialog({ kind: "cancel", event: r })}
+                >
+                  Cancel<span className="admin-long"> Event</span>
+                </MenuItem>
                 <MenuItem
                   icon="trash"
                   danger
@@ -556,6 +700,8 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
     table.setPage(1);
   };
 
+  const mayPublishForm = canPublish || editing?.approval === "approved";
+
   if (view === "form") {
     return (
       <div>
@@ -571,6 +717,32 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
             </p>
           </div>
         </div>
+
+        {editing ? (
+          <section className="admin-card admin-event-stages" aria-label="Event stages">
+            <ol className="admin-event-stages__list">
+              {editing.stages.map((stage) => (
+                <li
+                  key={stage.key}
+                  className="admin-event-stages__item"
+                  aria-current={stage.key === editing.stage ? "step" : undefined}
+                >
+                  <strong>{stage.label}</strong>
+                  <span className="admin-table__sub">
+                    {stage.from ? formatInZone(stage.from, editing.timezone) : "—"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="admin-table__sub">
+              {statusLabel(editing, today)}
+              {editing.cancelledAt && editing.cancelReason ? `: ${editing.cancelReason}` : ""}
+              {editing.approval === "rejected" && editing.rejectionNote
+                ? `: ${editing.rejectionNote}`
+                : ""}
+            </p>
+          </section>
+        ) : null}
 
         <form className="admin-dark-form" onSubmit={(event) => event.preventDefault()}>
           <div className="admin-form-grid">
@@ -641,6 +813,26 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
               />
               {errorFor("registrationClosesAt")}
             </div>
+
+            {mayPublishForm ? (
+              <div className="admin-field">
+                <label className="admin-field__label" htmlFor="event-publish-at">
+                  Publish at (optional)
+                </label>
+                <input
+                  id="event-publish-at"
+                  className="admin-input"
+                  type="datetime-local"
+                  value={form.publishAt}
+                  onChange={(e) => setForm({ ...form, publishAt: e.target.value })}
+                  {...errorProps("publishAt")}
+                />
+                <p className="admin-field__hint">
+                  Used by Publish: the event stays hidden until this time. Empty = now.
+                </p>
+                {errorFor("publishAt")}
+              </div>
+            ) : null}
 
             <div className="admin-field">
               <label className="admin-field__label" htmlFor="event-location">
@@ -937,6 +1129,69 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
           {["timezone", "schedule", "speakers", "sponsors"].map((field) => (
             <FieldError key={field} id={`event-${field}-error`} message={fieldErrors[field]} />
           ))}
+          {editing && (editing.stage === "after" || editing.stage === "locked") ? (
+            <fieldset className="admin-form-grid__full admin-event-after">
+              <legend className="admin-field__label">
+                After the event (shown on the public page)
+              </legend>
+              <div className="admin-form-grid">
+                <div className="admin-field">
+                  <label className="admin-field__label" htmlFor="event-attendance">
+                    Final attendance
+                  </label>
+                  <input
+                    id="event-attendance"
+                    className="admin-input"
+                    type="number"
+                    min={0}
+                    value={after.finalAttendance}
+                    onChange={(e) => setAfter({ ...after, finalAttendance: e.target.value })}
+                    {...errorProps("finalAttendance")}
+                  />
+                  {errorFor("finalAttendance")}
+                </div>
+                <div className="admin-field">
+                  <label className="admin-field__label" htmlFor="event-attendance-note">
+                    Note (e.g. 80 online, 40 on site)
+                  </label>
+                  <input
+                    id="event-attendance-note"
+                    className="admin-input"
+                    type="text"
+                    value={after.attendanceNote}
+                    onChange={(e) => setAfter({ ...after, attendanceNote: e.target.value })}
+                    {...errorProps("attendanceNote")}
+                  />
+                  {errorFor("attendanceNote")}
+                </div>
+                <div className="admin-field admin-form-grid__full">
+                  <label className="admin-field__label" htmlFor="event-recap">
+                    Recap link
+                  </label>
+                  <input
+                    id="event-recap"
+                    className="admin-input"
+                    type="url"
+                    placeholder="https://"
+                    value={after.recapUrl}
+                    onChange={(e) => setAfter({ ...after, recapUrl: e.target.value })}
+                    {...errorProps("recapUrl")}
+                  />
+                  {errorFor("recapUrl")}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                icon="check"
+                disabled={busy}
+                onClick={() => void saveAfterEvent()}
+              >
+                Save results
+              </Button>
+            </fieldset>
+          ) : null}
+
           <div className="admin-form-actions admin-form-grid__full">
             <Button variant="outline" size="sm" icon="chevronLeft" onClick={() => setView("list")}>
               Back
@@ -953,16 +1208,33 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
               >
                 Save draft
               </Button>
-              <Button
-                type="submit"
-                variant="outline"
-                size="sm"
-                icon="globeSimple"
-                disabled={busy || bannerUpload.busy || photoUpload.busy}
-                onClick={() => save(true)}
-              >
-                Publish
-              </Button>
+              {mayPublishForm ? (
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  icon="globeSimple"
+                  disabled={
+                    busy || bannerUpload.busy || photoUpload.busy || editing?.approval === "pending"
+                  }
+                  onClick={() => save(true)}
+                >
+                  {form.publishAt ? "Schedule" : "Publish"}
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  icon="send"
+                  disabled={
+                    busy || bannerUpload.busy || photoUpload.busy || editing?.approval === "pending"
+                  }
+                  onClick={() => save(false, true)}
+                >
+                  Ask for approval
+                </Button>
+              )}
             </div>
           </div>
         </form>
@@ -988,7 +1260,7 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
               size="sm"
               icon="download"
               disabled={filtered.length === 0}
-              onClick={() => downloadCsv("events", eventsCsv(filtered))}
+              onClick={() => downloadCsv("events", eventsCsv(filtered, today))}
             >
               Export CSV
             </Button>
@@ -1040,7 +1312,7 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
                 disabled={busy}
                 onClick={() => setPublishedFor(Array.from(selected), true)}
               >
-                Publish
+                {canPublish ? "Publish" : "Publish or ask"}
               </Button>
               <Button
                 variant="primary"
@@ -1074,6 +1346,39 @@ function EventsList({ initial: events, canEdit, publicBase }: EventsListProps) {
         onCancel={() => setDeleteConfirm(null)}
       >
         {DELETE_HINT}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={reasonDialog !== null}
+        title={reasonDialog?.kind === "reject" ? "Reject this request?" : "Cancel this event?"}
+        confirmLabel={reasonDialog?.kind === "reject" ? "Reject" : "Cancel event"}
+        icon="x"
+        pending={busy}
+        onConfirm={() => void confirmReason()}
+        onCancel={() => {
+          setReasonDialog(null);
+          setReason("");
+        }}
+      >
+        <p>
+          {reasonDialog?.kind === "reject"
+            ? "The asker is told, with your reason. The event stays a draft."
+            : "The public page stays, marked as cancelled. Registration closes and registrants are told."}
+        </p>
+        <label className="admin-field__label" htmlFor="event-reason">
+          Reason *
+        </label>
+        <textarea
+          id="event-reason"
+          className="admin-input admin-textarea"
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <FieldError
+          id="event-reason-error"
+          message={fieldErrors["note"] ?? fieldErrors["reason"]}
+        />
       </ConfirmDialog>
 
       <ToastBanner message={toast.message} />

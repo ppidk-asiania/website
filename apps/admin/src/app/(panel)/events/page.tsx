@@ -25,6 +25,7 @@ export default async function AdminEventsPage() {
     <EventsPage
       initial={events.map((e) => toEventItem(e, authors.get(e.id) ?? null))}
       canEdit={can(viewer.principal, "events.edit")}
+      canPublish={can(viewer.principal, "events.publish")}
       publicBase={getAppUrls().WEB_URL ?? ""}
     />
   );

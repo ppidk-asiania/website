@@ -40,13 +40,41 @@ change, from the newest 500 `events` audit entries and `users/{uid}`, mapped by
 - Registration link: http(s) only; empty = the site's own registration (step 2.5).
 - Sponsors keep the order of the list (`order` 1, 2, 3 …); the site shows them in that order.
   Speaker photos and sponsor logos use the `speaker` upload preset.
-- Permission `events.edit` for every change (there is no separate publish permission);
-  `events.read` to see the page.
+- Permission `events.edit` for every change except making an event public, which needs the extra
+  `events.publish` or an approval (DEC-25, "Life cycle" below); `events.read` to see the page.
 - Every change is one transaction with a version check and an audit entry (module `events`,
   resource `event`): CREATE / UPDATE / PUBLISH / UNPUBLISH / DELETE. Delete is a soft delete;
   registrations (`eventRegistrations`) are kept. Revertible for 14 days except edits that changed
   the URL.
 - The admin list loads the 500 most recently changed events and filters them in the browser.
+
+## Life cycle (N1.1, DEC-25)
+
+Rules live in `packages/domain/src/events/lifecycle.ts`; actions in `apps/admin/src/server/events.ts`.
+
+- **Approval**: Ask for approval (`events.edit`) → holders of `events.publish` are told (notice
+  `eventApprovalAsked`) → **Approve**, or **Reject** with a reason (kept on the event and in the audit
+  entry; the event is a draft again) → the asker is told. Only an approved event can be published or
+  scheduled; a holder of `events.publish` who publishes approves by doing so (the PUBLISH entry holds
+  `approvedBy`). While a request waits, publishing is closed to everyone. Editing after approval needs
+  no second approval. An event that was public before this step stays public; making it private and
+  public again asks like any other.
+- **Schedule**: `publishAt` (optional, must be before the start). A published event with a future
+  `publishAt` is hidden by the readers until then (`isLive`, read-time like news, no cron job); the
+  web cache lets it appear within a few minutes of that time. Unpublishing clears it.
+- **Cancel**: reason required, `cancelledAt`; the public page stays reachable and says "cancelled",
+  registration closes (`isRegistrationOpen`), and each registrant with a place or a waitlist spot is told
+  once (message key `event:{id}:cancelled:{uid}`, no version). A second cancel is refused; the Audit Log
+  revert is the only undo.
+- **Stage**, computed by `eventStage`: preparing → public → running → after → locked (14 days after the
+  end). "Past" (`isPast`) = ended, or started when no end is set (the form does not set an end yet, so
+  an event is past once it starts). The admin form shows the five stages with their dates.
+- **After the event**: `finalAttendance` (typed number), `attendanceNote` ("80 online, 40 on site") and
+  `recapUrl` (http(s) link, opens outside) are saved with "Save results" once the event is past. The
+  public page then shows "This event has ended" instead of the register button, these facts and the
+  gallery album's first photos.
+- **Dashboard**: the queue "Events waiting for approval" (holders of `events.publish`, in the event's
+  chapter), `apps/admin/src/server/dashboard.ts`.
 
 ## Public pages and registration
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqlContactReader, createSqlMessageLog } from "@website/db/sql";
 import type { Letter } from "@website/domain/documents";
+import type { EventEntity } from "@website/domain/events";
 import type { FinanceRequest } from "@website/domain/finance";
 import { createMessenger, deliveryDecision, messageTo } from "@website/domain/messaging";
 import type { LpjReport, Program, ProgramRevision } from "@website/domain/programs";
@@ -131,6 +132,8 @@ beforeEach(() => {
   fake.docs.set("roles/director", role(["letters.review"]));
   fake.docs.set("roles/treasurer", role(["finance.review", "finance.pay"]));
   fake.docs.set("roles/finance_coordinator", role(["finance.authorize"]));
+  fake.docs.set("roles/board", role(["events.edit", "events.publish"]));
+  fake.docs.set("users/chair", user("chair", [{ roleId: "board", scope: global }]));
   fake.docs.set("users/sekre", user("sekre", [{ roleId: "secretariat", scope: global }]));
   fake.docs.set(
     "users/old",
@@ -186,6 +189,7 @@ describe("notification sources (J2)", () => {
         sent.push({ to: message.to, channel: message.channel, key, text: message.text });
         return Promise.resolve("sent");
       },
+      eventRegistrants: () => Promise.resolve(["ari", "tina"]),
       letterType: (id) =>
         Promise.resolve(id === "missing" ? null : { requiresCoordinator: id === "sk" }),
       webUrl: "https://ppi.example.org",
@@ -453,6 +457,38 @@ describe("notification sources (J2)", () => {
     expect(polled).toEqual(["finance:f1:ari"]);
     expect(sent[0]?.text).toContain("Add the RAB.");
     expect(sent[1]?.text).toContain("No budget.");
+  });
+
+  const event = (fields: Partial<EventEntity>) =>
+    ({
+      id: "e1",
+      slug: "simposium",
+      title: "Simposium",
+      version: 3,
+      chapterId: null,
+      rejectionNote: null,
+      cancelReason: null,
+      ...fields,
+    }) as EventEntity;
+
+  it("events: a request goes to the holders of events.publish, the decision back to the asker", async () => {
+    await notices().eventApprovalAsked(event({}));
+    expect(sent.map((s) => [s.to, s.key])).toEqual([
+      ["chair@example.org", "event:e1:asked:3:chair"],
+    ]);
+    sent.length = 0;
+    await notices().eventApprovalDecided(event({ rejectionNote: "Date clashes" }), false, "ari");
+    expect(sent).toMatchObject([{ key: "event:e1:rejected:3:ari" }]);
+    expect(sent[0]?.text).toContain("Date clashes");
+    await notices().eventApprovalDecided(event({}), true, null);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("events: a cancellation tells each registrant once, with a key that has no version", async () => {
+    await notices().eventCancelled(event({ cancelReason: "Speaker ill", version: 4 }));
+    expect(sent.map((s) => s.key)).toEqual(["event:e1:cancelled:ari", "event:e1:cancelled:tina"]);
+    expect(sent[0]?.text).toContain("Speaker ill");
+    expect(sent[0]?.text).toContain("https://ppi.example.org/events/simposium");
   });
 
   it("never throws: a failed lookup is logged and the decision stands", async () => {

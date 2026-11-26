@@ -20,6 +20,11 @@ const event: PublicEvent = {
   schedule: [],
   speakers: [],
   sponsors: [],
+  cancelledAt: null,
+  cancelReason: null,
+  finalAttendance: null,
+  attendanceNote: null,
+  recapUrl: null,
 };
 const member = { uid: "u1", email: "sari@example.org" };
 const setup = (overrides: Partial<Parameters<typeof createEventRegistration>[0]> = {}) => {

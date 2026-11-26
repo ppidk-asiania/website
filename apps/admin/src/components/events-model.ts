@@ -1,6 +1,12 @@
 import {
+  EVENT_LOCK_DAYS,
+  approvalState,
+  eventEnd,
+  eventStage,
   sortedSponsors,
+  type ApprovalState,
   type EventEntity,
+  type EventStage,
   type EventImage,
   type EventType,
   type ScheduleRow,
@@ -34,6 +40,63 @@ export interface EventItem {
   schedule: ScheduleRow[];
   speakers: Speaker[];
   sponsors: Sponsor[];
+  publishAt: string | null;
+  approval: ApprovalState;
+  rejectionNote: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  stage: EventStage;
+  stages: StageRow[];
+  finalAttendance: number | null;
+  attendanceNote: string;
+  recapUrl: string;
+}
+
+export interface StageRow {
+  key: EventStage;
+  label: string;
+  from: string | null;
+}
+
+const STAGE_LABELS: Record<EventStage, string> = {
+  preparing: "Preparing",
+  public: "Public",
+  running: "Running",
+  after: "After the event",
+  locked: "Locked",
+};
+
+/** The five stages with the instant each one starts; preparing has no start. */
+export function stageRows(e: EventEntity): StageRow[] {
+  const end = eventEnd(e);
+  const lock = new Date(end.getTime() + EVENT_LOCK_DAYS * 86_400_000);
+  const from: Record<EventStage, Date | null> = {
+    preparing: null,
+    public: e.published ? (e.publishAt ?? e.updatedAt) : null,
+    running: e.startsAt,
+    after: end,
+    locked: lock,
+  };
+  return (Object.keys(STAGE_LABELS) as EventStage[]).map((key) => ({
+    key,
+    label: STAGE_LABELS[key],
+    from: from[key]?.toISOString() ?? null,
+  }));
+}
+
+/** The one word the list shows: what the public sees now, or what the event waits for. */
+export function statusLabel(
+  e: Pick<EventItem, "status" | "approval" | "publishAt" | "cancelledAt">,
+  nowIso: string,
+): string {
+  if (e.cancelledAt) return "Cancelled";
+  if (e.status === "published") return e.publishAt && e.publishAt > nowIso ? "Scheduled" : "Public";
+  return {
+    none: "Private",
+    pending: "Waiting for approval",
+    approved: "Approved",
+    rejected: "Rejected",
+  }[e.approval];
 }
 
 export function matchesTab(e: EventItem, tab: EventTab, nowIso: string): boolean {
@@ -49,7 +112,11 @@ export function countdownLabel(startsAt: string, now: number): string | null {
   return days === 1 ? "In 1 day" : `In ${days} days`;
 }
 
-export function toEventItem(e: EventEntity, author: Author | null): EventItem {
+export function toEventItem(
+  e: EventEntity,
+  author: Author | null,
+  now: Date = new Date(),
+): EventItem {
   return {
     id: e.id,
     version: e.version,
@@ -70,10 +137,20 @@ export function toEventItem(e: EventEntity, author: Author | null): EventItem {
     schedule: [...e.schedule],
     speakers: [...e.speakers],
     sponsors: sortedSponsors(e.sponsors),
+    publishAt: e.publishAt?.toISOString() ?? null,
+    approval: approvalState(e),
+    rejectionNote: e.rejectionNote,
+    cancelledAt: e.cancelledAt?.toISOString() ?? null,
+    cancelReason: e.cancelReason,
+    stage: eventStage(e, now),
+    stages: stageRows(e),
+    finalAttendance: e.finalAttendance,
+    attendanceNote: e.attendanceNote ?? "",
+    recapUrl: e.recapUrl ?? "",
   };
 }
 
-export function eventsCsv(rows: readonly EventItem[]): string[][] {
+export function eventsCsv(rows: readonly EventItem[], nowIso: string): string[][] {
   const header = [
     "Title",
     "Type",
@@ -91,7 +168,7 @@ export function eventsCsv(rows: readonly EventItem[]): string[][] {
         e.typeLabel,
         e.startsAt.slice(0, 16).replace("T", " "),
         e.location,
-        e.status === "published" ? "Public" : "Draft",
+        statusLabel(e, nowIso),
         e.modifiedAt.slice(0, 16).replace("T", " "),
         e.author?.name ?? "",
       ].map(esc),

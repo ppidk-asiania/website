@@ -23,13 +23,27 @@ describe("domain rules", () => {
   it("registration closes at the deadline", () => {
     expect(
       isRegistrationOpen(
-        { published: true, deletedAt: null, startsAt: future, registrationClosesAt: null },
+        {
+          published: true,
+          deletedAt: null,
+          publishAt: null,
+          cancelledAt: null,
+          startsAt: future,
+          registrationClosesAt: null,
+        },
         now,
       ),
     ).toBe(true);
     expect(
       isRegistrationOpen(
-        { published: true, deletedAt: null, startsAt: future, registrationClosesAt: past },
+        {
+          published: true,
+          deletedAt: null,
+          publishAt: null,
+          cancelledAt: null,
+          startsAt: future,
+          registrationClosesAt: past,
+        },
         now,
       ),
     ).toBe(false);

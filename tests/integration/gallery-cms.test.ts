@@ -24,7 +24,7 @@ const staff = (permissions: string[]): Principal => ({
     },
   ],
 });
-const editor = staff(["gallery.edit", "events.edit"]);
+const editor = staff(["gallery.edit", "events.edit", "events.publish"]);
 const context = () =>
   Promise.resolve({ actorEmail: "editor@example.org", requestId: "req-123456", authTime: null });
 const as = (principal: Principal) => [() => Promise.resolve(principal), context] as const;
@@ -56,7 +56,17 @@ let fake: ReturnType<typeof fakeDb>;
 let albums: ReturnType<typeof createSqlGalleryStore>;
 let events: ReturnType<typeof createSqlEventStore>;
 const gallery = () => createGalleryActions({ albums, events, now: () => now });
-const eventActions = () => createEventActions({ events, now: () => now, uuid: () => "u" });
+const eventActions = () =>
+  createEventActions({
+    events,
+    notify: {
+      approvalAsked: () => Promise.resolve(),
+      approvalDecided: () => Promise.resolve(),
+      cancelled: () => Promise.resolve(),
+    },
+    now: () => now,
+    uuid: () => "u",
+  });
 const auditEntries = () =>
   [...fake.docs.entries()].filter(([p]) => p.startsWith("auditLogs/")).map(([, d]) => d);
 const createEvent = async (publish: boolean, slug = "simposium") => {

@@ -1,4 +1,5 @@
 import "server-only";
+import { approvalState, type EventEntity } from "@website/domain/events";
 import { authorizeRequest, reviewRequest, type FinanceRequest } from "@website/domain/finance";
 import {
   LPJ_DESK_PERMISSIONS,
@@ -25,6 +26,7 @@ interface QueueSources {
   lpj: LpjReport[];
   zoom: ZoomRequest[];
   revisions: ProgramRevision[];
+  events: EventEntity[];
 }
 type Waiting<K extends keyof QueueSources> = (
   item: QueueSources[K][number],
@@ -40,6 +42,12 @@ interface Queue<K extends keyof QueueSources> {
 }
 const queue = <K extends keyof QueueSources>(q: Queue<K>) =>
   q as unknown as Queue<keyof QueueSources>;
+
+/** Items of a unit carry an org-unit path; an event belongs to a chapter or to nobody (global). */
+const resourceOf = (item: QueueSources[keyof QueueSources][number]) =>
+  "orgUnitPath" in item
+    ? { orgUnitPath: item.orgUnitPath }
+    : { ...(item.chapterId ? { chapterId: item.chapterId } : {}) };
 
 export const DASHBOARD_QUEUES = [
   queue({
@@ -90,6 +98,13 @@ export const DASHBOARD_QUEUES = [
     source: "zoom",
     waiting: (z, _uid, now) => z.status === "pending" && z.startsAt > now,
   }),
+  queue({
+    label: "Events waiting for approval",
+    href: "/events",
+    permission: "events.publish",
+    source: "events",
+    waiting: (e) => e.deletedAt === null && approvalState(e) === "pending",
+  }),
 ];
 
 export function createDashboard(deps: {
@@ -100,6 +115,7 @@ export function createDashboard(deps: {
   lpj: (periodId: string) => Promise<LpjReport[]>;
   zoom: (from: Date) => Promise<ZoomRequest[]>;
   revisions: (periodId: string) => Promise<ProgramRevision[]>;
+  events: () => Promise<EventEntity[]>;
   myTasks: (uid: string) => Promise<Task[]>;
   now: () => Date;
 }) {
@@ -112,16 +128,18 @@ export function createDashboard(deps: {
     const queues = DASHBOARD_QUEUES.filter((q) => canInSomeScope(principal, q.permission));
     const uses = (source: keyof QueueSources) => queues.some((q) => q.source === source);
     const period = await deps.activePeriod();
-    const [graduated, secretariat, finance, lpj, zoom, revisions, tasks] = await Promise.all([
-      can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
-      watchesLpj ? deps.lpjSecretariatHolders() : null,
-      period && uses("finance") ? deps.finance(period.id) : [],
-      period && uses("lpj") ? deps.lpj(period.id) : [],
-      uses("zoom") ? deps.zoom(now) : [],
-      period && uses("revisions") ? deps.revisions(period.id) : [],
-      deps.myTasks(principal.userId),
-    ]);
-    const sources: QueueSources = { finance, lpj, zoom, revisions };
+    const [graduated, secretariat, finance, lpj, zoom, revisions, events, tasks] =
+      await Promise.all([
+        can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
+        watchesLpj ? deps.lpjSecretariatHolders() : null,
+        period && uses("finance") ? deps.finance(period.id) : [],
+        period && uses("lpj") ? deps.lpj(period.id) : [],
+        uses("zoom") ? deps.zoom(now) : [],
+        period && uses("revisions") ? deps.revisions(period.id) : [],
+        uses("events") ? deps.events() : [],
+        deps.myTasks(principal.userId),
+      ]);
+    const sources: QueueSources = { finance, lpj, zoom, revisions, events };
     return {
       queues: queues
         .map((q) => ({
@@ -129,7 +147,7 @@ export function createDashboard(deps: {
           href: q.href,
           count: sources[q.source].filter(
             (item) =>
-              can(principal, q.permission, { orgUnitPath: item.orgUnitPath }) &&
+              can(principal, q.permission, resourceOf(item)) &&
               q.waiting(item, principal.userId, now),
           ).length,
         }))

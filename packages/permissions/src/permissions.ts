@@ -16,7 +16,10 @@ interface AdminPageDefinition {
 
 export const ADMIN_PAGES = {
   tools: { label: "Tools" },
-  events: { label: "Event" },
+  events: {
+    label: "Event",
+    extras: { publish: "Publish events (approve requests, schedule, make public)" },
+  },
   registrants: { label: "Event registrants", extras: { export: "Export registrants" } },
   gallery: { label: "Gallery" },
   articles: { label: "Article", extras: { publish: "Publish" } },

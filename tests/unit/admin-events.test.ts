@@ -5,6 +5,7 @@ import {
   countdownLabel,
   eventsCsv,
   matchesTab,
+  statusLabel,
   toEventItem,
 } from "../../apps/admin/src/components/events-model";
 import { formatInZone } from "../../apps/admin/src/components/format";
@@ -37,6 +38,17 @@ const entity: EventEntity = {
   createdAt: now,
   updatedAt: now,
   deletedAt: null,
+  publishAt: null,
+  approvalRequestedAt: null,
+  approvalRequestedBy: null,
+  approvedAt: null,
+  approvedBy: null,
+  rejectionNote: null,
+  cancelledAt: null,
+  cancelReason: null,
+  finalAttendance: null,
+  attendanceNote: null,
+  recapUrl: null,
 };
 
 describe("Event page rows (server mapping)", () => {
@@ -66,6 +78,35 @@ describe("Event page rows (server mapping)", () => {
     expect(matchesTab(row, "past", iso)).toBe(false);
     expect(matchesTab(draft, "drafts", iso)).toBe(true);
     expect(matchesTab(draft, "upcoming", iso)).toBe(false);
+  });
+});
+
+describe("Event life-cycle cells (N1.1)", () => {
+  const iso = now.toISOString();
+  const row = (fields: Partial<EventEntity>) => toEventItem({ ...entity, ...fields }, null, now);
+
+  it("the status word says what the public sees now or what the event waits for", () => {
+    const label = (fields: Partial<EventEntity>) => statusLabel(row(fields), iso);
+    expect(label({ published: false })).toBe("Private");
+    expect(label({ published: false, approvalRequestedAt: now })).toBe("Waiting for approval");
+    expect(label({ published: false, approvalRequestedAt: now, approvedAt: now })).toBe("Approved");
+    expect(label({ published: false, rejectionNote: "No" })).toBe("Rejected");
+    expect(label({ publishAt: new Date("2026-10-20T00:00:00Z") })).toBe("Scheduled");
+    expect(label({ publishAt: new Date("2026-10-17T00:00:00Z") })).toBe("Public");
+    expect(label({ cancelledAt: now })).toBe("Cancelled");
+  });
+
+  it("shows the five stages with their dates and the current one", () => {
+    const current = row({ publishAt: new Date("2026-10-10T00:00:00Z") });
+    expect(current.stage).toBe("public");
+    expect(current.stages.map((s) => [s.key, s.from])).toEqual([
+      ["preparing", null],
+      ["public", "2026-10-10T00:00:00.000Z"],
+      ["running", "2026-11-01T00:00:00.000Z"],
+      ["after", "2026-11-01T00:00:00.000Z"],
+      ["locked", "2026-11-15T00:00:00.000Z"],
+    ]);
+    expect(row({ published: false }).stages[1]?.from).toBeNull();
   });
 });
 
@@ -114,14 +155,17 @@ describe("Event page CSV export", () => {
       email: "nk@example.org",
       initials: "NK",
     });
-    const [header, row] = eventsCsv([{ ...item, title: "=cmd", status: "draft" }]);
+    const [header, row] = eventsCsv(
+      [{ ...item, title: "=cmd", status: "draft" }],
+      now.toISOString(),
+    );
     expect(header?.[0]).toBe('"Title"');
     expect(row?.slice(0, 5)).toEqual([
       '"\'=cmd"',
       '"Webinar"',
       '"2026-11-01 00:00"',
       '""',
-      '"Draft"',
+      '"Private"',
     ]);
     expect(row?.at(-1)).toBe('"Nevyllo K."');
   });

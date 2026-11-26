@@ -3522,6 +3522,37 @@ form.admin-toolbar::before {
   flex-direction: column;
 }
 
+.admin-event-stages {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.admin-event-stages__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.admin-event-stages__item {
+  display: flex;
+  flex-direction: column;
+  opacity: 0.6;
+}
+
+.admin-event-stages__item[aria-current="step"] {
+  opacity: 1;
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.admin-event-after {
+  margin: 0;
+  padding: var(--space-3) 0;
+  border: 0;
+}
+
 .admin-status-badge {
   display: inline-flex;
   align-items: center;

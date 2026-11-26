@@ -54,6 +54,17 @@ const base: Omit<EventEntity, "id" | "version" | "createdAt" | "updatedAt"> = {
   speakers: [],
   sponsors: [],
   deletedAt: null,
+  publishAt: null,
+  approvalRequestedAt: null,
+  approvalRequestedBy: null,
+  approvedAt: null,
+  approvedBy: null,
+  rejectionNote: null,
+  cancelledAt: null,
+  cancelReason: null,
+  finalAttendance: null,
+  attendanceNote: null,
+  recapUrl: null,
 };
 const create = (fields: Partial<typeof base>) =>
   events.write(null, null, () => ({ ...base, ...fields }), auditStub, now);

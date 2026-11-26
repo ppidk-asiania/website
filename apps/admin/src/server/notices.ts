@@ -1,5 +1,6 @@
 import "server-only";
 import type { SqlContactReader } from "@website/db/sql";
+import type { EventEntity } from "@website/domain/events";
 import { desksOf, type Letter, type LetterType } from "@website/domain/documents";
 import type { FinanceRequest } from "@website/domain/finance";
 import { messageTo, type Messenger, type SurveySource } from "@website/domain/messaging";
@@ -48,6 +49,8 @@ type Content = { subject: string; text: string };
 export interface NoticeDeps {
   readonly contacts: Pick<SqlContactReader, "contacts" | "holders">;
   readonly send: Messenger["send"];
+  /** Everyone holding a place or a waitlist spot of an event. */
+  readonly eventRegistrants: (eventId: string) => Promise<string[]>;
   readonly letterType: (id: string) => Promise<Pick<LetterType, "requiresCoordinator"> | null>;
   readonly webUrl: string;
   readonly adminUrl: string;
@@ -304,7 +307,61 @@ export function createNotices(deps: NoticeDeps) {
       }
     });
 
-  return { application, proof, letter, lpj, program, programRevision, finance };
+  const eventApprovalAsked = (saved: EventEntity) =>
+    safely("eventApprovalAsked", saved.id, async () => {
+      await tell(
+        await deps.contacts.holders("events.publish", {
+          ...(saved.chapterId ? { chapterId: saved.chapterId } : {}),
+        }),
+        {
+          subject: `Acara / Event: ${saved.title}`,
+          text: `${both("Acara menunggu persetujuan sebelum tayang.", "An event waits for your approval before it goes public.")}\n\n${deps.adminUrl}/events`,
+        },
+        (uid) => `event:${saved.id}:asked:${saved.version}:${uid}`,
+      );
+    });
+
+  const eventApprovalDecided = (saved: EventEntity, approved: boolean, askedBy: string | null) =>
+    safely("eventApprovalDecided", saved.id, async () => {
+      if (askedBy === null) return;
+      const [id, en] = approved
+        ? ["Acaramu disetujui dan boleh ditayangkan.", "Your event is approved and can go public."]
+        : ["Acaramu belum disetujui.", "Your event was not approved."];
+      await tell(
+        [askedBy],
+        {
+          subject: `Acara / Event: ${saved.title}`,
+          text: `${both(id, en)}${saved.rejectionNote ? `\n\n${saved.rejectionNote}` : ""}\n\n${deps.adminUrl}/events`,
+        },
+        (uid) => `event:${saved.id}:${approved ? "approved" : "rejected"}:${saved.version}:${uid}`,
+      );
+    });
+
+  // The key has no version: a person is told once about a cancellation, however often it is retried.
+  const eventCancelled = (saved: EventEntity) =>
+    safely("eventCancelled", saved.id, async () => {
+      await tell(
+        await deps.eventRegistrants(saved.id),
+        {
+          subject: `Acara dibatalkan / Event cancelled: ${saved.title}`,
+          text: `${both("Acara yang kamu daftar dibatalkan.", "An event you registered for is cancelled.")}\n\n${saved.cancelReason ?? ""}\n\n${deps.webUrl}/events/${saved.slug}`,
+        },
+        (uid) => `event:${saved.id}:cancelled:${uid}`,
+      );
+    });
+
+  return {
+    application,
+    proof,
+    letter,
+    lpj,
+    program,
+    programRevision,
+    finance,
+    eventApprovalAsked,
+    eventApprovalDecided,
+    eventCancelled,
+  };
 }
 
 export type Notices = ReturnType<typeof createNotices>;

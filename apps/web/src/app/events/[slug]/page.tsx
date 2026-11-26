@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { isRegistrationOpen } from "@website/domain/events";
+import { isPast, isRegistrationOpen } from "@website/domain/events";
 import { isValidSlug } from "@website/domain/shared";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { cityOf, formatEventDate, formatEventTimeRange } from "@/lib/event-time";
@@ -34,11 +34,17 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
   if (!event) notFound();
   const language = languageFrom((await cookies()).get(LANG_COOKIE)?.value);
   const t = DICTIONARIES[language];
-  const open = isRegistrationOpen({ ...event, published: true, deletedAt: null }, new Date());
+  const now = new Date();
+  const open = isRegistrationOpen(
+    { ...event, published: true, deletedAt: null, publishAt: null },
+    now,
+  );
+  const past = isPast(event, now);
   const [user, album] = await Promise.all([
     open && !event.registrationUrl ? getSignedInUser() : null,
     open ? null : publicAlbumForEvent(event.id),
   ]);
+  const hasRecap = event.finalAttendance !== null || event.attendanceNote || event.recapUrl;
 
   return (
     <main className="site-event">
@@ -69,21 +75,22 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
             {formatEventTimeRange(event.startsAt, event.endsAt, event.timezone)}
           </p>
 
+          {event.cancelledAt && (
+            <p className="site-event__notice" role="status">
+              <strong>{t.events.cancelled}</strong>
+              {event.cancelReason && <> {event.cancelReason}</>}
+            </p>
+          )}
+
           <div className="site-event__actions">
-            {!open ? (
+            {past ? (
+              <p className="site-muted site-event__closed">{t.events.ended}</p>
+            ) : !open ? (
               <>
                 <button className="site-event__button" type="button" disabled aria-disabled="true">
                   {t.events.register}
                 </button>
-                <p className="site-muted site-event__closed">
-                  {t.events.closed}
-                  {album && (
-                    <>
-                      {" "}
-                      · <a href={`/gallery/${album.slug}`}>{t.gallery.eventAlbum}</a>
-                    </>
-                  )}
-                </p>
+                <p className="site-muted site-event__closed">{t.events.closed}</p>
               </>
             ) : event.registrationUrl ? (
               <a
@@ -119,6 +126,42 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
             )}
           </div>
         </header>
+
+        {past && (hasRecap || album) && (
+          <section className="site-event__after">
+            {event.finalAttendance !== null && (
+              <p>
+                <strong>{t.events.attendance}:</strong> {event.finalAttendance}
+                {event.attendanceNote && ` (${event.attendanceNote})`}
+              </p>
+            )}
+            {event.finalAttendance === null && event.attendanceNote && (
+              <p>{event.attendanceNote}</p>
+            )}
+            {event.recapUrl && (
+              <p>
+                <a href={event.recapUrl} target="_blank" rel="noopener noreferrer">
+                  {t.events.recap}
+                </a>
+              </p>
+            )}
+            {album && (
+              <>
+                <p>
+                  <a href={`/gallery/${album.slug}`}>{t.gallery.eventAlbum}</a>
+                </p>
+                <ul className="site-event__photos">
+                  {album.images.slice(0, 6).map((image) => (
+                    <li key={image.path}>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Storage thumbnail (WebP) */}
+                      <img src={image.thumbUrl} alt="" loading="lazy" />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
 
         <div className={event.speakers.length > 0 ? "site-event__columns" : undefined}>
           <section className="site-event__about">
