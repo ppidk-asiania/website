@@ -2,11 +2,16 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
 import { randomUUID } from "node:crypto";
-import { createSqlInventoryReader, createSqlLoanWebStore } from "@website/db/sql";
+import {
+  createSqlContributionWebStore,
+  createSqlInventoryReader,
+  createSqlLoanWebStore,
+} from "@website/db/sql";
 import type { PublicItem } from "@website/domain/inventory";
 import { createRecaptchaVerifier, passesCaptcha } from "./captcha";
 import { webDb, webStorage } from "./db";
 import { getWebEnv } from "./env";
+import { createContributionOffers } from "./contribution-offers";
 import { createLoanRequests } from "./loan-requests";
 import { messenger } from "./messaging";
 import { hasCompleteProfile } from "./profile-wiring";
@@ -47,3 +52,17 @@ export const loanRequests = lazyEnv(() => {
     uuid: randomUUID,
   });
 });
+
+const offers = lazyEnv(() => createSqlContributionWebStore(webDb()));
+
+/** The signed-in member's own offered items; read per request, never cached. */
+export const myOffers = (uid: string) => offers().mine(uid);
+
+export const contributionOffers = lazyEnv(() =>
+  createContributionOffers({
+    offers: offers(),
+    profileComplete: hasCompleteProfile,
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);

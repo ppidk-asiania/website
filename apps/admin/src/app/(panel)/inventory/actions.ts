@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
-import { inventoryActions, loanActions } from "@/server/wiring";
+import { inventoryActions, inventoryFlowActions, loanActions } from "@/server/wiring";
 
 const done = <T extends { ok: boolean }>(result: T): T => {
   if (result.ok) {
@@ -46,4 +46,42 @@ export async function handOverLoanAction(input: unknown) {
 
 export async function takeBackLoanAction(input: unknown) {
   return loanDone(await loanActions().takeBack(getPrincipal, getAuditContext)(input));
+}
+
+const flows = () => inventoryFlowActions();
+const flowDone = <T extends { ok: boolean }>(result: T): T => {
+  if (result.ok) revalidatePath("/inventory");
+  return result;
+};
+
+export async function reserveItemAction(input: unknown) {
+  return flowDone(await flows().reserve(getPrincipal, getAuditContext)(input));
+}
+
+export async function releaseReservationAction(input: unknown) {
+  return flowDone(await flows().release(getPrincipal, getAuditContext)(input));
+}
+
+export async function approveContributionAction(input: unknown) {
+  return flowDone(await flows().approveContribution(getPrincipal, getAuditContext)(input));
+}
+
+export async function rejectContributionAction(input: unknown) {
+  return flowDone(await flows().rejectContribution(getPrincipal, getAuditContext)(input));
+}
+
+export async function requestProcurementAction(input: unknown) {
+  return flowDone(await flows().requestProcurement(getPrincipal, getAuditContext)(input));
+}
+
+export async function decideProcurementAction(input: unknown) {
+  return flowDone(await flows().decideProcurement(getPrincipal, getAuditContext)(input));
+}
+
+export async function lendOutAction(input: unknown) {
+  return flowDone(await flows().lendOut(getPrincipal, getAuditContext)(input));
+}
+
+export async function takeBackOutsideAction(input: unknown) {
+  return flowDone(await flows().takeBackOutside(getPrincipal, getAuditContext)(input));
 }

@@ -1,8 +1,15 @@
 import { orgUnitPath } from "@website/domain/organizations";
-import { isLoanOverdue, scopeOfItem } from "@website/domain/inventory";
-import { can } from "@website/permissions";
+import { amountText } from "@/components/finance-model";
+import {
+  financePrefill,
+  isLoanOverdue,
+  isOutsideOverdue,
+  scopeOfItem,
+} from "@website/domain/inventory";
+import { can, canInSomeScope } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { InventoryPage, type ItemRow } from "@/components/inventory-page";
+import { InventoryFlowsPanel } from "@/components/inventory-flows-panel";
 import { requireAdminViewer } from "@/server/context";
 import { adminReads } from "@/server/wiring";
 
@@ -15,12 +22,28 @@ export default async function InventoryRoute() {
 
   const periods = await adminReads.listPeriods();
   const active = periods.find((p) => p.status === "active");
-  const [items, chapters, units, log, loans] = await Promise.all([
+  const [
+    items,
+    chapters,
+    units,
+    log,
+    loans,
+    events,
+    reservations,
+    contributions,
+    procurement,
+    outside,
+  ] = await Promise.all([
     adminReads.listInventory(),
     adminReads.listChapters(),
     active ? adminReads.listOrgUnits(active.id) : Promise.resolve([]),
     adminReads.inventoryLog(100),
     adminReads.listLoans(),
+    adminReads.listEvents(),
+    adminReads.listReservations(),
+    adminReads.listContributions(),
+    adminReads.listProcurement(),
+    adminReads.listOutsideLoans(),
   ]);
   const chapterName = new Map(chapters.map((c) => [c.id, c.name]));
   const unitName = new Map(units.map((u) => [u.id, u.name]));
@@ -61,50 +84,123 @@ export default async function InventoryRoute() {
   ]);
   const today = new Date().toISOString().slice(0, 10);
 
+  const owners = [
+    ...(can(principal, "inventory.edit") ? [{ value: "region", label: "Region" }] : []),
+    ...chapters
+      .filter((c) => can(principal, "inventory.edit", { chapterId: c.id }))
+      .map((c) => ({ value: `chapter:${c.id}`, label: `Chapter ${c.name}` })),
+    ...units
+      .filter((u) => can(principal, "inventory.edit", { orgUnitPath: orgUnitPath(u) }))
+      .map((u) => ({ value: `unit:${u.id}`, label: `Unit ${u.name}` })),
+  ];
+  const eventTitle = new Map(events.map((e) => [e.id, e.title]));
+  const approves = (owner: (typeof items)[number]["owner"]) =>
+    can(principal, "inventory.approve", scopeOfItem(owner));
+
   return (
-    <InventoryPage
-      rows={rows}
-      owners={[
-        ...(can(principal, "inventory.edit") ? [{ value: "region", label: "Region" }] : []),
-        ...chapters
-          .filter((c) => can(principal, "inventory.edit", { chapterId: c.id }))
-          .map((c) => ({ value: `chapter:${c.id}`, label: `Chapter ${c.name}` })),
-        ...units
-          .filter((u) => can(principal, "inventory.edit", { orgUnitPath: orgUnitPath(u) }))
-          .map((u) => ({ value: `unit:${u.id}`, label: `Unit ${u.name}` })),
-      ]}
-      loans={mineLoans.map((l) => {
-        const who = l.borrower.kind === "member" ? people.get(l.borrower.userId) : null;
-        return {
-          id: l.id,
-          item: names.get(l.itemId) ?? "",
-          quantity: l.quantity,
-          borrower:
-            l.borrower.kind === "member"
-              ? (who?.name ?? who?.email ?? "Member")
-              : `${l.borrower.name} (outsider) · ${l.borrower.email} · ${l.borrower.phone}`,
-          own: l.borrower.kind === "member" && l.borrower.userId === principal.userId,
-          outsider: l.borrower.kind === "outsider",
-          purpose: l.purpose,
-          place: l.place,
-          period: `${l.from} → ${l.to}`,
-          status: l.status,
-          overdue: isLoanOverdue(l, today),
-          note: l.note,
-          canDecide: can(principal, "inventory.approve", scopeOfItem(ownerOfItem.get(l.itemId)!)),
-        };
-      })}
-      log={log
-        .filter((l) => names.has(l.itemId))
-        .map((l) => ({
-          id: l.id,
-          item: names.get(l.itemId) ?? "",
-          action: l.action,
-          change: l.change,
-          note: l.note,
-          by: l.by ? (people.get(l.by)?.name ?? people.get(l.by)?.email ?? l.by) : "",
-          at: l.at.toISOString().slice(0, 16).replace("T", " "),
+    <>
+      <InventoryPage
+        rows={rows}
+        owners={owners}
+        loans={mineLoans.map((l) => {
+          const who = l.borrower.kind === "member" ? people.get(l.borrower.userId) : null;
+          return {
+            id: l.id,
+            item: names.get(l.itemId) ?? "",
+            quantity: l.quantity,
+            borrower:
+              l.borrower.kind === "member"
+                ? (who?.name ?? who?.email ?? "Member")
+                : `${l.borrower.name} (outsider) · ${l.borrower.email} · ${l.borrower.phone}`,
+            own: l.borrower.kind === "member" && l.borrower.userId === principal.userId,
+            outsider: l.borrower.kind === "outsider",
+            purpose: l.purpose,
+            place: l.place,
+            period: `${l.from} → ${l.to}`,
+            status: l.status,
+            overdue: isLoanOverdue(l, today),
+            note: l.note,
+            canDecide: can(principal, "inventory.approve", scopeOfItem(ownerOfItem.get(l.itemId)!)),
+          };
+        })}
+        log={log
+          .filter((l) => names.has(l.itemId))
+          .map((l) => ({
+            id: l.id,
+            item: names.get(l.itemId) ?? "",
+            action: l.action,
+            change: l.change,
+            note: l.note,
+            by: l.by ? (people.get(l.by)?.name ?? people.get(l.by)?.email ?? l.by) : "",
+            at: l.at.toISOString().slice(0, 16).replace("T", " "),
+          }))}
+      />
+      <InventoryFlowsPanel
+        items={mine.map((i) => ({
+          id: i.id,
+          name: i.name,
+          canEdit: can(principal, "inventory.edit", scopeOfItem(i.owner)),
+          canApprove: approves(i.owner),
         }))}
-    />
+        owners={owners}
+        events={events.filter((e) => !e.deletedAt).map((e) => ({ id: e.id, title: e.title }))}
+        reservations={reservations
+          .filter((r) => ownerOfItem.has(r.itemId))
+          .map((r) => ({
+            id: r.id,
+            item: names.get(r.itemId) ?? "",
+            event: eventTitle.get(r.eventId) ?? "(removed event)",
+            quantity: r.quantity,
+            period: `${r.from} → ${r.to}`,
+            active: r.status === "active",
+            canEdit: can(principal, "inventory.edit", scopeOfItem(ownerOfItem.get(r.itemId)!)),
+          }))}
+        canApprove={canInSomeScope(principal, "inventory.approve")}
+        contributions={contributions.map((c) => ({
+          id: c.id,
+          name: c.name,
+          by: c.contributorName,
+          quantity: c.quantity,
+          mode: c.mode,
+          returnOn: c.returnOn,
+          description: c.description,
+          status: c.status,
+          note: c.note,
+        }))}
+        procurement={procurement
+          .filter((p) => can(principal, "inventory.read", scopeOfItem(p.owner)))
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            owner: ownerLabel(p.owner),
+            why: p.why,
+            estimate: amountText(p.estimatedMinor, p.currency),
+            urgency: p.urgency,
+            status: p.status,
+            note: p.note,
+            canDecide: approves(p.owner),
+            financeQuery: new URLSearchParams({
+              title: financePrefill(p).title,
+              description: financePrefill(p).description,
+              amount: String(financePrefill(p).amountMinor),
+              currency: p.currency,
+            }).toString(),
+          }))}
+        outside={outside
+          .filter((o) => ownerOfItem.has(o.itemId))
+          .map((o) => ({
+            id: o.id,
+            item: names.get(o.itemId) ?? "",
+            borrower: o.borrower,
+            contact: o.contact,
+            purpose: o.purpose,
+            quantity: o.quantity,
+            period: `${o.lentOn} → ${o.expectedBack}`,
+            status: o.status,
+            overdue: isOutsideOverdue(o, today),
+            canDecide: approves(ownerOfItem.get(o.itemId)!),
+          }))}
+      />
+    </>
   );
 }

@@ -112,7 +112,7 @@ const emptyForm = (owner: string): Form => ({
   total: "1",
 });
 
-const ownerInput = (value: string) => {
+export const ownerInput = (value: string) => {
   const [kind, id] = value.split(":");
   return kind === "chapter"
     ? { kind: "chapter" as const, chapterId: id ?? "" }

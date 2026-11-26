@@ -389,8 +389,10 @@ never listed. Cached for minutes (`cacheTag("inventory")`). Below the list a req
 posts JSON to `/api/inventory/loans` (complete profile needed); anyone else posts the fields in the
 query string and a signed statement (PDF) as the body to `/api/inventory/outsider` with a reCAPTCHA
 token (action `loan_request`). A signed-in member also sees "Your requests" with Ask to return and
-Cancel (`/api/inventory/loans/{id}?do=return|cancel`, only the member's own rows). Code:
-`apps/web/src/server/inventory.ts`, `loan-requests.ts`.
+Cancel (`/api/inventory/loans/{id}?do=return|cancel`, only the member's own rows). A signed-in member
+can also offer an item to give or lend (`POST /api/inventory/offers`, JSON, complete profile needed) and
+sees the state of their offers below the form. Code: `apps/web/src/server/inventory.ts`,
+`loan-requests.ts`, `contribution-offers.ts`.
 
 ## Configuration
 

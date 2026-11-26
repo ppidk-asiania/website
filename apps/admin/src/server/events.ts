@@ -29,6 +29,8 @@ export interface EventNotifier {
 export interface EventDeps {
   readonly events: Pick<SqlEventStore, "write">;
   readonly notify: EventNotifier;
+  /** Frees the equipment the event had reserved (N7.3). */
+  readonly releaseReservations: (eventId: string, now: Date) => Promise<unknown>;
   readonly now: () => Date;
   readonly uuid: () => string;
 }
@@ -289,6 +291,7 @@ export function createEventActions(deps: EventDeps) {
         eventAudit(audit, "DELETE"),
         now,
       );
+      await deps.releaseReservations(id, now);
       return { id };
     },
   });

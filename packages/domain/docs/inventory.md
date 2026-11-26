@@ -37,3 +37,25 @@ Equipment the region, a chapter or a unit owns and others may borrow (DEC-31). C
 - **Notices:** approved, rejected, handed over and returned go to the borrower (an outsider by the
   e-mail they gave); the request itself is acknowledged by e-mail. Approvers are not messaged on a new
   request: they see the dashboard queue.
+
+## Reservations, contributions, procurement and outside loans (N7.3)
+
+- **Reservations:** `inventory.edit` holders of the item's owner scope, or the BOARD of the event
+  (`orIf`), block units of an item for an event's days. A reservation, a loan request, a hand-over and an
+  outside loan all check the units other ACTIVE reservations hold on overlapping days
+  (`reservedDuring` / `assertNotReserved`, inside the same transaction as the stock). A loan out already
+  is not counted against a new reservation (only against `total`). Deleting the event releases its
+  reservations; a reservation can also be released by hand.
+- **Contributions:** a signed-in member with a complete profile offers an item to GIVE (a gift) or to LEND
+  (needs a return date). An approver of the chosen owner scope adds it as ONE new item (a lent item keeps
+  `lentBy {name, returnOn}`), with an "added" log row, in the same transaction. Nobody decides on their
+  own offer; a rejection needs a reason. The member sees the state on `/inventory`.
+- **Procurement:** `inventory.edit` of the owner asks to buy (`name`, `why`, estimate, urgency);
+  `inventory.approve` approves or rejects (reason); an approved one is marked fulfilled after the
+  purchase. The requester never decides their own request. Buying and money stay in Finance: "Ask Finance"
+  opens `/finance?title=&description=&amount=&currency=` with the form filled in (`financePrefill`).
+- **Outside loans:** `inventory.approve` lends units to a named body (contact, purpose, back-by day) and
+  takes them back. Stock and the log row move in one transaction; units reserved for an event on those
+  days cannot go. Overdue is read-time (`isOutsideOverdue`).
+- **Not built:** the event board reserves through the action only (no board screen yet); the offer
+  sender and the requester are not messaged about a decision.

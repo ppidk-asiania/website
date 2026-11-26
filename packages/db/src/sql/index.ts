@@ -319,6 +319,14 @@ export {
   type SqlLoanWebStore,
 } from "./loans";
 export {
+  createSqlContributionWebStore,
+  createSqlFlowStore,
+  type FlowAudit,
+  type Procurement,
+  type SqlContributionWebStore,
+  type SqlFlowStore,
+} from "./inventory-flows";
+export {
   channelSnapshot,
   createSqlDonationStore,
   createSqlDonationWebStore,

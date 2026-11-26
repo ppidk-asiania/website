@@ -44,6 +44,9 @@ interface Props {
   periodName: string | null;
   coordinatorTitle: string;
   initial: FinanceItem[];
+  /** A request started from elsewhere (an approved purchase in Inventory): opens the form filled in. */
+  prefill?:
+    { title: string; description: string; amountMinor: number; currency: string } | undefined;
   units: { id: string; name: string }[];
   desks: {
     edit: boolean;
@@ -84,14 +87,36 @@ export function FinancePage(props: Props) {
   return <FinanceList key={pathname} {...props} />;
 }
 
-function FinanceList({ periodName, coordinatorTitle, initial: items, units, desks }: Props) {
+function FinanceList({
+  periodName,
+  coordinatorTitle,
+  initial: items,
+  prefill,
+  units,
+  desks,
+}: Props) {
   const toast = useToastMessage();
   const router = useRouter();
   const [tab, setTab] = useState<FinanceTab>("all");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "form" | "detail">("list");
+  const [view, setView] = useState<"list" | "form" | "detail">(prefill ? "form" : "list");
   const [current, setCurrent] = useState<FinanceItem | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(() =>
+    prefill
+      ? {
+          category: "disbursement",
+          orgUnitId: units[0]?.id ?? "",
+          title: prefill.title,
+          description: prefill.description,
+          amount: amountText(prefill.amountMinor, prefill.currency),
+          currency: prefill.currency,
+          date: "",
+          account: "",
+          fundSource: "",
+          programId: "",
+        }
+      : null,
+  );
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
   const [noteStep, setNoteStep] = useState<(NoteStep & { note: string }) | null>(null);

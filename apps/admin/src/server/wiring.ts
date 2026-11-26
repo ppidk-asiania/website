@@ -83,6 +83,7 @@ import { createEventCertificateActions } from "./event-certificates";
 import { committeeRole } from "@website/domain/events";
 import { createDonationActions } from "./donations";
 import { createInventoryActions } from "./inventory";
+import { createInventoryFlowActions } from "./inventory-flows";
 import { createLoanActions } from "./loans";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
@@ -207,6 +208,7 @@ export const checkInActions = lazyEnv(() =>
 export const eventActions = lazyEnv(() =>
   createEventActions({
     events: adminStores().events,
+    releaseReservations: (id, now) => adminStores().flows.releaseForEvent(id, now),
     notify: {
       approvalAsked: (event) => notices().eventApprovalAsked(event),
       approvalDecided: (event, approved, askedBy) =>
@@ -239,6 +241,20 @@ export const inventoryActions = lazyEnv(() =>
       return unit ? orgUnitPath(unit) : null;
     },
     chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    now: () => new Date(),
+  }),
+);
+
+export const inventoryFlowActions = lazyEnv(() =>
+  createInventoryFlowActions({
+    flows: adminStores().flows,
+    inventory: adminStores().inventory,
+    unitPath: async (id) => {
+      const unit = await adminStores().orgUnits.get(id);
+      return unit ? orgUnitPath(unit) : null;
+    },
+    chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    committeeRole: (userId, eventId) => committeeRoleOf()(userId, eventId),
     now: () => new Date(),
   }),
 );
@@ -1353,6 +1369,10 @@ export const adminReads = {
   listSponsors: () => adminStores().sponsors.listForAdmin(),
   listInventory: () => adminStores().inventory.list(),
   listLoans: () => adminStores().loans.list(),
+  listReservations: () => adminStores().flows.listReservations(),
+  listContributions: () => adminStores().flows.listContributions(),
+  listProcurement: () => adminStores().flows.listProcurement(),
+  listOutsideLoans: () => adminStores().flows.listOutside(),
   inventoryLog: (limit: number) => adminStores().inventory.log(null, limit),
   listDonationChannels: () => adminStores().donations.listChannels(),
   listDonations: () => adminStores().donations.list(),

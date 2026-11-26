@@ -67,6 +67,7 @@ const told: string[] = [];
 const actions = () =>
   createEventActions({
     events: store,
+    releaseReservations: () => Promise.resolve(),
     notify: {
       approvalAsked: (e) => Promise.resolve(void told.push(`asked:${e.id}`)),
       approvalDecided: (e, approved, by) =>

@@ -1,6 +1,8 @@
 import type { AuditEvent, Snapshot } from "@website/audit";
 import {
   assertNotInPast,
+  assertNotReserved,
+  reservedDuring,
   assertNotOwnLoan,
   assertStep,
   isListed,
@@ -13,6 +15,7 @@ import {
   type LoanStep,
   type MemberLoanInput,
   type OutsiderLoanInput,
+  type Reservation,
 } from "@website/domain/inventory";
 import { RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
@@ -67,6 +70,20 @@ const loanSnapshot = (l: Loan): Snapshot => ({
 export type LoanAudit = (before: Snapshot, after: Snapshot, loan: Loan) => AuditEvent;
 
 const MAX_LIST = 2000;
+
+/** The reservations of an item, read inside the transaction (N7.3). */
+export async function reservationsOf(db: Database, tx: Transaction, itemId: string) {
+  const snapshot = await tx.get(db.collection("itemReservations").where("itemId", "==", itemId));
+  return snapshot.docs.map(
+    (d): Pick<Reservation, "itemId" | "quantity" | "from" | "to" | "status"> => ({
+      itemId,
+      quantity: d.get("quantity") as number,
+      from: d.get("from") as string,
+      to: d.get("to") as string,
+      status: d.get("status") as Reservation["status"],
+    }),
+  );
+}
 
 /** What a loan row stores beyond the fields every step keeps. */
 const storedLoan = (l: Loan) => ({
@@ -171,6 +188,9 @@ export function createSqlLoanStore(db: Database) {
         if (item.deletedAt || item.condition === "retired") {
           throw new RuleViolationError("This item is no longer lent out.");
         }
+        // Units an event has blocked on the loan's days are not for lending (N7.3).
+        const reserved = reservedDuring(await reservationsOf(db, tx, item.id), item.id, loan);
+        assertNotReserved(item.available, reserved, loan.quantity);
         const available = takeFromShelf(item, loan.quantity);
         const next: Loan = { ...loan, status: "handed_over", handedOverAt: now };
         const log = await audit.begin(tx);
@@ -272,6 +292,12 @@ export function createSqlLoanWebStore(db: Database) {
       if (input.quantity > item.total) {
         throw new RuleViolationError(`There are only ${item.total} of this item.`);
       }
+      // A request that overlaps an event's reservation of the item is refused with the reason (N7.3).
+      assertNotReserved(
+        item.total,
+        reservedDuring(await reservationsOf(db, tx, item.id), item.id, input),
+        input.quantity,
+      );
       const loan: Loan = {
         id,
         itemId: input.itemId,

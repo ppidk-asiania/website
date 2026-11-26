@@ -131,6 +131,7 @@ beforeEach(async () => {
   formStore = createSqlFormStore(fake.db as unknown as Db);
   const event = await createEventActions({
     events,
+    releaseReservations: () => Promise.resolve(),
     notify: {
       approvalAsked: () => Promise.resolve(),
       approvalDecided: () => Promise.resolve(),

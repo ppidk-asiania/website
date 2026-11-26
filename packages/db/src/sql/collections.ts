@@ -90,4 +90,8 @@ export const COLLECTIONS = [
   "inventoryItems",
   "inventoryLog",
   "itemLoans",
+  "itemReservations",
+  "itemContributions",
+  "procurementRequests",
+  "outsideLoans",
 ] as const;

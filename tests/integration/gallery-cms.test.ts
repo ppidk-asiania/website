@@ -59,6 +59,7 @@ const gallery = () => createGalleryActions({ albums, events, now: () => now });
 const eventActions = () =>
   createEventActions({
     events,
+    releaseReservations: () => Promise.resolve(),
     notify: {
       approvalAsked: () => Promise.resolve(),
       approvalDecided: () => Promise.resolve(),
