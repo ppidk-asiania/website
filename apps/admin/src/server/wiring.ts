@@ -82,6 +82,7 @@ import { createCommitteeActions, createCommitteeRoles } from "./event-committee"
 import { createEventCertificateActions } from "./event-certificates";
 import { committeeRole } from "@website/domain/events";
 import { createDonationActions } from "./donations";
+import { createInventoryActions } from "./inventory";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
@@ -227,6 +228,18 @@ export const orgDocumentActions = lazyEnv(() =>
 
 export const sponsorActions = lazyEnv(() =>
   createSponsorActions({ sponsors: adminStores().sponsors, now: () => new Date() }),
+);
+
+export const inventoryActions = lazyEnv(() =>
+  createInventoryActions({
+    inventory: adminStores().inventory,
+    unitPath: async (id) => {
+      const unit = await adminStores().orgUnits.get(id);
+      return unit ? orgUnitPath(unit) : null;
+    },
+    chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    now: () => new Date(),
+  }),
 );
 
 export const donationActions = lazyEnv(() =>
@@ -1297,6 +1310,8 @@ export const adminReads = {
   listAlbums: () => adminStores().galleries.listForAdmin(),
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
   listSponsors: () => adminStores().sponsors.listForAdmin(),
+  listInventory: () => adminStores().inventory.list(),
+  inventoryLog: (limit: number) => adminStores().inventory.log(null, limit),
   listDonationChannels: () => adminStores().donations.listChannels(),
   listDonations: () => adminStores().donations.list(),
   seats: (uid: string) => adminStores().appointments.activeSeats(uid),

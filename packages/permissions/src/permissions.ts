@@ -27,6 +27,10 @@ export const ADMIN_PAGES = {
   registrants: { label: "Event registrants", extras: { export: "Export registrants" } },
   gallery: { label: "Gallery" },
   sponsors: { label: "Sponsors (directory and sponsorship page)" },
+  inventory: {
+    label: "Inventory (items, stock, loans)",
+    extras: { approve: "Approve or reject requests, hand items over and take them back" },
+  },
   articles: { label: "Article", extras: { publish: "Publish" } },
   newsletter: {
     label: "Newsletter",

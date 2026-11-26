@@ -381,6 +381,12 @@ server (the page stays small; no list of thousands of names is sent to the brows
 rejected proposals are never listed and no member counts are shown (small groups). Cached for
 minutes (`cacheTag("universities")`). Code: `apps/web/src/server/universities-directory.ts`.
 
+## Inventory
+
+`/inventory` (footer link) lists the equipment the organisation lends: published items that are
+not retired, each with "N available" (or "All out on loan"). Hidden, retired and deleted items are
+never listed. Cached for minutes (`cacheTag("inventory")`). Code: `apps/web/src/server/inventory.ts`.
+
 ## Configuration
 
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, `RECAPTCHA_MIN_SCORE` (captcha);

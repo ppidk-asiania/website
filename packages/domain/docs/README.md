@@ -8,6 +8,7 @@
 | [gallery.md](gallery.md)           | Gallery albums: event, 1–10 images, external album link      |
 | [organization.md](organization.md) | Chapters (PPI Negara), the map and member councils           |
 | [forms.md](forms.md)               | Forms: question types, versions frozen once answered         |
+| [inventory.md](inventory.md)       | Inventory: items, stock, loans, reservations, contributions  |
 | [recruitment.md](recruitment.md)   | Recruitment (Oprec): set-up, seats, applying, next action    |
 | [documents.md](documents.md)       | Letters: numbers, desks, verification, certificates          |
 | [programs.md](programs.md)         | OKR, work programmes, LPJ, period report card                |

@@ -301,6 +301,16 @@ export {
   type SqlSponsorStore,
 } from "./sponsors";
 export {
+  createSqlInventoryReader,
+  createSqlInventoryStore,
+  itemSnapshot,
+  toItem,
+  writeLog,
+  type ItemAudit,
+  type SqlInventoryReader,
+  type SqlInventoryStore,
+} from "./inventory";
+export {
   channelSnapshot,
   createSqlDonationStore,
   createSqlDonationWebStore,

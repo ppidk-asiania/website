@@ -75,6 +75,7 @@ const SUBPATHS = {
       "recruitment",
       "documents",
       "meetings",
+      "inventory",
       "shared",
     ],
   },

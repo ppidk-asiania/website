@@ -87,4 +87,6 @@ export const COLLECTIONS = [
   "eventCommittees",
   "eventApplicants",
   "unitDocuments",
+  "inventoryItems",
+  "inventoryLog",
 ] as const;

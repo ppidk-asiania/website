@@ -48,6 +48,7 @@ const id = {
     documents: "Dokumen Organisasi",
     sponsorship: "Sponsor",
     donate: "Donasi",
+    inventory: "Inventaris",
     universities: "Universitas",
     privacy: "Kebijakan Privasi",
   },
@@ -590,6 +591,15 @@ const id = {
     supportersEmpty: "Belum ada pendukung yang tercatat.",
     anonymous: "Anonim",
   },
+  inventory: {
+    title: "Inventaris",
+    intro:
+      "Perlengkapan milik organisasi yang dapat dipinjam. Jumlah yang tersedia diperbarui oleh pengelolanya.",
+    empty: "Belum ada perlengkapan yang diterbitkan.",
+    available: "tersedia",
+    none: "Sedang habis dipinjam",
+    damaged: "Kondisi: rusak ringan",
+  },
   documents: {
     title: "Dokumen Organisasi",
     intro: "Anggaran dasar, pedoman, dan dokumen tetap organisasi.",
@@ -1020,6 +1030,7 @@ const en: Dictionary = {
     documents: "Organisation documents",
     sponsorship: "Sponsors",
     donate: "Donate",
+    inventory: "Inventory",
     universities: "Universities",
     privacy: "Privacy Policy",
   },
@@ -1565,6 +1576,15 @@ const en: Dictionary = {
     supporters: "Our supporters",
     supportersEmpty: "No supporters yet.",
     anonymous: "Anonymous",
+  },
+  inventory: {
+    title: "Inventory",
+    intro:
+      "Equipment the organisation owns and lends out. The number available is kept up to date by its keepers.",
+    empty: "No equipment has been published yet.",
+    available: "available",
+    none: "All out on loan",
+    damaged: "Condition: slightly damaged",
   },
   documents: {
     title: "Organisation documents",

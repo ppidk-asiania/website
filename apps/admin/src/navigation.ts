@@ -40,6 +40,7 @@ export const ADMIN_NAVIGATION: readonly NavEntry[] = [
   { group: "Content", label: "Newsletter", href: "/newsletter", permission: "newsletter.read" },
   { group: "Content", label: "Forms", href: "/forms", permission: "forms.read" },
   { group: "Content", label: "Sponsors", href: "/sponsors", permission: "sponsors.read" },
+  { group: "Organization", label: "Inventory", href: "/inventory", permission: "inventory.read" },
   {
     group: "Organization",
     label: "Recruitment",

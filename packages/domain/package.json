@@ -19,6 +19,7 @@
     "./documents": "./src/documents/index.ts",
     "./programs": "./src/programs/index.ts",
     "./finance": "./src/finance/index.ts",
+    "./inventory": "./src/inventory/index.ts",
     "./meetings": "./src/meetings/index.ts",
     "./links": "./src/links/index.ts",
     "./zoom": "./src/zoom/index.ts",
