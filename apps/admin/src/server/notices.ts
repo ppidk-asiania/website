@@ -398,7 +398,34 @@ export function createNotices(deps: NoticeDeps) {
       );
     });
 
+  // One decision per applicant (it cannot be decided twice), so the key needs no time.
+  const eventPlacement = (
+    event: EventEntity,
+    uid: string,
+    placement: { seat: string; division: string } | null,
+  ) =>
+    safely("eventPlacement", event.id, async () => {
+      const [id, en] = placement
+        ? [
+            `Kamu diterima sebagai ${placement.seat} di ${placement.division}.`,
+            `You are accepted as ${placement.seat} of ${placement.division}.`,
+          ]
+        : [
+            "Lamaranmu untuk kepanitiaan belum diterima. Terima kasih atas minatmu.",
+            "Your committee application was not accepted. Thank you for your interest.",
+          ];
+      await tell(
+        [uid],
+        {
+          subject: `Panitia / Committee: ${event.title}`,
+          text: `${both(id, en)}\n\n${deps.webUrl}/events/${event.slug}`,
+        },
+        (to) => `event:${event.id}:placement:${to}`,
+      );
+    });
+
   return {
+    eventPlacement,
     application,
     proof,
     letter,

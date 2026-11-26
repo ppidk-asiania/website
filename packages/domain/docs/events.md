@@ -170,6 +170,27 @@ manual` (self check-in, main plan 9.4/2, is not built yet). Manual check-in show
 - Lock: 14 days after the event ends (its start when it has no end), the seat gives no rights any more.
 - Not built: the board managing its own committee, board editing the event, album upload, responsible units of
   an event, the SK draft from this list, the registrants table with column filters.
+
+### Volunteers and committee applications (N1.6)
+
+- No new form builder: the committee links up to four ordinary public forms (Forms page) in its "Applications"
+  block. Kind `volunteer` = a sign-up form (usually `guest`); kind `committee` = an application answered with an
+  account (`account` or `officers`). While a linked form is open, the public event page shows a button to it
+  ("Volunteer for this event", "Apply for the committee") unless the event is past or cancelled.
+- Placement: "Show applicants" lists the answers of each linked form (the newest 200: name, e-mail, answers).
+  Per answer the event board or an `events.edit` holder picks a division and a seat and presses Place, or
+  Reject. Place writes the seat into the committee and a decision row (`eventApplicants/{eventId}_{responseId}`)
+  in one transaction, so an answer is decided once and a person holds one seat. A volunteer whose e-mail is an
+  account gets a real seat; otherwise a typed helper with the name from the form.
+- Rules: nobody places themselves; the 14-day lock refuses everyone; the applicant (when an account) is told
+  "accepted as <seat> of <division>" or that the application was not accepted (one notice per answer).
+- Not built: a system question "division, first and second choice" built from the divisions (the form asks the
+  question as an ordinary choice question), one volunteer e-mail per event as a rule of its own (a guest form can
+  be linked once per event; a repeat answer is refused as a second seat), the invite e-mail for a volunteer
+  without an account, after-submit text and group link per form, a "my placement" page (N3.2).
+- Code: `apps/admin/src/server/event-committee.ts` (`applicants`, `place`), `packages/db/src/sql/event-committees.ts`
+  (`decide`, `decisionsOf`), `apps/web/src/server/events.ts` (`eventCommitteeCalls`). Tests:
+  `tests/integration/events-committee.test.ts`.
 - Code: `packages/domain/src/events/committee.ts`, `packages/db/src/sql/event-committees.ts`,
   `apps/admin/src/server/event-committee.ts`, `apps/admin/src/components/event-committee-panel.tsx`. Tests:
   `tests/unit/events-committee.test.ts`, `tests/integration/events-committee.test.ts`, seat cases in

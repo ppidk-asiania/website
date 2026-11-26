@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditEvent } from "@website/audit";
 import { createSqlCommitteeStore, createSqlEventStore } from "@website/db/sql";
-import type { EventEntity } from "@website/domain/events";
+import type { CommitteeRole, EventEntity } from "@website/domain/events";
+import type { Form, FormResponse } from "@website/domain/forms";
 import { normalizePermissions, type Principal } from "@website/permissions";
 import { createCommitteeActions } from "../../apps/admin/src/server/event-committee";
 import { fakeDb } from "../support/fake-db";
@@ -46,7 +47,11 @@ const auditStub = (): AuditEvent => ({
 
 let fake: ReturnType<typeof fakeDb>;
 let eventId = "";
-const input = (version: number | null, members: unknown[] = []) => ({
+const input = (
+  version: number | null,
+  members: unknown[] = [],
+  applicationForms: unknown[] = [],
+) => ({
   eventId,
   version,
   committee: {
@@ -55,12 +60,43 @@ const input = (version: number | null, members: unknown[] = []) => ({
       { id: "logi", name: "Logistics", parentId: null, quota: null, description: "" },
     ],
     members,
+    applicationForms,
   },
+});
+let clock = now;
+let seat: CommitteeRole | null = null;
+let accounts = new Map<string, string>();
+const placed = vi.fn(
+  (_event: EventEntity, _uid: string, _placement: { seat: string; division: string } | null) =>
+    Promise.resolve(),
+);
+const form = (respondents: Form["respondents"], id = "f1"): Form =>
+  ({ id, title: "Join", usage: "public", respondents, deletedAt: null }) as unknown as Form;
+let forms: Record<string, Form> = {};
+let responses: FormResponse[] = [];
+const response = (id: string, extra: Partial<FormResponse>): FormResponse => ({
+  id,
+  formId: "f1",
+  version: 1,
+  answers: {},
+  submittedAt: now,
+  ...extra,
 });
 const actions = () =>
   createCommitteeActions({
     events: createSqlEventStore(fake.db as unknown as Db),
     committees: createSqlCommitteeStore(fake.db as unknown as Db),
+    committeeRole: () => Promise.resolve(seat),
+    forms: {
+      get: (id: string) => Promise.resolve(forms[id] ?? null),
+      listResponses: () => Promise.resolve(responses),
+      getVersion: () => Promise.resolve(null),
+    },
+    accountByEmail: (email: string) => {
+      const uid = accounts.get(email);
+      return Promise.resolve(uid ? { uid } : null);
+    },
+    notify: { placed },
     users: (uids) =>
       Promise.resolve(
         new Map(
@@ -70,11 +106,17 @@ const actions = () =>
         ),
       ),
     findPeople: () => Promise.resolve([{ uid: "u1", name: "Name u1", email: "u1@x.org" }]),
-    now: () => now,
+    now: () => clock,
   });
 
 beforeEach(async () => {
   fake = fakeDb();
+  clock = now;
+  seat = null;
+  accounts = new Map();
+  forms = { f1: form("guest"), f2: form("account", "f2") };
+  responses = [];
+  placed.mockClear();
   const events = createSqlEventStore(fake.db as unknown as Db);
   const base = {
     slug: "s",
@@ -142,5 +184,94 @@ describe("event committee actions (N1.5)", () => {
     expect(await actions().save(...as(editor))(input(null))).toMatchObject({ ok: false });
     const gone = [{ userId: "gone", name: "", divisionId: "board", seat: "member" }];
     expect(await actions().save(...as(editor))(input(1, gone))).toMatchObject({ error: "refused" });
+  });
+});
+
+describe("committee applications (N1.6)", () => {
+  const setUp = async (linked = [{ formId: "f1", kind: "volunteer" }]) => {
+    await actions().save(...as(editor))(input(null, [], linked));
+  };
+  const place = (who: Principal, responseId: string, placement: unknown) =>
+    actions().place(...as(who))({ eventId, formId: "f1", responseId, placement });
+  const asSeat = { outcome: "placed", divisionId: "logi", seat: "member" } as const;
+
+  it("links only public forms, and a committee application needs an account form", async () => {
+    forms["f1"] = { ...form("guest"), usage: "recruitment" };
+    expect(
+      await actions().save(...as(editor))(input(null, [], [{ formId: "f1", kind: "volunteer" }])),
+    ).toMatchObject({ error: "refused" });
+    forms["f1"] = form("guest");
+    expect(
+      await actions().save(...as(editor))(input(null, [], [{ formId: "f1", kind: "committee" }])),
+    ).toMatchObject({ error: "refused" });
+    expect(
+      await actions().save(...as(editor))(input(null, [], [{ formId: "f2", kind: "committee" }])),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("a placement writes the seat once; a second decision on the same answer is refused", async () => {
+    await setUp();
+    accounts.set("ana@x.org", "ana");
+    responses = [response("r1", { name: "Ana", email: "ana@x.org" })];
+    expect(await place(editor, "r1", asSeat)).toMatchObject({ ok: true, data: { placed: true } });
+    expect(await place(editor, "r1", asSeat)).toMatchObject({ error: "refused" });
+    expect(await actions().load(...as(editor))({ eventId })).toMatchObject({
+      data: { members: [{ userId: "ana", divisionId: "logi", seat: "member" }] },
+    });
+    expect(placed).toHaveBeenCalledTimes(1);
+    expect(placed).toHaveBeenCalledWith(expect.anything(), "ana", {
+      seat: "member",
+      division: "Logistics",
+    });
+  });
+
+  it("a volunteer without an account becomes a typed helper and is not told", async () => {
+    await setUp();
+    responses = [response("r1", { name: "Pak Budi", email: "budi@x.org" })];
+    await place(editor, "r1", asSeat);
+    expect(await actions().load(...as(editor))({ eventId })).toMatchObject({
+      data: { members: [{ userId: null, name: "Pak Budi" }] },
+    });
+    expect(placed).not.toHaveBeenCalled();
+  });
+
+  it("a rejection writes no seat and tells the applicant", async () => {
+    await setUp();
+    responses = [response("r1", { uid: "u1", name: "Ana" })];
+    await place(editor, "r1", { outcome: "rejected" });
+    expect(await actions().load(...as(editor))({ eventId })).toMatchObject({
+      data: { members: [] },
+    });
+    expect(placed).toHaveBeenCalledWith(expect.anything(), "u1", null);
+    const listed = await actions().applicants(...as(editor))({ eventId });
+    expect(listed).toMatchObject({ data: [{ rows: [{ responseId: "r1", outcome: "rejected" }] }] });
+  });
+
+  it("nobody places themselves; a person holds one seat", async () => {
+    await setUp();
+    responses = [
+      response("r1", { uid: "staff-1", name: "Me" }),
+      response("r2", { uid: "u1", name: "Ana" }),
+    ];
+    expect(await place(editor, "r1", asSeat)).toMatchObject({ error: "refused" });
+    expect(await place(editor, "r2", asSeat)).toMatchObject({ ok: true });
+    responses = [...responses, response("r3", { uid: "u1", name: "Ana again" })];
+    expect(await place(editor, "r3", asSeat)).toMatchObject({ error: "refused" });
+  });
+
+  it("the event board may place, a plain seat and strangers may not; the lock holds", async () => {
+    await setUp();
+    responses = [response("r1", { uid: "u1", name: "Ana" })];
+    const nobody = staff(["events.read"]);
+    seat = "member";
+    expect(await place(nobody, "r1", asSeat)).toMatchObject({ error: "forbidden" });
+    expect(await actions().applicants(...as(nobody))({ eventId })).toMatchObject({
+      error: "forbidden",
+    });
+    seat = "board";
+    clock = new Date("2026-12-10T00:00:00Z");
+    expect(await place(nobody, "r1", asSeat)).toMatchObject({ error: "refused" });
+    clock = now;
+    expect(await place(nobody, "r1", asSeat)).toMatchObject({ ok: true });
   });
 });

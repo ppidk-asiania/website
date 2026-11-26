@@ -93,3 +93,11 @@ export async function saveCommitteeAction(input: unknown) {
 export async function findCommitteePeopleAction(input: unknown) {
   return committeeActions().findPeople(getPrincipal, getAuditContext)(input);
 }
+
+export async function listCommitteeApplicantsAction(input: unknown) {
+  return committeeActions().applicants(getPrincipal, getAuditContext)(input);
+}
+
+export async function placeCommitteeApplicantAction(input: unknown) {
+  return committeeActions().place(getPrincipal, getAuditContext)(input);
+}

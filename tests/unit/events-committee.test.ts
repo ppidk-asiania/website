@@ -60,6 +60,15 @@ describe("committee input", () => {
     expect(CommitteeInputSchema.safeParse(valid).success).toBe(true);
   });
 
+  it("links a form once, at most four, and defaults to none", () => {
+    expect(CommitteeInputSchema.parse(valid).applicationForms).toEqual([]);
+    const link = { formId: "f1", kind: "volunteer" };
+    expect(refused({ ...valid, applicationForms: [link, link] })).toBe(true);
+    const many = ["a", "b", "c", "d", "e"].map((formId) => ({ formId, kind: "committee" }));
+    expect(refused({ ...valid, applicationForms: many })).toBe(true);
+    expect(refused({ ...valid, applicationForms: [{ formId: "f1", kind: "other" }] })).toBe(true);
+  });
+
   it("gives a person one seat", () => {
     expect(refused({ ...valid, members: [member("boss", "board"), member("boss", "door")] })).toBe(
       true,

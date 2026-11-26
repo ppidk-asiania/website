@@ -314,4 +314,5 @@ export {
   type CommitteeAudit,
   type SqlCommitteeStore,
   type StoredCommittee,
+  type StoredDecision,
 } from "./event-committees";

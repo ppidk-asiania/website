@@ -27,9 +27,19 @@ export interface CommitteeMember {
   readonly seat: CommitteeSeat;
 }
 
+/** A form that fills the committee (N1.6): a volunteer sign-up (guest form) or an application of accounts. */
+export const APPLICATION_KINDS = ["volunteer", "committee"] as const;
+export type ApplicationKind = (typeof APPLICATION_KINDS)[number];
+export interface ApplicationForm {
+  readonly formId: string;
+  readonly kind: ApplicationKind;
+}
+
 export interface EventCommittee {
   readonly divisions: readonly Division[];
   readonly members: readonly CommitteeMember[];
+  /** The forms whose answers are placed into the committee; absent = none. */
+  readonly applicationForms?: readonly ApplicationForm[];
 }
 
 export const CommitteeInputSchema = z
@@ -59,6 +69,10 @@ export const CommitteeInputSchema = z
           .strict(),
       )
       .max(300),
+    applicationForms: z
+      .array(z.object({ formId: safeId, kind: z.enum(APPLICATION_KINDS) }).strict())
+      .max(4)
+      .default([]),
   })
   .strict()
   .superRefine((committee, ctx) => {
@@ -85,6 +99,11 @@ export const CommitteeInputSchema = z
       issue("Each division needs its own name.", ["divisions"]);
     }
     const seen = new Set<string>();
+    if (
+      new Set(committee.applicationForms.map((f) => f.formId)).size !==
+      committee.applicationForms.length
+    )
+      issue("A form is linked once.", ["applicationForms"]);
     committee.members.forEach((m, i) => {
       if (!ids.has(m.divisionId)) issue("Choose a division of this committee.", ["members", i]);
       if (m.userId === null && m.name === "")
@@ -166,3 +185,12 @@ export const COMMITTEE_TEMPLATES: Readonly<
     { name: "Venue", parent: "Logistics", quota: 3 },
   ],
 };
+
+/** How one applicant ended: placed in a division with a seat, or rejected (N1.6). */
+export const PlacementSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({ outcome: z.literal("placed"), divisionId: safeId, seat: z.enum(COMMITTEE_SEATS) })
+    .strict(),
+  z.object({ outcome: z.literal("rejected") }).strict(),
+]);
+export type Placement = z.infer<typeof PlacementSchema>;

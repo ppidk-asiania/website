@@ -50,7 +50,7 @@ import {
   type EventTab,
 } from "./events-model";
 import { Select } from "@/components/ui/select";
-import { EventCommitteePanel } from "./event-committee-panel";
+import { EventCommitteePanel, type PublicFormChoice } from "./event-committee-panel";
 import { EventRegistrationPanel, type RegistrationFormChoice } from "./event-registration-panel";
 import { downloadCsv } from "@/components/csv";
 
@@ -151,6 +151,8 @@ interface EventsListProps {
   canSeeRegistrants: boolean;
   /** The events the viewer serves on through a committee seat (N1.5): their role there. */
   serving: Record<string, "board" | "member">;
+  /** Public forms an event may link to fill its committee (N1.6). */
+  publicForms: PublicFormChoice[];
   canCheckPayments: boolean;
   forms: readonly RegistrationFormChoice[];
   publicBase: string;
@@ -188,6 +190,7 @@ function EventsList({
   canPublish,
   canSeeRegistrants,
   serving,
+  publicForms,
   canCheckPayments,
   forms,
   publicBase,
@@ -1148,6 +1151,7 @@ function EventsList({
           {editing && canEdit ? (
             <EventCommitteePanel
               key={`committee:${editing.id}`}
+              forms={publicForms}
               eventId={editing.id}
               show={toast.show}
             />

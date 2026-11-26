@@ -85,5 +85,6 @@ export const COLLECTIONS = [
   "donationChannels",
   "donations",
   "eventCommittees",
+  "eventApplicants",
   "unitDocuments",
 ] as const;

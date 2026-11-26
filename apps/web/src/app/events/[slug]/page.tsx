@@ -5,7 +5,7 @@ import { isPast, isRegistrationOpen } from "@website/domain/events";
 import { formatMoney, isValidSlug } from "@website/domain/shared";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { cityOf, formatEventDate, formatEventTimeRange } from "@/lib/event-time";
-import { publicEventBySlug } from "@/server/events";
+import { eventCommitteeCalls, publicEventBySlug } from "@/server/events";
 import { publicAlbumForEvent } from "@/server/gallery";
 import { getSignedInUser } from "@/server/session";
 import { RegisterButton } from "./register-button";
@@ -40,9 +40,10 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
     now,
   );
   const past = isPast(event, now);
-  const [user, album] = await Promise.all([
+  const [user, album, calls] = await Promise.all([
     open && !event.registrationUrl && !event.registration ? getSignedInUser() : null,
     open ? null : publicAlbumForEvent(event.id),
+    past || event.cancelledAt ? [] : eventCommitteeCalls(event.id, now),
   ]);
   const hasRecap = event.finalAttendance !== null || event.attendanceNote || event.recapUrl;
 
@@ -128,6 +129,11 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
                 {t.events.register}
               </a>
             )}
+            {calls.map((call) => (
+              <a key={call.token} className="site-event__button" href={`/f/${call.token}`}>
+                {call.kind === "volunteer" ? t.events.volunteer : t.events.joinCommittee}
+              </a>
+            ))}
           </div>
           {event.fee && (
             <p className="site-muted">

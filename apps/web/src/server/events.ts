@@ -2,6 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
 import {
+  createSqlCommitteeStore,
   createSqlEventReader,
   createSqlFormWebStore,
   createSqlRegistrationStore,
@@ -16,7 +17,8 @@ import { createEventProofUpload } from "./event-proof";
 import { getWebEnv } from "./env";
 import { messenger } from "./messaging";
 import { hasCompleteProfile } from "./profile-wiring";
-import { publicFormByToken } from "./forms-wiring";
+import { formWindow } from "@website/domain/forms";
+import { publicFormByToken, publishedPublicForms } from "./forms-wiring";
 import {
   createEventFormRegistration,
   createEventRegistration,
@@ -38,6 +40,21 @@ export async function publicEventBySlug(slug: string): Promise<PublicEvent | nul
   cacheTag("events");
   cacheLife("minutes");
   return reader().findPublishedBySlug(slug);
+}
+
+const committees = lazyEnv(() => createSqlCommitteeStore(webDb()));
+
+/** The open forms an event links to fill its committee (N1.6): volunteer sign-up and committee applications. */
+export async function eventCommitteeCalls(eventId: string, now: Date) {
+  const links = (await committees().get(eventId))?.applicationForms ?? [];
+  if (links.length === 0) return [];
+  const open = await publishedPublicForms();
+  return links.flatMap((link) => {
+    const form = open.find((f) => f.id === link.formId);
+    return form && form.publicToken && formWindow(form, now) === "open"
+      ? [{ kind: link.kind, title: form.title, token: form.publicToken }]
+      : [];
+  });
 }
 
 const forms = lazyEnv(() => createSqlFormWebStore(webDb()));

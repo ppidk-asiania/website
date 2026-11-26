@@ -166,6 +166,10 @@ export const eventRegistrationActions = lazyEnv(() =>
 
 export const committeeActions = lazyEnv(() =>
   createCommitteeActions({
+    committeeRole: (userId, eventId) => committeeRoleOf()(userId, eventId),
+    forms: adminStores().forms,
+    accountByEmail: (email) => adminStores().accounts.findByEmail(email),
+    notify: { placed: (event, uid, placement) => notices().eventPlacement(event, uid, placement) },
     events: adminStores().events,
     committees: adminStores().committees,
     users: (uids) => adminStores().accounts.getMany(uids),
