@@ -82,5 +82,7 @@ export const COLLECTIONS = [
   "whatsappLinkCodes",
   "orgDocuments",
   "sponsors",
+  "donationChannels",
+  "donations",
   "unitDocuments",
 ] as const;

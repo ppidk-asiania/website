@@ -108,6 +108,7 @@ export const ADMIN_PAGES = {
       pay: "Mark requests paid with proof of transfer",
       cashbook: "Write manual cash book entries (treasurer)",
       export: "Export the cash report (CSV, PDF)",
+      donations: "Manage donation channels and verify or reject donations",
     },
   },
   meetings: {

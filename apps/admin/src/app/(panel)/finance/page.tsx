@@ -53,6 +53,7 @@ export default async function AdminFinancePage() {
         authorize: canInSomeScope(principal, "finance.authorize"),
         pay: canInSomeScope(principal, "finance.pay"),
         cashbook: can(principal, "finance.cashbook") || can(principal, "finance.export"),
+        donations: can(principal, "finance.donations"),
       }}
     />
   );

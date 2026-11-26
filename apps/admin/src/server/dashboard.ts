@@ -29,6 +29,8 @@ interface QueueSources {
   events: EventEntity[];
   /** One item per proof of payment waiting for a check (N1.3). */
   payments: { chapterId: string | null }[];
+  /** One item per donation waiting for a check (N5.4). */
+  donations: { chapterId: string | null }[];
 }
 type Waiting<K extends keyof QueueSources> = (
   item: QueueSources[K][number],
@@ -114,6 +116,13 @@ export const DASHBOARD_QUEUES = [
     source: "payments",
     waiting: () => true,
   }),
+  queue({
+    label: "Donations waiting for a check",
+    href: "/finance/donations",
+    permission: "finance.donations",
+    source: "donations",
+    waiting: () => true,
+  }),
 ];
 
 export function createDashboard(deps: {
@@ -126,6 +135,7 @@ export function createDashboard(deps: {
   revisions: (periodId: string) => Promise<ProgramRevision[]>;
   events: () => Promise<EventEntity[]>;
   payments: () => Promise<{ chapterId: string | null }[]>;
+  donations: () => Promise<{ chapterId: string | null }[]>;
   myTasks: (uid: string) => Promise<Task[]>;
   now: () => Date;
 }) {
@@ -138,19 +148,38 @@ export function createDashboard(deps: {
     const queues = DASHBOARD_QUEUES.filter((q) => canInSomeScope(principal, q.permission));
     const uses = (source: keyof QueueSources) => queues.some((q) => q.source === source);
     const period = await deps.activePeriod();
-    const [graduated, secretariat, finance, lpj, zoom, revisions, events, payments, tasks] =
-      await Promise.all([
-        can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
-        watchesLpj ? deps.lpjSecretariatHolders() : null,
-        period && uses("finance") ? deps.finance(period.id) : [],
-        period && uses("lpj") ? deps.lpj(period.id) : [],
-        uses("zoom") ? deps.zoom(now) : [],
-        period && uses("revisions") ? deps.revisions(period.id) : [],
-        uses("events") ? deps.events() : [],
-        uses("payments") ? deps.payments() : [],
-        deps.myTasks(principal.userId),
-      ]);
-    const sources: QueueSources = { finance, lpj, zoom, revisions, events, payments };
+    const [
+      graduated,
+      secretariat,
+      finance,
+      lpj,
+      zoom,
+      revisions,
+      events,
+      payments,
+      donationsWaiting,
+      tasks,
+    ] = await Promise.all([
+      can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
+      watchesLpj ? deps.lpjSecretariatHolders() : null,
+      period && uses("finance") ? deps.finance(period.id) : [],
+      period && uses("lpj") ? deps.lpj(period.id) : [],
+      uses("zoom") ? deps.zoom(now) : [],
+      period && uses("revisions") ? deps.revisions(period.id) : [],
+      uses("events") ? deps.events() : [],
+      uses("payments") ? deps.payments() : [],
+      uses("donations") ? deps.donations() : [],
+      deps.myTasks(principal.userId),
+    ]);
+    const sources: QueueSources = {
+      finance,
+      lpj,
+      zoom,
+      revisions,
+      events,
+      payments,
+      donations: donationsWaiting,
+    };
     return {
       queues: queues
         .map((q) => ({

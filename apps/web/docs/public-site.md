@@ -363,6 +363,15 @@ and lists the period's past events with their final attendance ("-" until it is 
 for minutes (`cacheTag("sponsors")`); a read failure on Home is logged as `home_sponsors_failed`.
 Managed on the admin Sponsors page. Code: `apps/web/src/server/sponsors.ts`.
 
+## Donate
+
+`/donate` (footer link): a signed-in member sees the published donation channels with their
+payment details (never cached, never shown to visitors), a form (channel, amount, message, "show my
+name", proof file) that posts to `/api/donations` (query string plus the file as body, like the event
+proof), and the donor gets a receipt e-mail. Everyone sees the Supporters wall (names or
+"Anonymous", no amounts; cached for minutes, `cacheTag("supporters")`). Managed on the admin
+Finance > Donations page. Code: `apps/web/src/server/donations.ts`, `donation-upload.ts`.
+
 ## Universities directory
 
 `/universities` (footer link) lists the approved campuses (`universities`, status `approved`) of

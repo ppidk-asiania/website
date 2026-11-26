@@ -174,6 +174,25 @@ Imported with the programmes (`packages/domain/docs/programs.md` → Import from
   `cashEntries/ppidk-cash-<id>` with their category (`saldo_awal` → opening_balance, `lain` →
   other_in / other_out, …) and their first `bukti` PDF as proof.
 
+## Donations (N5.4)
+
+Money is sent outside the platform (DEC-26). `donationChannels` (label, how to send, QR image,
+currency, published) are managed on the admin Finance > Donations page with the extra
+`finance.donations`. A signed-in member opens `/donate`, picks a published channel, types the
+amount (converted to minor units with the channel's currency), an optional message, "show my name"
+and uploads an image or PDF proof (private, up to 5 MB): `donations/{id}` is `pending`. A holder of
+`finance.donations` verifies or rejects it (a rejection needs a reason; the donor is told); the
+verifier is never the donor. Verify is one transaction: the donation becomes `verified` and ONE
+cash book income line (`cashEntryFromDonation`: category donation, source donation, id = donation
+id) is written; a second verify writes nothing. The wall of supporters (`/donate`) lists verified
+donations by name only when the donor chose it (otherwise "Anonymous") and never shows amounts. A
+hidden channel takes no new donation but keeps its past ones. `finance.export` downloads all
+donations as CSV (the export is logged). The dashboard queue "Donations waiting for a check" goes
+to `finance.donations`. Not built: online payment, recurring donations, tax receipts, a new proof
+after a rejection (the donor sends a new donation). Code: `packages/domain/src/organizations/donations.ts`,
+`packages/db/src/sql/donations.ts`, `apps/admin/src/server/donations.ts`,
+`apps/web/src/server/donation-upload.ts`. Tests: `tests/integration/donations.test.ts`.
+
 ## Assumptions
 
 - `programId` (optional) must be a programme of the active period; the admin save checks it.

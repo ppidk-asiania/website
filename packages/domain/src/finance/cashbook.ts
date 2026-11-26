@@ -51,7 +51,7 @@ export type CashEntryInput = z.infer<typeof CashEntryInputSchema>;
 export interface CashEntry extends CashEntryInput {
   readonly id: string;
   readonly periodId: string;
-  readonly source: "request" | "manual" | "event";
+  readonly source: "request" | "manual" | "event" | "donation";
   readonly requestId: string | null;
   readonly proof: FinanceFile | null;
   readonly createdBy: string;

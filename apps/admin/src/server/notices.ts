@@ -379,6 +379,25 @@ export function createNotices(deps: NoticeDeps) {
       );
     });
 
+  // A donation is decided once (rejected donations are not resent), so the id is enough for the key.
+  const donationDecided = (uid: string, id: string, verified: boolean, note: string | null) =>
+    safely("donationDecided", id, async () => {
+      const [idText, en] = verified
+        ? [
+            "Donasimu terverifikasi. Terima kasih atas dukunganmu!",
+            "Your donation is verified. Thank you for your support!",
+          ]
+        : ["Bukti donasimu belum diterima.", "Your proof of donation was not accepted."];
+      await tell(
+        [uid],
+        {
+          subject: "Donasi / Donation",
+          text: `${both(idText, en)}${note ? `\n\n${note}` : ""}\n\n${deps.webUrl}/donate`,
+        },
+        (to) => `donation:${id}:${verified ? "verified" : "rejected"}:${to}`,
+      );
+    });
+
   return {
     application,
     proof,
@@ -391,6 +410,7 @@ export function createNotices(deps: NoticeDeps) {
     eventApprovalDecided,
     eventCancelled,
     eventPaymentDecided,
+    donationDecided,
   };
 }
 

@@ -51,6 +51,7 @@ interface Props {
     authorize: boolean;
     pay: boolean;
     cashbook: boolean;
+    donations: boolean;
   };
 }
 
@@ -779,6 +780,11 @@ function FinanceList({ periodName, coordinatorTitle, initial: items, units, desk
             {desks.cashbook ? (
               <Button variant="outline" size="sm" icon="eye" href="/finance/cashbook">
                 Cash book
+              </Button>
+            ) : null}
+            {desks.donations ? (
+              <Button variant="outline" size="sm" icon="eye" href="/finance/donations">
+                Donations
               </Button>
             ) : null}
             {desks.edit ? (

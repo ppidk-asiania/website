@@ -77,6 +77,7 @@ import { createNewsletterActions } from "./newsletter";
 import { createNewsActions } from "./news";
 import { createOrgUnitActions } from "./org-units";
 import { createPeriodActions } from "./periods";
+import { createDonationActions } from "./donations";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
@@ -184,6 +185,19 @@ export const orgDocumentActions = lazyEnv(() =>
 
 export const sponsorActions = lazyEnv(() =>
   createSponsorActions({ sponsors: adminStores().sponsors, now: () => new Date() }),
+);
+
+export const donationActions = lazyEnv(() =>
+  createDonationActions({
+    donations: adminStores().donations,
+    storage: imageStorage(),
+    notify: {
+      decided: (uid, id, verified, note) => notices().donationDecided(uid, id, verified, note),
+    },
+    users: (uids) => adminStores().accounts.getMany(uids),
+    logExport: (actorId, details) =>
+      logSecurityEvent(adminStores().logger, { type: "data.export", actorId, details }),
+  }),
 );
 
 export const unitDocumentActions = lazyEnv(() =>
@@ -808,6 +822,10 @@ export const dashboard = lazyEnv(() =>
       const chapters = new Map(events.map((e) => [e.id, e.chapterId]));
       return waiting.map((w) => ({ chapterId: chapters.get(w.eventId) ?? null }));
     },
+    donations: async () =>
+      Array.from({ length: await adminStores().donations.countPending() }, () => ({
+        chapterId: null,
+      })),
     myTasks: (uid) => tasks().mine(uid),
     now: () => new Date(),
   }),
@@ -1200,6 +1218,8 @@ export const adminReads = {
   listAlbums: () => adminStores().galleries.listForAdmin(),
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
   listSponsors: () => adminStores().sponsors.listForAdmin(),
+  listDonationChannels: () => adminStores().donations.listChannels(),
+  listDonations: () => adminStores().donations.list(),
   seats: (uid: string) => adminStores().appointments.activeSeats(uid),
   listUnitDocuments: (periodId: string) => adminStores().unitDocuments.listForPeriod(periodId),
   listChapters: () => adminStores().chapters.listForAdmin(),
