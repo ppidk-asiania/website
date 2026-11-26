@@ -35,7 +35,8 @@ const FileSchema = z
   })
   .strict();
 
-const LinkSchema = z
+/** An https link, or empty for none (stored as null). */
+export const LinkSchema = z
   .string()
   .trim()
   .max(2000)

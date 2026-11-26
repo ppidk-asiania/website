@@ -81,5 +81,6 @@ export const COLLECTIONS = [
   "proofChecks",
   "whatsappLinkCodes",
   "orgDocuments",
+  "sponsors",
   "unitDocuments",
 ] as const;

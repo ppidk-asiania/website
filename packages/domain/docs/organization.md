@@ -214,6 +214,18 @@ through `documents.edit`. Code: `packages/domain/src/organizations/unit-document
 `packages/db/src/sql/unit-documents.ts`, `apps/admin/src/server/unit-documents.ts`. Tests:
 `tests/unit/unit-documents.test.ts`, `tests/integration/unit-documents.test.ts`.
 
+## Sponsors directory (admin Sponsors page)
+
+`sponsors` rows (name, tier platinum/gold/silver/partner, logo, https link, order inside the tier,
+published) belong to the board period that was active when the sponsor was added; an edit keeps
+that period. The public pages show the sponsors of the active period only, so activating a new
+period empties the home strip until the new board adds its own (there is no copy feature). Writes
+need `sponsors.edit`; delete is soft; the audit entries are not revertible. `reachRows` lists the
+past, uncancelled events of the period with their `finalAttendance` for the sponsorship page. Code:
+`packages/domain/src/organizations/sponsors.ts`, `packages/db/src/sql/sponsors.ts`,
+`apps/admin/src/server/sponsors.ts`. Tests: `tests/unit/sponsors.test.ts`,
+`tests/integration/sponsors.test.ts`.
+
 ## Configuration
 
 Logo and member-photo uploads need `FILE_STORAGE_DIR`.

@@ -77,6 +77,7 @@ import { createNewsletterActions } from "./newsletter";
 import { createNewsActions } from "./news";
 import { createOrgUnitActions } from "./org-units";
 import { createPeriodActions } from "./periods";
+import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
 import { createUniversityActions } from "./universities";
@@ -179,6 +180,10 @@ export const orgDocumentActions = lazyEnv(() =>
     now: () => new Date(),
     uuid: randomUUID,
   }),
+);
+
+export const sponsorActions = lazyEnv(() =>
+  createSponsorActions({ sponsors: adminStores().sponsors, now: () => new Date() }),
 );
 
 export const unitDocumentActions = lazyEnv(() =>
@@ -1194,6 +1199,7 @@ export const adminReads = {
     adminStores().forms.currentVersions(forms),
   listAlbums: () => adminStores().galleries.listForAdmin(),
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
+  listSponsors: () => adminStores().sponsors.listForAdmin(),
   seats: (uid: string) => adminStores().appointments.activeSeats(uid),
   listUnitDocuments: (periodId: string) => adminStores().unitDocuments.listForPeriod(periodId),
   listChapters: () => adminStores().chapters.listForAdmin(),

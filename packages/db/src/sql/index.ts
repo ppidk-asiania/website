@@ -290,3 +290,11 @@ export interface DatabaseRoleConfig {
 export function getDatabaseForRole(config: DatabaseRoleConfig): Database {
   return getDatabase({ url: config.url, connectionLimit: config.connectionLimit });
 }
+export {
+  createSqlSponsorReader,
+  createSqlSponsorStore,
+  sponsorSnapshot,
+  type DirectorySponsorFields,
+  type SqlSponsorReader,
+  type SqlSponsorStore,
+} from "./sponsors";

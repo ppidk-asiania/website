@@ -1901,12 +1901,10 @@
   width: auto;
 }
 
-.home-logos__mark--ebay {
-  width: 3.75rem;
-}
-
-.home-logos__mark--amazon {
-  width: 6.5rem;
+img.home-logos__mark {
+  max-height: 3rem;
+  max-width: 9rem;
+  object-fit: contain;
 }
 
 .home-logos__mark--text {

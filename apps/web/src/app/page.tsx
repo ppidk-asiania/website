@@ -8,6 +8,7 @@ import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { Localized } from "@/i18n/localized";
 import { publicEvents } from "@/server/events";
 import { publicNews } from "@/server/news";
+import { publicSponsors } from "@/server/sponsors";
 import { logger } from "@/server/session";
 
 interface FeaturedCard {
@@ -16,14 +17,38 @@ interface FeaturedCard {
   href: string;
 }
 
-const HOME_LOGOS: ReadonlyArray<{ src?: string; alt: string }> = [
-  { src: "/home/ebay.png", alt: "eBay" },
-  { src: "/home/amazon.png", alt: "amazon" },
-  { alt: "AJIO" },
-  { src: "/home/ebay.png", alt: "eBay" },
-  { src: "/home/amazon.png", alt: "amazon" },
-  { alt: "AJIO" },
-];
+/** The sponsors of the active period, from the directory; nothing is shown while there are none. */
+async function SponsorStrip() {
+  const language = languageFrom((await cookies()).get(LANG_COOKIE)?.value);
+  const { sponsors } = await publicSponsors().catch((error: unknown) => {
+    logger().error("home_sponsors_failed", { error: String(error) });
+    return { sponsors: [] };
+  });
+  if (sponsors.length === 0) return null;
+  return (
+    <section className="home-logos" aria-label={DICTIONARIES[language].home.sponsorLabel}>
+      <ol className="home-logos__list">
+        {sponsors.map((s) => (
+          <li key={s.id} className="home-logos__item">
+            <a href="/sponsorship">
+              {s.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- Storage serves sized WebP
+                <img
+                  className="home-logos__mark"
+                  src={s.logo.thumbUrl}
+                  alt={s.name}
+                  loading="lazy"
+                />
+              ) : (
+                <span className="home-logos__mark home-logos__mark--text">{s.name}</span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 async function LatestEvents() {
   const language = languageFrom((await cookies()).get(LANG_COOKIE)?.value);
@@ -160,29 +185,9 @@ export default function HomePage() {
         <LatestEvents />
       </Suspense>
       <section className="home-blank" aria-hidden="true" />
-      <Localized
-        render={(t) => (
-          <section className="home-logos" aria-label={t.home.sponsorLabel}>
-            <ol className="home-logos__list">
-              {HOME_LOGOS.map((logo, index) => (
-                <li key={`${logo.alt}-${index}`} className="home-logos__item">
-                  {logo.src ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- static brand logo PNGs
-                    <img
-                      className={`home-logos__mark home-logos__mark--${logo.alt.toLowerCase()}`}
-                      src={logo.src}
-                      alt={logo.alt}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="home-logos__mark home-logos__mark--text">{logo.alt}</span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-      />
+      <Suspense fallback={<LinesSkeleton lines={1} />}>
+        <SponsorStrip />
+      </Suspense>
       <Localized render={(t) => <PpiSlider t={t.home.slider} />} />
       <Localized
         render={(t) => (

@@ -46,6 +46,7 @@ const id = {
     rights: "Hak cipta dilindungi",
     terms: "Syarat dan Ketentuan",
     documents: "Dokumen Organisasi",
+    sponsorship: "Sponsor",
     universities: "Universitas",
     privacy: "Kebijakan Privasi",
   },
@@ -544,6 +545,21 @@ const id = {
     searchButton: "Cari",
     empty: "Tidak ada kampus yang cocok.",
   },
+  sponsorship: {
+    title: "Sponsor dan Kemitraan",
+    intro:
+      "PPIDK Asia-Oseania menjangkau pelajar Indonesia di Asia dan Oseania lewat acara, komunitas, dan media. Bekerja samalah dengan kami.",
+    workWithUs:
+      "Ingin menjadi sponsor atau mitra? Hubungi sekretariat kami lewat kontak di bagian bawah halaman.",
+    empty: "Belum ada sponsor yang ditampilkan untuk periode ini.",
+    tiers: { platinum: "Platinum", gold: "Gold", silver: "Silver", partner: "Mitra" },
+    reachTitle: "Jangkauan acara periode ini",
+    reachEmpty: "Belum ada acara yang sudah selesai pada periode ini.",
+    event: "Acara",
+    date: "Tanggal",
+    attendance: "Peserta",
+    unknown: "–",
+  },
   documents: {
     title: "Dokumen Organisasi",
     intro: "Anggaran dasar, pedoman, dan dokumen tetap organisasi.",
@@ -972,6 +988,7 @@ const en: Dictionary = {
     rights: "All Rights Reserved",
     terms: "Terms of Use",
     documents: "Organisation documents",
+    sponsorship: "Sponsors",
     universities: "Universities",
     privacy: "Privacy Policy",
   },
@@ -1472,6 +1489,21 @@ const en: Dictionary = {
     search: "Search campus or city",
     searchButton: "Search",
     empty: "No campus matches.",
+  },
+  sponsorship: {
+    title: "Sponsors and partners",
+    intro:
+      "PPIDK Asia-Oseania reaches Indonesian students across Asia and Oceania through events, communities and media. Work with us.",
+    workWithUs:
+      "Want to sponsor or partner with us? Reach our secretariat through the contact details at the bottom of the page.",
+    empty: "No sponsors are shown for this period yet.",
+    tiers: { platinum: "Platinum", gold: "Gold", silver: "Silver", partner: "Partner" },
+    reachTitle: "Event reach this period",
+    reachEmpty: "No event has finished in this period yet.",
+    event: "Event",
+    date: "Date",
+    attendance: "Attendance",
+    unknown: "–",
   },
   documents: {
     title: "Organisation documents",

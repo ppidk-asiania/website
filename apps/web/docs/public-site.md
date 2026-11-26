@@ -355,6 +355,14 @@ completeness test fail until both exist.
 by type, newest version first with older versions folded; the data is cached for minutes
 (`cacheTag("org-documents")`). Managed on the admin Organizations > Documents tab.
 
+## Sponsors and sponsorship page
+
+The Home logo strip is the published sponsors of the active period (`sponsors`, by tier, then
+order); it renders nothing while there are none. `/sponsorship` (footer link) groups them by tier
+and lists the period's past events with their final attendance ("-" until it is entered). Cached
+for minutes (`cacheTag("sponsors")`); a read failure on Home is logged as `home_sponsors_failed`.
+Managed on the admin Sponsors page. Code: `apps/web/src/server/sponsors.ts`.
+
 ## Universities directory
 
 `/universities` (footer link) lists the approved campuses (`universities`, status `approved`) of
