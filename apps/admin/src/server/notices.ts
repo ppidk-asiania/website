@@ -4,6 +4,7 @@ import type { EventEntity } from "@website/domain/events";
 import { desksOf, type Letter, type LetterType } from "@website/domain/documents";
 import type { FinanceRequest } from "@website/domain/finance";
 import { messageTo, type Messenger, type SurveySource } from "@website/domain/messaging";
+import type { Loan } from "@website/domain/inventory";
 import type { ProofReview } from "@website/domain/members";
 import type { LpjReport, Program, ProgramRevision } from "@website/domain/programs";
 import type { Application, ApplicationStatus } from "@website/domain/recruitment";
@@ -424,7 +425,52 @@ export function createNotices(deps: NoticeDeps) {
       );
     });
 
+  // One notice per step of a loan; an outsider has no account, so the e-mail they gave is used.
+  const loanStep = (
+    loan: Loan,
+    itemName: string,
+    step: "approved" | "rejected" | "handed_over" | "returned",
+    note: string | null,
+  ) =>
+    safely("loanStep", loan.id, async () => {
+      const texts: Record<typeof step, readonly [string, string]> = {
+        approved: [
+          "Permintaan peminjamanmu disetujui. Kami akan menyerahkan barangnya.",
+          "Your loan request is approved. We will hand the item over.",
+        ],
+        rejected: [
+          "Permintaan peminjamanmu belum dapat disetujui.",
+          "Your loan request could not be approved.",
+        ],
+        handed_over: [
+          `Barang diserahkan. Mohon dikembalikan paling lambat ${loan.to}.`,
+          `The item is handed over. Please return it by ${loan.to}.`,
+        ],
+        returned: ["Barang sudah dikembalikan. Terima kasih.", "The item is returned. Thank you."],
+      };
+      const [id, en] = texts[step];
+      const content = {
+        subject: `Peminjaman / Loan: ${itemName}`,
+        text: `${both(id, en)}${note ? `\n\n${note}` : ""}\n\n${deps.webUrl}/inventory`,
+      };
+      if (loan.borrower.kind === "member") {
+        await tell([loan.borrower.userId], content, (to) => `loan:${loan.id}:${step}:${to}`);
+      } else {
+        await deps.send(
+          {
+            channel: "email",
+            to: loan.borrower.email,
+            subject: content.subject,
+            text: content.text,
+            html: html(content.text),
+          },
+          `loan:${loan.id}:${step}:outsider`,
+        );
+      }
+    });
+
   return {
+    loanStep,
     eventPlacement,
     application,
     proof,

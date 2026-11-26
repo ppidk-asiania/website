@@ -31,6 +31,8 @@ interface QueueSources {
   payments: { chapterId: string | null }[];
   /** One item per donation waiting for a check (N5.4). */
   donations: { chapterId: string | null }[];
+  /** One item per borrowing request waiting for a decision or out past its return day (N7.2). */
+  loans: { chapterId: string | null }[];
 }
 type Waiting<K extends keyof QueueSources> = (
   item: QueueSources[K][number],
@@ -123,6 +125,13 @@ export const DASHBOARD_QUEUES = [
     source: "donations",
     waiting: () => true,
   }),
+  queue({
+    label: "Loans waiting or overdue",
+    href: "/inventory",
+    permission: "inventory.approve",
+    source: "loans",
+    waiting: () => true,
+  }),
 ];
 
 export function createDashboard(deps: {
@@ -136,6 +145,7 @@ export function createDashboard(deps: {
   events: () => Promise<EventEntity[]>;
   payments: () => Promise<{ chapterId: string | null }[]>;
   donations: () => Promise<{ chapterId: string | null }[]>;
+  loans: () => Promise<{ chapterId: string | null }[]>;
   myTasks: (uid: string) => Promise<Task[]>;
   now: () => Date;
 }) {
@@ -158,6 +168,7 @@ export function createDashboard(deps: {
       events,
       payments,
       donationsWaiting,
+      loansWaiting,
       tasks,
     ] = await Promise.all([
       can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
@@ -169,6 +180,7 @@ export function createDashboard(deps: {
       uses("events") ? deps.events() : [],
       uses("payments") ? deps.payments() : [],
       uses("donations") ? deps.donations() : [],
+      uses("loans") ? deps.loans() : [],
       deps.myTasks(principal.userId),
     ]);
     const sources: QueueSources = {
@@ -179,6 +191,7 @@ export function createDashboard(deps: {
       events,
       payments,
       donations: donationsWaiting,
+      loans: loansWaiting,
     };
     return {
       queues: queues

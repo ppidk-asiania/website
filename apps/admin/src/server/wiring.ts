@@ -83,6 +83,7 @@ import { createEventCertificateActions } from "./event-certificates";
 import { committeeRole } from "@website/domain/events";
 import { createDonationActions } from "./donations";
 import { createInventoryActions } from "./inventory";
+import { createLoanActions } from "./loans";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
@@ -238,6 +239,18 @@ export const inventoryActions = lazyEnv(() =>
       return unit ? orgUnitPath(unit) : null;
     },
     chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    now: () => new Date(),
+  }),
+);
+
+export const loanActions = lazyEnv(() =>
+  createLoanActions({
+    loans: adminStores().loans,
+    inventory: adminStores().inventory,
+    storage: imageStorage(),
+    notify: {
+      loanStep: (loan, itemName, step, note) => notices().loanStep(loan, itemName, step, note),
+    },
     now: () => new Date(),
   }),
 );
@@ -899,6 +912,22 @@ export const dashboard = lazyEnv(() =>
       Array.from({ length: await adminStores().donations.countPending() }, () => ({
         chapterId: null,
       })),
+    loans: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const [waiting, late, items] = await Promise.all([
+        adminStores().loans.list(),
+        adminStores().loans.overdue(today),
+        adminStores().inventory.list(),
+      ]);
+      const chapterOf = new Map(
+        items.map((i) => [i.id, i.owner.kind === "chapter" ? i.owner.chapterId : null]),
+      );
+      const open = [
+        ...waiting.filter((l) => l.status === "pending"),
+        ...late.filter((l) => !waiting.some((w) => w.id === l.id && w.status === "pending")),
+      ];
+      return open.map((l) => ({ chapterId: chapterOf.get(l.itemId) ?? null }));
+    },
     myTasks: (uid) => tasks().mine(uid),
     now: () => new Date(),
   }),
@@ -1194,6 +1223,18 @@ export const deadlineReminders = lazyEnv(() =>
       const period = await activePeriod();
       return period ? adminStores().lpj.listForPeriod(period.id) : [];
     },
+    overdueLoans: async (today) => {
+      const late = await adminStores().loans.overdue(today);
+      return Promise.all(
+        late.map(async (l) => ({
+          id: l.id,
+          to: l.to,
+          itemName: (await adminStores().inventory.get(l.itemId))?.name ?? "",
+          userId: l.borrower.kind === "member" ? l.borrower.userId : null,
+          email: l.borrower.kind === "outsider" ? l.borrower.email : null,
+        })),
+      );
+    },
     contacts: (uids) => adminStores().contacts.contacts(uids),
     send: (message, key) => messenger().send(message, key),
     adminUrl: getAppUrls().ADMIN_URL ?? "",
@@ -1311,6 +1352,7 @@ export const adminReads = {
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
   listSponsors: () => adminStores().sponsors.listForAdmin(),
   listInventory: () => adminStores().inventory.list(),
+  listLoans: () => adminStores().loans.list(),
   inventoryLog: (limit: number) => adminStores().inventory.log(null, limit),
   listDonationChannels: () => adminStores().donations.listChannels(),
   listDonations: () => adminStores().donations.list(),

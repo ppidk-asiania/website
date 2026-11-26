@@ -61,6 +61,7 @@ describe("deadline reminders (M6)", () => {
         lpj("l-desk", "2026-11-01", "submitted"),
         lpj("l-far", "2026-12-01"),
       ]),
+    overdueLoans: () => Promise.resolve([]),
     contacts: (uids) =>
       Promise.resolve(new Map(uids.map((u) => [u, { email: `${u}@x.org`, phone: null }]))),
     send: (_message, key) => {
@@ -94,6 +95,7 @@ describe("deadline reminders (M6)", () => {
         checkedIn: (week) => createSqlProgramStore(fake.db as unknown as Db).checkedIn(week),
         programs: () => Promise.resolve(programs),
         lpj: () => Promise.resolve([]),
+        overdueLoans: () => Promise.resolve([]),
         contacts: () => Promise.resolve(new Map()),
         send: (_message, key) => (keys.push(key), Promise.resolve("sent" as const)),
         adminUrl: "https://admin.example.org",

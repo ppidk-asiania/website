@@ -311,6 +311,14 @@ export {
   type SqlInventoryStore,
 } from "./inventory";
 export {
+  createSqlLoanStore,
+  createSqlLoanWebStore,
+  toLoan,
+  type LoanAudit,
+  type SqlLoanStore,
+  type SqlLoanWebStore,
+} from "./loans";
+export {
   channelSnapshot,
   createSqlDonationStore,
   createSqlDonationWebStore,

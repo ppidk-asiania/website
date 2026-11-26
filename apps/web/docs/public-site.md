@@ -385,7 +385,12 @@ minutes (`cacheTag("universities")`). Code: `apps/web/src/server/universities-di
 
 `/inventory` (footer link) lists the equipment the organisation lends: published items that are
 not retired, each with "N available" (or "All out on loan"). Hidden, retired and deleted items are
-never listed. Cached for minutes (`cacheTag("inventory")`). Code: `apps/web/src/server/inventory.ts`.
+never listed. Cached for minutes (`cacheTag("inventory")`). Below the list a request form: a signed-in member
+posts JSON to `/api/inventory/loans` (complete profile needed); anyone else posts the fields in the
+query string and a signed statement (PDF) as the body to `/api/inventory/outsider` with a reCAPTCHA
+token (action `loan_request`). A signed-in member also sees "Your requests" with Ask to return and
+Cancel (`/api/inventory/loans/{id}?do=return|cancel`, only the member's own rows). Code:
+`apps/web/src/server/inventory.ts`, `loan-requests.ts`.
 
 ## Configuration
 

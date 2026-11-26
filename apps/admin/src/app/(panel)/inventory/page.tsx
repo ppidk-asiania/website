@@ -1,5 +1,5 @@
 import { orgUnitPath } from "@website/domain/organizations";
-import { scopeOfItem } from "@website/domain/inventory";
+import { isLoanOverdue, scopeOfItem } from "@website/domain/inventory";
 import { can } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { InventoryPage, type ItemRow } from "@/components/inventory-page";
@@ -15,11 +15,12 @@ export default async function InventoryRoute() {
 
   const periods = await adminReads.listPeriods();
   const active = periods.find((p) => p.status === "active");
-  const [items, chapters, units, log] = await Promise.all([
+  const [items, chapters, units, log, loans] = await Promise.all([
     adminReads.listInventory(),
     adminReads.listChapters(),
     active ? adminReads.listOrgUnits(active.id) : Promise.resolve([]),
     adminReads.inventoryLog(100),
+    adminReads.listLoans(),
   ]);
   const chapterName = new Map(chapters.map((c) => [c.id, c.name]));
   const unitName = new Map(units.map((u) => [u.id, u.name]));
@@ -50,9 +51,15 @@ export default async function InventoryRoute() {
     canEdit: can(principal, "inventory.edit", scopeOfItem(i.owner)),
   }));
   const names = new Map(mine.map((i) => [i.id, i.name]));
+  const ownerOfItem = new Map(mine.map((i) => [i.id, i.owner]));
+  const mineLoans = loans.filter((l) => ownerOfItem.has(l.itemId));
   const people = await adminReads.getUsers([
-    ...new Set(log.flatMap((l) => (l.by && names.has(l.itemId) ? [l.by] : []))),
+    ...new Set([
+      ...log.flatMap((l) => (l.by && names.has(l.itemId) ? [l.by] : [])),
+      ...mineLoans.flatMap((l) => (l.borrower.kind === "member" ? [l.borrower.userId] : [])),
+    ]),
   ]);
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <InventoryPage
@@ -66,6 +73,27 @@ export default async function InventoryRoute() {
           .filter((u) => can(principal, "inventory.edit", { orgUnitPath: orgUnitPath(u) }))
           .map((u) => ({ value: `unit:${u.id}`, label: `Unit ${u.name}` })),
       ]}
+      loans={mineLoans.map((l) => {
+        const who = l.borrower.kind === "member" ? people.get(l.borrower.userId) : null;
+        return {
+          id: l.id,
+          item: names.get(l.itemId) ?? "",
+          quantity: l.quantity,
+          borrower:
+            l.borrower.kind === "member"
+              ? (who?.name ?? who?.email ?? "Member")
+              : `${l.borrower.name} (outsider) · ${l.borrower.email} · ${l.borrower.phone}`,
+          own: l.borrower.kind === "member" && l.borrower.userId === principal.userId,
+          outsider: l.borrower.kind === "outsider",
+          purpose: l.purpose,
+          place: l.place,
+          period: `${l.from} → ${l.to}`,
+          status: l.status,
+          overdue: isLoanOverdue(l, today),
+          note: l.note,
+          canDecide: can(principal, "inventory.approve", scopeOfItem(ownerOfItem.get(l.itemId)!)),
+        };
+      })}
       log={log
         .filter((l) => names.has(l.itemId))
         .map((l) => ({

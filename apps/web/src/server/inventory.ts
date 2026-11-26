@@ -1,9 +1,15 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
-import { createSqlInventoryReader } from "@website/db/sql";
+import { randomUUID } from "node:crypto";
+import { createSqlInventoryReader, createSqlLoanWebStore } from "@website/db/sql";
 import type { PublicItem } from "@website/domain/inventory";
-import { webDb } from "./db";
+import { createRecaptchaVerifier, passesCaptcha } from "./captcha";
+import { webDb, webStorage } from "./db";
+import { getWebEnv } from "./env";
+import { createLoanRequests } from "./loan-requests";
+import { messenger } from "./messaging";
+import { hasCompleteProfile } from "./profile-wiring";
 
 const reader = lazyEnv(() => createSqlInventoryReader(webDb()));
 
@@ -14,3 +20,30 @@ export async function catalogue(): Promise<PublicItem[]> {
   cacheLife("minutes");
   return reader().catalogue();
 }
+
+const loans = lazyEnv(() => createSqlLoanWebStore(webDb()));
+
+/** The signed-in member's own requests; read per request, never cached. */
+export const myLoans = (uid: string) => loans().mine(uid);
+
+export const loanRequests = lazyEnv(() => {
+  const env = getWebEnv();
+  const verifier = env.RECAPTCHA_SECRET_KEY
+    ? createRecaptchaVerifier({ secret: env.RECAPTCHA_SECRET_KEY, fetchImpl: fetch })
+    : null;
+  return createLoanRequests({
+    loans: loans(),
+    storage: webStorage(),
+    send: (message, key) => messenger().send(message, key),
+    captcha: (token) =>
+      passesCaptcha(
+        verifier,
+        { minScore: env.RECAPTCHA_MIN_SCORE ?? 0.5, appEnv: env.APP_ENV },
+        token,
+        "loan_request",
+      ),
+    profileComplete: hasCompleteProfile,
+    now: () => new Date(),
+    uuid: randomUUID,
+  });
+});

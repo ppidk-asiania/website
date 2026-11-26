@@ -40,6 +40,7 @@ describe("admin dashboard: only what needs the viewer", () => {
     events: () => Promise.resolve(events),
     payments: () => Promise.resolve(payments),
     donations: () => Promise.resolve([{ chapterId: null }, { chapterId: null }]),
+    loans: () => Promise.resolve([{ chapterId: null }]),
     myTasks: () => Promise.resolve(tasks),
     now: () => now,
   });
@@ -98,6 +99,14 @@ describe("admin dashboard: only what needs the viewer", () => {
       ["Donations waiting for a check", 2],
     ]);
     expect(await counts(staff(["finance.read"]))).toEqual([]);
+  });
+
+  it("loans waiting or overdue go to the holders of inventory.approve", async () => {
+    period = { id: "p1", name: "2026" };
+    const counts = async (principal: Principal) =>
+      (await dashboard(principal)).queues.map((q) => [q.label, q.count]);
+    expect(await counts(staff(["inventory.approve"]))).toEqual([["Loans waiting or overdue", 1]]);
+    expect(await counts(staff(["inventory.read"]))).toEqual([]);
   });
 
   it("queues count only what waits at my desks, in my units, that the module would let me do", async () => {

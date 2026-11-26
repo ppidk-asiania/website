@@ -17,6 +17,8 @@ const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charC
 interface Reminder {
   readonly key: string;
   readonly uids: readonly string[];
+  /** Addresses of people without an account (an outsider who borrowed an item). */
+  readonly emails?: readonly string[];
   readonly subject: string;
   readonly text: string;
 }
@@ -26,6 +28,12 @@ export function createDeadlineReminders(deps: {
   checkedIn: SqlProgramStore["checkedIn"];
   programs: () => Promise<Program[]>;
   lpj: () => Promise<LpjReport[]>;
+  /** Items still out after their return day (N7.2): the borrower is an account or an e-mail address. */
+  overdueLoans: (
+    today: string,
+  ) => Promise<
+    Array<{ id: string; to: string; itemName: string; userId: string | null; email: string | null }>
+  >;
   contacts: (uids: readonly string[]) => Promise<Map<string, Contact>>;
   send: Messenger["send"];
   adminUrl: string;
@@ -39,7 +47,7 @@ export function createDeadlineReminders(deps: {
     const soon = (day: string | null): day is string => day !== null && day >= today && day <= last;
     const thursday = now.getUTCDay() === 4;
     const week = weekStartUtc(now);
-    const [interviews, programs, lpjs, checkedIn] = await Promise.all([
+    const [interviews, programs, lpjs, checkedIn, loans] = await Promise.all([
       deps.applications.bookingsBetween(
         new Date(`${tomorrow}T00:00:00Z`),
         new Date(`${addDaysUtc(now, 2)}T00:00:00Z`),
@@ -47,9 +55,21 @@ export function createDeadlineReminders(deps: {
       deps.programs(),
       deps.lpj(),
       thursday ? deps.checkedIn(week) : Promise.resolve([]),
+      deps.overdueLoans(today),
     ]);
 
     const reminders: Reminder[] = [
+      // One reminder per loan, ever: the key has no date.
+      ...loans.map((l) => ({
+        key: `reminder:loan:${l.id}`,
+        uids: l.userId ? [l.userId] : [],
+        emails: l.email ? [l.email] : [],
+        subject: "Barang belum dikembalikan / Item not returned yet",
+        text: both(
+          `"${l.itemName}" seharusnya dikembalikan ${l.to}. Mohon segera dikembalikan.`,
+          `"${l.itemName}" was due back on ${l.to}. Please return it soon.`,
+        ),
+      })),
       ...interviews.map(({ application: a, choiceId, booking }) => {
         const at = `${booking.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
         return {
@@ -129,6 +149,21 @@ export function createDeadlineReminders(deps: {
             html: `<p>${escapeHtml(r.text).replace(/\n/g, "<br>")}</p>`,
           }),
           `${r.key}:${uid}`,
+        );
+        if (status !== "duplicate") messages += 1;
+      }
+    }
+    for (const r of reminders) {
+      for (const to of r.emails ?? []) {
+        const status = await deps.send(
+          {
+            channel: "email",
+            to,
+            subject: r.subject,
+            text: r.text,
+            html: `<p>${escapeHtml(r.text).replace(/\n/g, "<br>")}</p>`,
+          },
+          `${r.key}:email`,
         );
         if (status !== "duplicate") messages += 1;
       }

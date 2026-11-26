@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
-import { catalogue } from "@/server/inventory";
+import { isLoanOverdue } from "@website/domain/inventory";
+import { catalogue, myLoans } from "@/server/inventory";
+import { getSignedInUser } from "@/server/session";
+import { LoanForm } from "./loan-form";
+import { MyLoans } from "./my-loans";
 
 export const metadata: Metadata = { title: "Inventaris · Inventory" };
 export const instant = false;
@@ -9,6 +13,9 @@ export const instant = false;
 export default async function InventoryPage() {
   const t = DICTIONARIES[languageFrom((await cookies()).get(LANG_COOKIE)?.value)].inventory;
   const items = await catalogue();
+  const user = await getSignedInUser();
+  const today = new Date().toISOString().slice(0, 10);
+  const mine = user ? await myLoans(user.uid) : [];
 
   return (
     <main className="ui-shell">
@@ -32,6 +39,33 @@ export default async function InventoryPage() {
           </li>
         ))}
       </ul>
+      {items.length > 0 ? (
+        <section aria-labelledby="loan-request">
+          <h2 id="loan-request">{t.request.title}</h2>
+          <LoanForm
+            items={items.map((i) => ({ id: i.id, name: i.name }))}
+            signedIn={user !== null}
+            labels={t.request}
+          />
+        </section>
+      ) : null}
+      {user ? (
+        <section aria-labelledby="my-loans">
+          <h2 id="my-loans">{t.mine.title}</h2>
+          <MyLoans
+            labels={t.mine}
+            loans={mine.map((l) => ({
+              id: l.id,
+              item: l.itemName,
+              quantity: l.quantity,
+              period: `${l.from} → ${l.to}`,
+              status: l.status,
+              overdue: isLoanOverdue(l, today),
+              note: l.status === "rejected" ? l.note : null,
+            }))}
+          />
+        </section>
+      ) : null}
     </main>
   );
 }

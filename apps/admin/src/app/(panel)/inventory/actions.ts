@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
-import { inventoryActions } from "@/server/wiring";
+import { inventoryActions, loanActions } from "@/server/wiring";
 
 const done = <T extends { ok: boolean }>(result: T): T => {
   if (result.ok) {
@@ -25,4 +25,25 @@ export async function setItemTotalAction(input: unknown) {
 
 export async function deleteItemAction(input: unknown) {
   return done(await inventoryActions().remove(getPrincipal, getAuditContext)(input));
+}
+
+const loanDone = <T extends { ok: boolean }>(result: T): T => {
+  if (result.ok) revalidatePath("/inventory");
+  return result;
+};
+
+export async function approveLoanAction(input: unknown) {
+  return loanDone(await loanActions().approve(getPrincipal, getAuditContext)(input));
+}
+
+export async function rejectLoanAction(input: unknown) {
+  return loanDone(await loanActions().reject(getPrincipal, getAuditContext)(input));
+}
+
+export async function handOverLoanAction(input: unknown) {
+  return loanDone(await loanActions().handOver(getPrincipal, getAuditContext)(input));
+}
+
+export async function takeBackLoanAction(input: unknown) {
+  return loanDone(await loanActions().takeBack(getPrincipal, getAuditContext)(input));
 }

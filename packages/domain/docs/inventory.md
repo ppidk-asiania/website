@@ -17,3 +17,23 @@ Equipment the region, a chapter or a unit owns and others may borrow (DEC-31). C
   keeps its history. A damaged one stays listed with a note.
 - **Delete** is soft and only when nothing is out on loan (retire an item to keep its history).
 - **Public catalogue** (`/inventory`): published, not retired, not deleted items with "N available".
+
+## Borrowing (N7.2)
+
+- **Who asks:** a member with a complete profile (a small JSON request), or an outsider with a name,
+  an e-mail, a phone number and a signed statement (a PDF, up to 5 MB, checked by its first bytes;
+  reCAPTCHA). The statement stays on the private file store and an approver opens it by a short-lived link.
+- **Flow:** pending -> approved or rejected (with a reason) -> handed over -> return asked by the
+  borrower (optional) -> returned. A member may cancel while it is pending or approved. Only the owner's
+  `inventory.approve` holders decide; the approver is never the borrower.
+- **Stock:** the hand-over reads and writes the item in ONE transaction with its log row and refuses
+  when `available` is too low, so two hand-overs for the last unit cannot both go out. A return puts the
+  quantity back (never above `total`); a damaged return also marks the item damaged.
+- **Checks at the request:** the start day is not in the past, the item is listed, and the quantity is
+  not more than the item's total.
+- **Overdue** is a read-time rule (`to` passed and still out). The daily `deadline-reminders` job sends
+  ONE reminder per loan (`reminder:loan:{id}`); the dashboard queue "Loans waiting or overdue" counts
+  requests waiting for a decision and loans out past their day.
+- **Notices:** approved, rejected, handed over and returned go to the borrower (an outsider by the
+  e-mail they gave); the request itself is acknowledged by e-mail. Approvers are not messaged on a new
+  request: they see the dashboard queue.
