@@ -6,6 +6,7 @@ import {
   appointmentActions,
   chapterActions,
   chapterRecords,
+  orgDocumentActions,
   orgUnitActions,
   periodActions,
   universityActions,
@@ -110,5 +111,17 @@ export async function reviewUniversityAction(input: unknown) {
 export async function addUniversityAction(input: unknown) {
   const result = await universityActions().add(getPrincipal, getAuditContext)(input);
   if (result.ok) revalidatePath("/organizations");
+  return result;
+}
+
+export async function saveOrgDocumentAction(input: unknown) {
+  const result = await orgDocumentActions().save(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/organizations", "layout");
+  return result;
+}
+
+export async function deleteOrgDocumentAction(input: unknown) {
+  const result = await orgDocumentActions().remove(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/organizations", "layout");
   return result;
 }

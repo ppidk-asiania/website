@@ -36,6 +36,7 @@ import { createEventActions } from "./events";
 import { createFinanceActions } from "./finance";
 import { createFormActions } from "./forms";
 import { createGalleryActions } from "./gallery";
+import { createOrgDocumentActions } from "./org-documents";
 import { getAdminEnv, getAppUrls } from "./env";
 import { createImageUploads } from "./images";
 import { createIncomingActions } from "./incoming";
@@ -139,6 +140,15 @@ export const newsActions = lazyEnv(() =>
 
 export const eventActions = lazyEnv(() =>
   createEventActions({ events: adminStores().events, now: () => new Date(), uuid: randomUUID }),
+);
+
+export const orgDocumentActions = lazyEnv(() =>
+  createOrgDocumentActions({
+    documents: adminStores().orgDocuments,
+    storage: imageStorage(),
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
 );
 
 export const galleryActions = lazyEnv(() =>
@@ -1116,6 +1126,7 @@ export const adminReads = {
   currentFormVersions: (forms: Parameters<SqlFormStore["currentVersions"]>[0]) =>
     adminStores().forms.currentVersions(forms),
   listAlbums: () => adminStores().galleries.listForAdmin(),
+  listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
   listChapters: () => adminStores().chapters.listForAdmin(),
   getChapter: (id: string) => adminStores().chapters.get(id),
   chapterOfficers: (id: string) => adminStores().chapterRecords.officers(id),

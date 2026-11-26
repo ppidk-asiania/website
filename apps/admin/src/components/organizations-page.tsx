@@ -27,12 +27,18 @@ import { CHAPTER_RISK_LABELS, label } from "@/labels";
 import type { ChapterItem } from "./chapters-model";
 import type { PeriodItem } from "./periods-model";
 import { Select } from "@/components/ui/select";
+import { OrgDocumentsPanel, type OrgDocumentRow } from "./org-documents-panel";
 import { ReviewQueue, type ProposalRow } from "./university-review-queue";
 
 export const ORG_SUBTITLE =
   "Manage the board periods, their structure and the PPI chapters shown on the public site.";
 
-export type OrgView = "period" | "ppi" | "universities";
+export type OrgView = "period" | "ppi" | "universities" | "documents";
+
+export interface DocumentsTabData {
+  rows: OrgDocumentRow[];
+  canEdit: boolean;
+}
 
 export interface UniversitiesTabData {
   country: string;
@@ -52,17 +58,20 @@ export function OrgTabs({
   onSelect,
   showPeriod = true,
   showUniversities = false,
+  showDocuments = false,
 }: {
   view: OrgView;
   onSelect?: (view: OrgView) => void;
   showPeriod?: boolean;
   showUniversities?: boolean;
+  showDocuments?: boolean;
 }) {
   const router = useRouter();
   const tabs: { key: OrgView; label: string }[] = [
     ...(showPeriod ? [{ key: "period" as const, label: "Period" }] : []),
     { key: "ppi", label: "PPI" },
     ...(showUniversities ? [{ key: "universities" as const, label: "Universities" }] : []),
+    ...(showDocuments ? [{ key: "documents" as const, label: "Documents" }] : []),
   ];
   return (
     <Tabs
@@ -140,6 +149,7 @@ interface OrganizationsProps {
   periods: PeriodItem[] | null;
   canEditPeriods: boolean;
   universities: UniversitiesTabData | null;
+  documents: DocumentsTabData | null;
   initialView: OrgView;
 }
 
@@ -156,6 +166,7 @@ function OrganizationsList({
   periods: periodList,
   canEditPeriods,
   universities,
+  documents,
   initialView,
 }: OrganizationsProps) {
   const periods = useMemo(() => periodList ?? [], [periodList]);
@@ -168,7 +179,9 @@ function OrganizationsList({
   const [chapterForm, setChapterForm] = useState<ChapterItem | "new" | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<OrgView>(
-    (initialView === "period" && !periodList) || (initialView === "universities" && !universities)
+    (initialView === "period" && !periodList) ||
+      (initialView === "universities" && !universities) ||
+      (initialView === "documents" && !documents)
       ? "ppi"
       : initialView,
   );
@@ -317,6 +330,7 @@ function OrganizationsList({
         onSelect={switchView}
         showPeriod={periodList !== null}
         showUniversities={universities !== null}
+        showDocuments={documents !== null}
       />
     </>
   );
@@ -529,6 +543,16 @@ function OrganizationsList({
         </ConfirmDialog>
 
         {deleteDialog}
+        <ToastBanner message={toast.message} />
+      </div>
+    );
+  }
+
+  if (view === "documents" && documents) {
+    return (
+      <div>
+        {header("Organizations > Documents", null)}
+        <OrgDocumentsPanel rows={documents.rows} canEdit={documents.canEdit} />
         <ToastBanner message={toast.message} />
       </div>
     );

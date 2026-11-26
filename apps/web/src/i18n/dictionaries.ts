@@ -45,6 +45,7 @@ const id = {
     social: "Media sosial",
     rights: "Hak cipta dilindungi",
     terms: "Syarat dan Ketentuan",
+    documents: "Dokumen Organisasi",
     privacy: "Kebijakan Privasi",
   },
   home: {
@@ -496,6 +497,13 @@ const id = {
     linkExpiry: "Tautan unduh berlaku 15 menit; cari lagi bila sudah lewat.",
     recaptchaNotice: "Halaman ini dilindungi reCAPTCHA Google.",
   },
+  documents: {
+    title: "Dokumen Organisasi",
+    intro: "Anggaran dasar, pedoman, dan dokumen tetap organisasi.",
+    empty: "Belum ada dokumen yang diterbitkan.",
+    older: "Versi sebelumnya",
+    types: { statutes: "AD/ART", guideline: "Pedoman", other: "Lainnya" },
+  },
   letterArchive: {
     title: "Arsip Surat",
     intro:
@@ -916,6 +924,7 @@ const en: Dictionary = {
     social: "Social media",
     rights: "All Rights Reserved",
     terms: "Terms of Use",
+    documents: "Organisation documents",
     privacy: "Privacy Policy",
   },
   home: {
@@ -1370,6 +1379,13 @@ const en: Dictionary = {
     downloadSheet: "Download PDF",
     linkExpiry: "Download links work for 15 minutes; search again after that.",
     recaptchaNotice: "This page is protected by Google reCAPTCHA.",
+  },
+  documents: {
+    title: "Organisation documents",
+    intro: "The statutes, guidelines and other standing documents of the organisation.",
+    empty: "No documents have been published yet.",
+    older: "Earlier versions",
+    types: { statutes: "Statutes (AD/ART)", guideline: "Guidelines", other: "Other" },
   },
   letterArchive: {
     title: "Letter archive",

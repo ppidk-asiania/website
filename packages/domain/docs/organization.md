@@ -187,6 +187,18 @@ The statutes renamed the top seats; people and powers did not move, only names d
   checking, 2+ = At risk of vacancy, with the quarters as the reason. Inactive chapters are not
   rated.
 
+## Organisation documents (statutes, guidelines)
+
+Admin: Organizations > **Documents** tab (`organizations.edit`, global). A row has a type
+(statutes / guideline / other), a title, a version label, a date and EITHER a PDF OR an https link,
+and is Public or Private. The PDF goes through `POST /api/org-documents` (PDF magic bytes, at most
+10 MB) into the public file store under `documents/`; the save action accepts only such a path.
+A new version of the same title is a new row; nothing ever deletes a file, so older versions
+stay downloadable. Public page `/documents` (footer link) groups by type, shows the newest version
+of each title and folds the older ones (`groupOrgDocuments`). Code: `packages/domain/src/organizations/documents.ts`,
+`packages/db/src/sql/org-documents.ts` (`orgDocuments`), `apps/admin/src/server/org-documents.ts`.
+Tests: `tests/unit/org-documents.test.ts`, `tests/integration/org-documents.test.ts`.
+
 ## Configuration
 
 Logo and member-photo uploads need `FILE_STORAGE_DIR`.

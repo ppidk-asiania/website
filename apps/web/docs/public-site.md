@@ -346,6 +346,12 @@ completeness test fail until both exist.
 - If the news read fails, Home logs `home_latest_news_failed` and leaves the section out; a failing
   highlights read logs `home_highlights_failed` the same way.
 
+## Organisation documents
+
+`/documents` (footer link) lists the published organisation documents (statutes, guidelines, other)
+by type, newest version first with older versions folded; the data is cached for minutes
+(`cacheTag("org-documents")`). Managed on the admin Organizations > Documents tab.
+
 ## Configuration
 
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, `RECAPTCHA_MIN_SCORE` (captcha);

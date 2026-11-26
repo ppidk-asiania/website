@@ -11,7 +11,7 @@ import { adminReads, chapterRecords } from "@/server/wiring";
 
 export const instant = false;
 
-const VIEWS: readonly OrgView[] = ["period", "ppi", "universities"];
+const VIEWS: readonly OrgView[] = ["period", "ppi", "universities", "documents"];
 
 export default async function OrganizationsRoute({
   searchParams,
@@ -71,6 +71,21 @@ export default async function OrganizationsRoute({
     };
   }
 
+  const documents = {
+    rows: (await adminReads.listOrgDocuments()).map((d) => ({
+      id: d.id,
+      version: d.version,
+      type: d.type,
+      title: d.title,
+      versionLabel: d.versionLabel,
+      date: d.date,
+      file: d.file,
+      link: d.link,
+      published: d.published,
+    })),
+    canEdit: can(viewer.principal, "organizations.edit"),
+  };
+
   const view = VIEWS.find((v) => v === params["view"]) ?? "period";
   return (
     <OrganizationsPage
@@ -86,6 +101,7 @@ export default async function OrganizationsRoute({
       periods={periods?.map(toPeriodItem) ?? null}
       canEditPeriods={can(viewer.principal, "periods.edit")}
       universities={universities}
+      documents={documents}
       initialView={view}
     />
   );

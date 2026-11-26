@@ -36,6 +36,12 @@ export {
 export { nextNumbers } from "./counters";
 export { createSqlSignatureStore, type SqlSignatureStore } from "./signatures";
 export {
+  createSqlOrgDocumentReader,
+  createSqlOrgDocumentStore,
+  type SqlOrgDocumentReader,
+  type SqlOrgDocumentStore,
+} from "./org-documents";
+export {
   createSqlIncomingStore,
   incomingSnapshot,
   type SqlIncomingStore,
