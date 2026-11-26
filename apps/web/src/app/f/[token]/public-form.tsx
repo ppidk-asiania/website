@@ -37,6 +37,7 @@ export function PublicFormClient(props: {
     if (result.error === "answers") return t.checkAnswers;
     if (result.error === "signin") return t.signIn;
     if (result.error === "officers") return t.officersOnly;
+    if (result.error === "committee") return t.committeeOnly;
     if (result.error === "guest") return t.guestInvalid;
     return t.failed;
   };

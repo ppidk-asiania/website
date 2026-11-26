@@ -196,6 +196,32 @@ manual` (self check-in, main plan 9.4/2, is not built yet). Manual check-in show
   `tests/unit/events-committee.test.ts`, `tests/integration/events-committee.test.ts`, seat cases in
   `tests/integration/events-checkin.test.ts` and `tests/integration/event-registration-admin.test.ts`.
 
+### Evaluation and certificates (N1.7)
+
+- Settings sit on the committee document (block "Evaluation" in the event's committee panel): the participant
+  evaluation form, `certificateNeedsAttendance` (default on), the committee evaluation form and its window.
+  Both forms are ordinary public forms of the Forms page. The participant form is anonymous when its own mode
+  is `anonymous` or `guest`; then it cannot be a condition for a certificate (nobody knows who answered), so
+  "anonymous" and "needed for the certificate" exclude each other by construction.
+- Public event page: "Fill in the evaluation" once the event is past; "Committee evaluation" while the window
+  is open (computed when read: not set / before / open / closed; set with +3, +7 or +14 days after the start).
+- Committee evaluation: only an account with a seat in this event's committee may answer, inside the window.
+  The check runs in the answer's own transaction (`refuseCommitteeAnswer`); a refused answer writes nothing and
+  the form says so. One answer per account (a later answer replaces the first, the rule of every account form).
+- Certificates: ONE function `entitledToCertificate` (confirmed registration; attended when the switch is on;
+  evaluation answered with the account when the form is in `account` or `officers` mode). On a certificate
+  batch (Letters > participants) "Add registrants" adds those people and lists who was left out and why (not
+  confirmed, did not attend, evaluation not answered, account without a name, already on the batch). It needs
+  `letters.edit` on the batch and `events.edit` or `registrants.read`.
+- Not built: the standard question set ("Start from the standard questions"), the evaluator's division stored
+  with the answer, the split of committee results (board sees answers, other members only the count; the Forms
+  responses page applies as usual), a typed time window (only the three buttons), reading the evaluation in the
+  officer assessment (9.3).
+- Code: `packages/domain/src/events/evaluation.ts`, `apps/admin/src/server/event-certificates.ts`,
+  `packages/db/src/sql/event-committees.ts`, `apps/web/src/server/forms-wiring.ts`. Tests:
+  `tests/unit/events-evaluation.test.ts`, `tests/integration/event-certificates.test.ts`,
+  `tests/integration/events-committee.test.ts`, `tests/integration/public-forms.test.ts`.
+
 ## Public pages and registration
 
 `toPublicEvent` is what the website shows (no version or capacity). The web reader

@@ -202,8 +202,12 @@ const id = {
     waitlisted: "Kuota penuh: kamu masuk daftar tunggu. Kami kabari bila ada tempat.",
     closed: "Pendaftaran sudah ditutup.",
     cancelled: "Acara ini dibatalkan.",
-    volunteer: "Jadi relawan acara ini",
-    joinCommittee: "Daftar jadi panitia",
+    formLinks: {
+      volunteer: "Jadi relawan acara ini",
+      committee: "Daftar jadi panitia",
+      evaluation: "Isi evaluasi acara",
+      committeeEval: "Evaluasi panitia",
+    },
     ended: "Acara ini sudah selesai.",
     attendance: "Peserta",
     recap: "Rangkuman acara",
@@ -334,6 +338,7 @@ const id = {
     guestInvalid: "Isi nama dan e-mail yang valid.",
     signIn: "Masuk untuk mengisi formulir ini",
     officersOnly: "Formulir ini hanya untuk pengurus dengan jabatan aktif.",
+    committeeOnly: "Formulir ini hanya untuk panitia acara, selama jendela evaluasi dibuka.",
     profileTitle: "Data profilmu yang ikut terkirim",
     profileFields: {
       seat: "Jabatan",
@@ -1173,8 +1178,12 @@ const en: Dictionary = {
     waitlisted: "The event is full: you are on the waiting list. We will tell you if a seat opens.",
     closed: "Registration is closed.",
     cancelled: "This event was cancelled.",
-    volunteer: "Volunteer for this event",
-    joinCommittee: "Apply for the committee",
+    formLinks: {
+      volunteer: "Volunteer for this event",
+      committee: "Apply for the committee",
+      evaluation: "Fill in the evaluation",
+      committeeEval: "Committee evaluation",
+    },
     ended: "This event has ended.",
     attendance: "Attendance",
     recap: "Event recap",
@@ -1305,6 +1314,8 @@ const en: Dictionary = {
     guestInvalid: "Enter your name and a valid e-mail.",
     signIn: "Sign in to answer this form",
     officersOnly: "This form is only for officers with an active seat.",
+    committeeOnly:
+      "This form is only for the committee of the event, while the evaluation window is open.",
     profileTitle: "Your profile data sent with the answers",
     profileFields: {
       seat: "Seat",

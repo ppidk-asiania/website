@@ -51,12 +51,31 @@ const KIND_LABELS: Record<ApplicationForm["kind"], string> = {
   committee: "Committee application (accounts)",
 };
 
+interface EvaluationForm {
+  formId: string | null;
+  certificateNeedsAttendance: boolean;
+  committeeFormId: string | null;
+  committeeOpensAt: string | null;
+  committeeClosesAt: string | null;
+}
+
+const DAY = 86_400_000;
+
 export function EventCommitteePanel(props: {
   eventId: string;
+  /** When the event starts (ISO): the committee evaluation window is counted from it. */
+  startsAt: string;
   forms: PublicFormChoice[];
   show: (message: string) => void;
 }) {
-  const { eventId, forms, show } = props;
+  const { eventId, startsAt, forms, show } = props;
+  const [evaluation, setEvaluation] = useState<EvaluationForm>({
+    formId: null,
+    certificateNeedsAttendance: true,
+    committeeFormId: null,
+    committeeOpensAt: null,
+    committeeClosesAt: null,
+  });
   const [links, setLinks] = useState<ApplicationForm[]>([]);
   const [applicants, setApplicants] = useState<Applicants | null>(null);
   const [choice, setChoice] = useState<Record<string, { divisionId: string; seat: CommitteeSeat }>>(
@@ -82,6 +101,14 @@ export function EventCommitteePanel(props: {
     setDivisions([...result.data.divisions]);
     setMembers(result.data.members.map((m) => ({ ...m })));
     setLinks([...result.data.applicationForms]);
+    const e = result.data.evaluation;
+    setEvaluation({
+      formId: e.formId,
+      certificateNeedsAttendance: e.certificateNeedsAttendance,
+      committeeFormId: e.committeeFormId,
+      committeeOpensAt: e.committeeOpensAt?.toISOString() ?? null,
+      committeeClosesAt: e.committeeClosesAt?.toISOString() ?? null,
+    });
     setLoaded(true);
   };
 
@@ -92,6 +119,7 @@ export function EventCommitteePanel(props: {
       version,
       committee: {
         applicationForms: links,
+        evaluation,
         divisions: divisions.map((d) => ({ ...d, name: d.name.trim() })),
         members: members.map(({ userId, name, divisionId, seat }) => ({
           userId,
@@ -414,6 +442,87 @@ export function EventCommitteePanel(props: {
       >
         Link a form
       </Button>
+      <h3 className="admin-section-title">Evaluation</h3>
+      <div className="admin-form-grid">
+        <div className="admin-field">
+          <label className="admin-field__label" htmlFor="eval-form">
+            Participant evaluation (a public form; answered with an account it counts for the
+            certificate)
+          </label>
+          <Select
+            id="eval-form"
+            value={evaluation.formId ?? ""}
+            onChange={(e) => setEvaluation({ ...evaluation, formId: e.target.value || null })}
+          >
+            <option value="">(none)</option>
+            {forms.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.title}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <label className="admin-field">
+          <span>
+            <input
+              type="checkbox"
+              checked={evaluation.certificateNeedsAttendance}
+              onChange={(e) =>
+                setEvaluation({ ...evaluation, certificateNeedsAttendance: e.target.checked })
+              }
+            />{" "}
+            A certificate needs attendance (checked in at the door)
+          </span>
+        </label>
+        <div className="admin-field">
+          <label className="admin-field__label" htmlFor="eval-committee">
+            Committee evaluation (a public form answered with an account; only the committee may
+            answer)
+          </label>
+          <Select
+            id="eval-committee"
+            value={evaluation.committeeFormId ?? ""}
+            onChange={(e) =>
+              setEvaluation({ ...evaluation, committeeFormId: e.target.value || null })
+            }
+          >
+            <option value="">(none)</option>
+            {forms.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.title}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {evaluation.committeeFormId ? (
+          <div className="admin-field">
+            <span className="admin-field__label">Window after the event</span>
+            {[3, 7, 14].map((days) => (
+              <Button
+                key={days}
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setEvaluation({
+                    ...evaluation,
+                    committeeOpensAt: startsAt,
+                    committeeClosesAt: new Date(
+                      new Date(startsAt).getTime() + days * DAY,
+                    ).toISOString(),
+                  })
+                }
+              >
+                +{days} days
+              </Button>
+            ))}
+            <span className="admin-field__hint">
+              {evaluation.committeeClosesAt
+                ? `Open until ${evaluation.committeeClosesAt.slice(0, 10)}`
+                : "No window set: the form stays closed to everyone."}
+            </span>
+          </div>
+        ) : null}
+      </div>
       <Button variant="outline" size="sm" icon="check" disabled={busy} onClick={() => void save()}>
         Save committee
       </Button>

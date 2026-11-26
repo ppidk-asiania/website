@@ -5,7 +5,7 @@ import { isPast, isRegistrationOpen } from "@website/domain/events";
 import { formatMoney, isValidSlug } from "@website/domain/shared";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { cityOf, formatEventDate, formatEventTimeRange } from "@/lib/event-time";
-import { eventCommitteeCalls, publicEventBySlug } from "@/server/events";
+import { eventFormLinks, publicEventBySlug } from "@/server/events";
 import { publicAlbumForEvent } from "@/server/gallery";
 import { getSignedInUser } from "@/server/session";
 import { RegisterButton } from "./register-button";
@@ -43,7 +43,7 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
   const [user, album, calls] = await Promise.all([
     open && !event.registrationUrl && !event.registration ? getSignedInUser() : null,
     open ? null : publicAlbumForEvent(event.id),
-    past || event.cancelledAt ? [] : eventCommitteeCalls(event.id, now),
+    event.cancelledAt ? [] : eventFormLinks(event.id, now),
   ]);
   const hasRecap = event.finalAttendance !== null || event.attendanceNote || event.recapUrl;
 
@@ -129,11 +129,15 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
                 {t.events.register}
               </a>
             )}
-            {calls.map((call) => (
-              <a key={call.token} className="site-event__button" href={`/f/${call.token}`}>
-                {call.kind === "volunteer" ? t.events.volunteer : t.events.joinCommittee}
-              </a>
-            ))}
+            {calls
+              .filter((call) =>
+                call.kind === "evaluation" ? past : call.kind === "committeeEval" || !past,
+              )
+              .map((call) => (
+                <a key={call.token} className="site-event__button" href={`/f/${call.token}`}>
+                  {t.events.formLinks[call.kind]}
+                </a>
+              ))}
           </div>
           {event.fee && (
             <p className="site-muted">

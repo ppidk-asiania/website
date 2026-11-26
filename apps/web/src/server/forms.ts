@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { RuleViolationError } from "@website/domain/shared";
 import type { OwnFormData, SignedInAccount, SubmitOutcome } from "@website/db/sql";
 import {
   toPublicForm,
@@ -62,6 +63,7 @@ export type FormSubmitResult =
         | "changed"
         | "signin"
         | "officers"
+        | "committee"
         | "guest";
     }
   | {
@@ -86,6 +88,12 @@ export function createFormSubmission(deps: FormSubmissionDeps) {
     if (!parsed.success) return { ok: false, error: "invalid" };
     if (!(await deps.captcha(parsed.data.captcha))) return { ok: false, error: "captcha" };
     const { token, version, answers, guest } = parsed.data;
-    return deps.submit(token, version, answers, deps.now(), { user, guest });
+    try {
+      return await deps.submit(token, version, answers, deps.now(), { user, guest });
+    } catch (error) {
+      // A committee evaluation answered by someone outside the committee or outside its window.
+      if (error instanceof RuleViolationError) return { ok: false, error: "committee" };
+      throw error;
+    }
   };
 }

@@ -1152,6 +1152,7 @@ function EventsList({
             <EventCommitteePanel
               key={`committee:${editing.id}`}
               forms={publicForms}
+              startsAt={editing.startsAt}
               eventId={editing.id}
               show={toast.show}
             />

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SqlCommitteeStore, SqlEventStore, SqlFormStore } from "@website/db/sql";
 import {
   CommitteeInputSchema,
+  DEFAULT_EVALUATION,
   PlacementSchema,
   committeeLocked,
   committeeRole,
@@ -77,6 +78,7 @@ export function createCommitteeActions(deps: CommitteeDeps) {
         version: stored?.version ?? null,
         divisions: stored?.divisions ?? [],
         applicationForms: stored?.applicationForms ?? [],
+        evaluation: stored?.evaluation ?? DEFAULT_EVALUATION,
         members: (stored?.members ?? []).map((m) => ({
           ...m,
           shownName: m.userId ? (accounts.get(m.userId)?.name ?? "(unknown account)") : m.name,
@@ -107,10 +109,26 @@ export function createCommitteeActions(deps: CommitteeDeps) {
           throw new RuleViolationError("A committee application is answered with an account.");
         }
       }
+      const { evaluation } = committee;
+      for (const [id, byAccount] of [
+        [evaluation.formId, false],
+        [evaluation.committeeFormId, true],
+      ] as const) {
+        if (id === null) continue;
+        const form = await deps.forms.get(id);
+        if (!form || form.deletedAt !== null || form.usage !== "public") {
+          throw new RuleViolationError("Link a public form of the Forms page.");
+        }
+        // The committee roster is checked against the account that answers.
+        if (byAccount && !isSignedInMode(form.respondents)) {
+          throw new RuleViolationError("The committee evaluation is answered with an account.");
+        }
+      }
       return deps.committees.save(
         eventId,
         version,
         {
+          evaluation,
           applicationForms: committee.applicationForms,
           divisions: committee.divisions,
           // The account's own name is shown, so none is copied next to it.

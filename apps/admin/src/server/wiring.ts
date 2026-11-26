@@ -79,6 +79,7 @@ import { createOrgUnitActions } from "./org-units";
 import { createPeriodActions } from "./periods";
 import { createCheckInActions } from "./event-checkin";
 import { createCommitteeActions, createCommitteeRoles } from "./event-committee";
+import { createEventCertificateActions } from "./event-certificates";
 import { committeeRole } from "@website/domain/events";
 import { createDonationActions } from "./donations";
 import { createSponsorActions } from "./sponsors";
@@ -364,6 +365,24 @@ export const certificateActions = lazyEnv(() =>
       if (!secret) throw new Error("SUBSCRIBER_HASH_SECRET is required for e-mail columns.");
       return keyedHash(CERTIFICATE_EMAIL_PURPOSE, email, secret);
     },
+    now: () => new Date(),
+  }),
+);
+
+export const eventCertificateActions = lazyEnv(() =>
+  createEventCertificateActions({
+    certificates: adminStores().certificates,
+    getLetter: (id) => adminStores().letters.get(id),
+    hashEmail: (email) => {
+      const secret = getAdminEnv().SUBSCRIBER_HASH_SECRET;
+      if (!secret) throw new Error("SUBSCRIBER_HASH_SECRET is required for e-mail columns.");
+      return keyedHash(CERTIFICATE_EMAIL_PURPOSE, email, secret);
+    },
+    events: adminStores().events,
+    registrations: adminStores().eventRegistrations,
+    committees: adminStores().committees,
+    forms: adminStores().forms,
+    users: (uids) => adminStores().accounts.getMany(uids),
     now: () => new Date(),
   }),
 );

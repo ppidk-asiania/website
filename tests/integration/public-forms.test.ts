@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSqlFormStore, createSqlFormWebStore } from "@website/db/sql";
+import {
+  createSqlCommitteeStore,
+  createSqlFormStore,
+  createSqlFormWebStore,
+} from "@website/db/sql";
+import { RuleViolationError } from "@website/domain/shared";
 import { normalizePermissions, type Principal } from "@website/permissions";
 import { createFormActions } from "../../apps/admin/src/server/forms";
 import { createFormSubmission, createPublicFormReader } from "../../apps/web/src/server/forms";
@@ -452,6 +457,48 @@ describe("who may answer (10.3)", () => {
     clock = new Date("2027-01-01T00:00:00Z");
     await actions().close(...as(owner))({ id, version: (await store.get(id))?.version ?? 0 });
     expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: false, error: "closed" });
+  });
+
+  it("a committee evaluation form takes answers only from the committee, inside its window (N1.7)", async () => {
+    seed();
+    const { id, publicToken } = await published({ respondents: "account" });
+    const ids = await questionIds(id);
+    const committees = createSqlCommitteeStore(fake.db as unknown as Db);
+    fake.docs.set("eventCommittees/ev1", {
+      divisions: [],
+      members: [{ userId: "u1", name: "", divisionId: "x", seat: "member" }],
+      committeeEvalFormId: id,
+      committeeEvalOpensAt: new Date("2026-10-19T00:00:00Z"),
+      committeeEvalClosesAt: new Date("2026-10-30T00:00:00Z"),
+      version: 1,
+    });
+    // The same hook as apps/web/src/server/forms-wiring.ts.
+    const gated = (user: Signed) =>
+      createFormSubmission({
+        submit: (token, version, answers, now, who) =>
+          web.submit(token, version, answers, now, who, async (tx, saved) => {
+            const refused = await committees.refuseCommitteeAnswer(
+              tx,
+              saved.formId,
+              who.user?.uid ?? null,
+              now,
+            );
+            if (refused) throw new RuleViolationError("committee only");
+          }),
+        captcha,
+        now: () => clock,
+      })(user, {
+        token: publicToken,
+        version: 1,
+        answers: { [ids[0]!]: "x", [ids[1]!]: "Good" },
+        captcha: "human",
+      });
+    expect(await gated(budi)).toEqual({ ok: false, error: "committee" });
+    expect(responses()).toHaveLength(0);
+    expect(await gated(ari)).toEqual({ ok: true });
+    expect(responses()).toEqual([`formResponses/${id}_u1`]);
+    clock = new Date("2026-11-05T00:00:00Z");
+    expect(await gated(ari)).toEqual({ ok: false, error: "committee" });
   });
 
   it("officers forms refuse accounts without an active seat in the active period", async () => {

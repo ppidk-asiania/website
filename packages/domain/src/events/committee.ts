@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
+import { DEFAULT_EVALUATION, EvaluationInputSchema, type EvaluationSettings } from "./evaluation";
 
 /** The committee of one event (N1.5): divisions, and people with a seat in a division. */
 export const COMMITTEE_SEATS = ["head", "deputy", "secretary", "treasurer", "member"] as const;
@@ -40,6 +41,8 @@ export interface EventCommittee {
   readonly members: readonly CommitteeMember[];
   /** The forms whose answers are placed into the committee; absent = none. */
   readonly applicationForms?: readonly ApplicationForm[];
+  /** The evaluation forms and the certificate rule of the event (N1.7). */
+  readonly evaluation?: EvaluationSettings;
 }
 
 export const CommitteeInputSchema = z
@@ -73,6 +76,7 @@ export const CommitteeInputSchema = z
       .array(z.object({ formId: safeId, kind: z.enum(APPLICATION_KINDS) }).strict())
       .max(4)
       .default([]),
+    evaluation: EvaluationInputSchema.default(DEFAULT_EVALUATION),
   })
   .strict()
   .superRefine((committee, ctx) => {

@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuditContext, getPrincipal } from "@/server/context";
-import { certificateActions, certificateSending, letterActions } from "@/server/wiring";
+import {
+  certificateActions,
+  certificateSending,
+  eventCertificateActions,
+  letterActions,
+} from "@/server/wiring";
 
 const done = <T extends { ok: boolean }>(result: T): T => {
   if (result.ok) revalidatePath("/letters", "layout");
@@ -59,4 +64,7 @@ export async function addParticipantsAction(input: unknown) {
 }
 export async function removeParticipantAction(input: unknown) {
   return done(await certificateActions().remove(getPrincipal, getAuditContext)(input));
+}
+export async function addEventParticipantsAction(input: unknown) {
+  return done(await eventCertificateActions().addFromEvent(getPrincipal, getAuditContext)(input));
 }

@@ -1,20 +1,24 @@
-import type { Database } from "./store";
+import type { Database, Transaction } from "./store";
 import type { AuditEvent, Snapshot } from "@website/audit";
 import type {
   ApplicationForm,
   CommitteeMember,
   Division,
+  EvaluationSettings,
   EventCommittee,
   Placement,
 } from "@website/domain/events";
+import { evaluationWindow } from "@website/domain/events";
 import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { createSqlAuditWriter } from "./audit";
+import { toDate } from "./slugged";
 
 export interface StoredCommittee extends EventCommittee {
   readonly eventId: string;
   readonly version: number;
   readonly applicationForms: readonly ApplicationForm[];
+  readonly evaluation: EvaluationSettings;
 }
 
 export type CommitteeAudit = (
@@ -27,6 +31,22 @@ const snapshotOf = (c: EventCommittee): Snapshot => ({
   divisions: c.divisions.map((d) => ({ ...d })),
   members: c.members.map((m) => ({ ...m })),
   applicationForms: (c.applicationForms ?? []).map((f) => ({ ...f })),
+  evaluation: c.evaluation
+    ? {
+        ...c.evaluation,
+        committeeOpensAt: c.evaluation.committeeOpensAt?.toISOString() ?? null,
+        committeeClosesAt: c.evaluation.committeeClosesAt?.toISOString() ?? null,
+      }
+    : null,
+});
+
+/** The evaluation settings sit as flat fields, so a form can be found by its id (the committee gate). */
+const evaluationFields = (e: EvaluationSettings | undefined) => ({
+  evaluationFormId: e?.formId ?? null,
+  certificateNeedsAttendance: e?.certificateNeedsAttendance ?? true,
+  committeeEvalFormId: e?.committeeFormId ?? null,
+  committeeEvalOpensAt: e?.committeeOpensAt ?? null,
+  committeeEvalClosesAt: e?.committeeClosesAt ?? null,
 });
 
 export interface StoredDecision {
@@ -48,6 +68,14 @@ export function createSqlCommitteeStore(db: Database) {
     divisions: (doc.get("divisions") as Division[] | undefined) ?? [],
     members: (doc.get("members") as CommitteeMember[] | undefined) ?? [],
     applicationForms: (doc.get("applicationForms") as ApplicationForm[] | undefined) ?? [],
+    evaluation: {
+      formId: (doc.get("evaluationFormId") as string | null | undefined) ?? null,
+      certificateNeedsAttendance:
+        (doc.get("certificateNeedsAttendance") as boolean | undefined) ?? true,
+      committeeFormId: (doc.get("committeeEvalFormId") as string | null | undefined) ?? null,
+      committeeOpensAt: toDate(doc.get("committeeEvalOpensAt")),
+      committeeClosesAt: toDate(doc.get("committeeEvalClosesAt")),
+    },
   });
   return {
     async get(eventId: string): Promise<StoredCommittee | null> {
@@ -82,6 +110,7 @@ export function createSqlCommitteeStore(db: Database) {
           divisions: committee.divisions.map((d) => ({ ...d })),
           members: committee.members.map((m) => ({ ...m })),
           applicationForms: (committee.applicationForms ?? []).map((f) => ({ ...f })),
+          ...evaluationFields(committee.evaluation),
           version,
           updatedAt: now,
         });
@@ -93,6 +122,27 @@ export function createSqlCommitteeStore(db: Database) {
         );
         return { version };
       });
+    },
+
+    /**
+     * The gate of a committee evaluation form, inside the answer's own transaction: the form belongs to an
+     * event's committee, so only a person with a seat may answer, and only inside the window. Any other form
+     * passes. Returns a reason when refused.
+     */
+    async refuseCommitteeAnswer(
+      tx: Transaction,
+      formId: string,
+      userId: string | null,
+      now: Date,
+    ): Promise<"not_committee" | "window" | null> {
+      const found = await tx.get(
+        docs.where("committeeEvalFormId", "==", safeId.parse(formId)).limit(1),
+      );
+      const doc = found.docs[0];
+      if (!doc) return null;
+      const committee = read(doc.id, doc);
+      if (!userId || !committee.members.some((m) => m.userId === userId)) return "not_committee";
+      return evaluationWindow(committee.evaluation, now) === "open" ? null : "window";
     },
 
     /** What was decided for the applicants of an event, by response id. */
@@ -159,6 +209,7 @@ export function createSqlCommitteeStore(db: Database) {
             divisions: current.divisions.map((d) => ({ ...d })),
             members,
             applicationForms: current.applicationForms.map((f) => ({ ...f })),
+            ...evaluationFields(current.evaluation),
             version,
             updatedAt: now,
           });

@@ -8,7 +8,12 @@ import {
   createSqlRegistrationStore,
   type SignedInAccount,
 } from "@website/db/sql";
-import { checkInOutcome, registrationId, type PublicEvent } from "@website/domain/events";
+import {
+  checkInOutcome,
+  evaluationWindow,
+  registrationId,
+  type PublicEvent,
+} from "@website/domain/events";
 import { keyedHash, sha256Hex } from "@website/security";
 import { createRecaptchaVerifier, passesCaptcha } from "./captcha";
 import { webDb, webStorage } from "./db";
@@ -44,13 +49,27 @@ export async function publicEventBySlug(slug: string): Promise<PublicEvent | nul
 
 const committees = lazyEnv(() => createSqlCommitteeStore(webDb()));
 
-/** The open forms an event links to fill its committee (N1.6): volunteer sign-up and committee applications. */
-export async function eventCommitteeCalls(eventId: string, now: Date) {
-  const links = (await committees().get(eventId))?.applicationForms ?? [];
-  if (links.length === 0) return [];
+/**
+ * The open forms an event links (N1.6, N1.7): volunteer sign-up and committee application before the event,
+ * the evaluation after it, and the committee evaluation while its window is open.
+ */
+export async function eventFormLinks(eventId: string, now: Date) {
+  const committee = await committees().get(eventId);
+  if (!committee) return [];
+  const wanted = [
+    ...committee.applicationForms.map((l) => ({ id: l.formId, kind: l.kind })),
+    ...(committee.evaluation.formId
+      ? [{ id: committee.evaluation.formId, kind: "evaluation" as const }]
+      : []),
+    ...(committee.evaluation.committeeFormId &&
+    evaluationWindow(committee.evaluation, now) === "open"
+      ? [{ id: committee.evaluation.committeeFormId, kind: "committeeEval" as const }]
+      : []),
+  ];
+  if (wanted.length === 0) return [];
   const open = await publishedPublicForms();
-  return links.flatMap((link) => {
-    const form = open.find((f) => f.id === link.formId);
+  return wanted.flatMap((link) => {
+    const form = open.find((f) => f.id === link.id);
     return form && form.publicToken && formWindow(form, now) === "open"
       ? [{ kind: link.kind, title: form.title, token: form.publicToken }]
       : [];

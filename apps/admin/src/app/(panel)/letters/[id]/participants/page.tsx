@@ -29,8 +29,11 @@ export default async function ParticipantsRoute({ params }: { params: Promise<{ 
   const sheets = await adminReads.listCertificates(batch.id);
   const canSend = batch.status === "issued" && can(viewer.principal, "letters.edit", scope);
   const progress = canSend ? await certificateSending().progress(batch.id) : null;
+  const mayList = can(viewer.principal, "events.edit") || can(viewer.principal, "registrants.read");
+  const events = mayList ? await adminReads.listEvents() : [];
   return (
     <ParticipantsPage
+      events={events.map((e) => ({ id: e.id, title: e.title }))}
       batch={{
         id: batch.id,
         subject: batch.subject,

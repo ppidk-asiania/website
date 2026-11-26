@@ -275,3 +275,107 @@ describe("committee applications (N1.6)", () => {
     expect(await place(nobody, "r1", asSeat)).toMatchObject({ ok: true });
   });
 });
+
+describe("evaluation forms and the committee gate (N1.7)", () => {
+  const opens = "2026-11-21T00:00:00.000Z";
+  const closes = "2026-11-28T00:00:00.000Z";
+  const withEvaluation = (evaluation: Record<string, unknown>) => ({
+    ...input(null, [{ userId: "u1", name: "", divisionId: "board", seat: "head" }]),
+    committee: {
+      ...input(null, [{ userId: "u1", name: "", divisionId: "board", seat: "head" }]).committee,
+      evaluation: {
+        formId: null,
+        certificateNeedsAttendance: true,
+        committeeFormId: null,
+        committeeOpensAt: null,
+        committeeClosesAt: null,
+        ...evaluation,
+      },
+    },
+  });
+  const gate = (formId: string, userId: string | null, at: string) =>
+    (fake.db as unknown as Db).runTransaction((tx) =>
+      createSqlCommitteeStore(fake.db as unknown as Db).refuseCommitteeAnswer(
+        tx,
+        formId,
+        userId,
+        new Date(at),
+      ),
+    );
+
+  it("saves the evaluation settings and loads them back", async () => {
+    forms["f2"] = form("account", "f2");
+    const saved = await actions().save(...as(editor))(
+      withEvaluation({
+        formId: "f1",
+        certificateNeedsAttendance: false,
+        committeeFormId: "f2",
+        committeeOpensAt: opens,
+        committeeClosesAt: closes,
+      }),
+    );
+    expect(saved).toMatchObject({ ok: true });
+    const loaded = await actions().load(...as(editor))({ eventId });
+    expect(loaded).toMatchObject({
+      data: {
+        evaluation: {
+          formId: "f1",
+          certificateNeedsAttendance: false,
+          committeeFormId: "f2",
+          committeeOpensAt: new Date(opens),
+          committeeClosesAt: new Date(closes),
+        },
+      },
+    });
+  });
+
+  it("refuses a form that is not public, and a committee form that cannot name the account", async () => {
+    forms["f1"] = { ...form("account"), usage: "recruitment" };
+    expect(await actions().save(...as(editor))(withEvaluation({ formId: "f1" }))).toMatchObject({
+      error: "refused",
+    });
+    forms["f1"] = form("guest");
+    expect(
+      await actions().save(...as(editor))(withEvaluation({ committeeFormId: "f1" })),
+    ).toMatchObject({ error: "refused" });
+    expect(
+      await actions().save(...as(editor))(withEvaluation({ formId: "f1", committeeFormId: "f1" })),
+    ).toMatchObject({ error: "invalid_input" });
+  });
+
+  it("only a member of the committee answers the committee form, inside its window", async () => {
+    await actions().save(...as(editor))(
+      withEvaluation({
+        committeeFormId: "f2",
+        committeeOpensAt: opens,
+        committeeClosesAt: closes,
+      }),
+    );
+    expect(await gate("other-form", null, "2026-11-22T00:00:00Z")).toBeNull();
+    expect(await gate("f2", "u1", "2026-11-22T00:00:00Z")).toBeNull();
+    expect(await gate("f2", "stranger", "2026-11-22T00:00:00Z")).toBe("not_committee");
+    expect(await gate("f2", null, "2026-11-22T00:00:00Z")).toBe("not_committee");
+    expect(await gate("f2", "u1", "2026-11-20T00:00:00Z")).toBe("window");
+    expect(await gate("f2", "u1", "2026-12-01T00:00:00Z")).toBe("window");
+  });
+
+  it("a seat decision keeps the evaluation settings", async () => {
+    await actions().save(...as(editor))({
+      ...withEvaluation({ formId: "f1" }),
+      committee: {
+        ...withEvaluation({ formId: "f1" }).committee,
+        applicationForms: [{ formId: "f1", kind: "volunteer" }],
+      },
+    });
+    responses = [response("r1", { name: "Pak Budi" })];
+    await actions().place(...as(editor))({
+      eventId,
+      formId: "f1",
+      responseId: "r1",
+      placement: { outcome: "placed", divisionId: "logi", seat: "member" },
+    });
+    expect(await actions().load(...as(editor))({ eventId })).toMatchObject({
+      data: { evaluation: { formId: "f1" } },
+    });
+  });
+});

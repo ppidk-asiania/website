@@ -2,9 +2,14 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { addParticipantsAction, removeParticipantAction } from "@/app/(panel)/letters/actions";
+import {
+  addEventParticipantsAction,
+  addParticipantsAction,
+  removeParticipantAction,
+} from "@/app/(panel)/letters/actions";
 import { actionMessage } from "@/components/action-message";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
 import { ListCard, ListEmpty, useListTable } from "@/components/ui/list-controls";
@@ -25,9 +30,19 @@ interface Props {
   sheets: Sheet[];
   canEdit: boolean;
   send: ReactNode;
+  /** Events whose registrants the viewer may read: the source of "Add registrants" (empty = no button). */
+  events: Array<{ id: string; title: string }>;
 }
 
-export function ParticipantsPage({ batch, sheets, canEdit, send }: Props) {
+const LEFT_OUT: Record<string, string> = {
+  not_confirmed: "registration not confirmed",
+  not_attended: "did not attend",
+  not_evaluated: "evaluation not answered",
+  no_name: "the account has no name",
+  already_on_batch: "already on this batch",
+};
+
+export function ParticipantsPage({ batch, sheets, canEdit, send, events }: Props) {
   const router = useRouter();
   const toast = useToastMessage();
   const [text, setText] = useState("");
@@ -43,6 +58,18 @@ export function ParticipantsPage({ batch, sheets, canEdit, send }: Props) {
     if (!result.ok) return toast.show(actionMessage(result));
     toast.show(`${result.data.added} participants added`);
     setText("");
+    router.refresh();
+  };
+
+  const [eventId, setEventId] = useState("");
+  const [leftOut, setLeftOut] = useState<Array<{ name: string; reason: string }> | null>(null);
+  const addFromEvent = async () => {
+    setBusy(true);
+    const result = await addEventParticipantsAction({ batchId: batch.id, eventId });
+    setBusy(false);
+    if (!result.ok) return toast.show(actionMessage(result));
+    setLeftOut(result.data.leftOut);
+    toast.show(`${result.data.added} participants added`);
     router.refresh();
   };
 
@@ -175,6 +202,42 @@ export function ParticipantsPage({ batch, sheets, canEdit, send }: Props) {
             </Button>
           </div>
         </form>
+      ) : null}
+      {canEdit && events.length > 0 ? (
+        <div className="admin-dark-form">
+          <label className="admin-field">
+            <span className="admin-field__label">
+              Add the registrants of an event who earned a certificate (confirmed, attended and
+              evaluated, as the event sets it)
+            </span>
+            <Select value={eventId} onChange={(e) => setEventId(e.target.value)}>
+              <option value="">Choose an event</option>
+              {events.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.title}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            icon="plus"
+            disabled={busy || eventId === ""}
+            onClick={() => void addFromEvent()}
+          >
+            Add registrants
+          </Button>
+          {leftOut && leftOut.length > 0 ? (
+            <ul aria-label="Left out">
+              {leftOut.map((p, i) => (
+                <li key={`${p.name}-${i}`}>
+                  {p.name}: {LEFT_OUT[p.reason] ?? p.reason}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
       <ListCard
         table={table}

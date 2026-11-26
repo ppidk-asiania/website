@@ -23,7 +23,7 @@ export interface CertificateDeps {
   readonly now: () => Date;
 }
 
-const participantAudit =
+export const participantAudit =
   (audit: AuditBuilder): CertificateAudit =>
   (batch, change) =>
     audit({

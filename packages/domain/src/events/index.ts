@@ -274,6 +274,7 @@ export interface CalendarFeed {
 
 export * from "./checkin";
 export * from "./committee";
+export * from "./evaluation";
 export * from "./lifecycle";
 export * from "./payment";
 export * from "./registration";
