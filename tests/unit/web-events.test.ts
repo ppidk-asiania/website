@@ -32,6 +32,7 @@ const event = (slug: string, start: string, extra: Partial<PublicEvent> = {}): P
   attendanceNote: null,
   recapUrl: null,
   registration: null,
+  fee: null,
   ...extra,
 });
 

@@ -9,7 +9,9 @@ import {
 } from "@website/db/sql";
 import type { PublicEvent } from "@website/domain/events";
 import { createRecaptchaVerifier, passesCaptcha } from "./captcha";
-import { webDb } from "./db";
+import { webDb, webStorage } from "./db";
+import { randomUUID } from "node:crypto";
+import { createEventProofUpload } from "./event-proof";
 import { getWebEnv } from "./env";
 import { messenger } from "./messaging";
 import { hasCompleteProfile } from "./profile-wiring";
@@ -86,4 +88,23 @@ export async function eventRegistrationWizard(slug: string, user: SignedInAccoun
   const token = setup && (await forms().tokenOf(setup.formId));
   const view = token ? await publicFormByToken()(token, user) : null;
   return { event, hasForm: setup !== null, view };
+}
+
+/** The proof of a payment made outside the platform (N1.3). */
+export const uploadEventProof = lazyEnv(() =>
+  createEventProofUpload({
+    events: reader(),
+    registrations: registrations(),
+    storage: webStorage(),
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);
+
+/** What the ticket page shows: the event, how to pay and the member's own registration (null: not theirs to see). */
+export async function eventTicket(slug: string, user: SignedInAccount) {
+  const guide = await reader().findPaymentGuide(slug);
+  if (!guide) return null;
+  const mine = await registrations().ownRegistration(guide.event.id, user.uid);
+  return mine && { ...guide, mine };
 }

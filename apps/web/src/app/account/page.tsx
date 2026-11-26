@@ -68,6 +68,12 @@ export default async function AccountPage() {
             <li key={event.id}>
               <a href={`/events/${event.slug}`}>{event.title}</a> —{" "}
               {formatEventTime(event.startsAt, event.timezone, language)} · {t.statuses[status]}
+              {event.fee && (
+                <>
+                  {" · "}
+                  <a href={`/events/${event.slug}/ticket`}>{t.ticketOpen}</a>
+                </>
+              )}
             </li>
           ))}
         </ul>

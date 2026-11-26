@@ -28,7 +28,10 @@ export default async function AdminEventsPage() {
       initial={events.map((e) => toEventItem(e, authors.get(e.id) ?? null))}
       canEdit={canEdit}
       canPublish={can(viewer.principal, "events.publish")}
-      canSeeRegistrants={can(viewer.principal, "registrants.read")}
+      canSeeRegistrants={
+        can(viewer.principal, "registrants.read") || can(viewer.principal, "events.payments")
+      }
+      canCheckPayments={can(viewer.principal, "events.payments")}
       forms={forms.map((f) => ({ id: f.id, title: f.title, status: f.status }))}
       publicBase={getAppUrls().WEB_URL ?? ""}
     />

@@ -71,6 +71,7 @@ const repos = createMemoryGatewayRepositories({
       attendanceNote: null,
       recapUrl: null,
       registration: null,
+      fee: null,
     },
   ],
 });

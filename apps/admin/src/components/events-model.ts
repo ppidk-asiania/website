@@ -6,6 +6,7 @@ import {
   sortedSponsors,
   type ApprovalState,
   type AttendanceMode,
+  type EventFee,
   type EventEntity,
   type EventStage,
   type EventImage,
@@ -57,6 +58,7 @@ export interface EventItem {
     showOnTicket: string;
     shortUrl: string | null;
   } | null;
+  fee: (Omit<EventFee, "earlyUntil"> & { earlyUntil: string | null }) | null;
 }
 
 export interface StageRow {
@@ -155,6 +157,7 @@ export function toEventItem(
     attendanceNote: e.attendanceNote ?? "",
     recapUrl: e.recapUrl ?? "",
     registration: e.registration,
+    fee: e.fee && { ...e.fee, earlyUntil: e.fee.earlyUntil?.toISOString() ?? null },
   };
 }
 

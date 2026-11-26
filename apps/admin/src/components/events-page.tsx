@@ -148,6 +148,7 @@ interface EventsListProps {
   canEdit: boolean;
   canPublish: boolean;
   canSeeRegistrants: boolean;
+  canCheckPayments: boolean;
   forms: readonly RegistrationFormChoice[];
   publicBase: string;
 }
@@ -183,6 +184,7 @@ function EventsList({
   canEdit,
   canPublish,
   canSeeRegistrants,
+  canCheckPayments,
   forms,
   publicBase,
 }: EventsListProps) {
@@ -1146,6 +1148,7 @@ function EventsList({
               forms={forms}
               canEdit={canEdit}
               canSeeRegistrants={canSeeRegistrants}
+              canCheckPayments={canCheckPayments}
               publicBase={publicBase}
               show={toast.show}
             />

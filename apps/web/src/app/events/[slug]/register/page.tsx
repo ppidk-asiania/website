@@ -46,6 +46,7 @@ export default async function EventRegisterPage({
           version={view.form.version}
           questions={view.form.questions}
           modes={event.registration?.attendanceModes ?? []}
+          fee={event.fee}
           practice={practice}
           profile={{
             name: view.mine?.name ?? "",

@@ -27,6 +27,8 @@ interface QueueSources {
   zoom: ZoomRequest[];
   revisions: ProgramRevision[];
   events: EventEntity[];
+  /** One item per proof of payment waiting for a check (N1.3). */
+  payments: { chapterId: string | null }[];
 }
 type Waiting<K extends keyof QueueSources> = (
   item: QueueSources[K][number],
@@ -105,6 +107,13 @@ export const DASHBOARD_QUEUES = [
     source: "events",
     waiting: (e) => e.deletedAt === null && approvalState(e) === "pending",
   }),
+  queue({
+    label: "Payments waiting for a check",
+    href: "/events",
+    permission: "events.payments",
+    source: "payments",
+    waiting: () => true,
+  }),
 ];
 
 export function createDashboard(deps: {
@@ -116,6 +125,7 @@ export function createDashboard(deps: {
   zoom: (from: Date) => Promise<ZoomRequest[]>;
   revisions: (periodId: string) => Promise<ProgramRevision[]>;
   events: () => Promise<EventEntity[]>;
+  payments: () => Promise<{ chapterId: string | null }[]>;
   myTasks: (uid: string) => Promise<Task[]>;
   now: () => Date;
 }) {
@@ -128,7 +138,7 @@ export function createDashboard(deps: {
     const queues = DASHBOARD_QUEUES.filter((q) => canInSomeScope(principal, q.permission));
     const uses = (source: keyof QueueSources) => queues.some((q) => q.source === source);
     const period = await deps.activePeriod();
-    const [graduated, secretariat, finance, lpj, zoom, revisions, events, tasks] =
+    const [graduated, secretariat, finance, lpj, zoom, revisions, events, payments, tasks] =
       await Promise.all([
         can(principal, "appointments.edit") ? deps.graduatedOfficers() : null,
         watchesLpj ? deps.lpjSecretariatHolders() : null,
@@ -137,9 +147,10 @@ export function createDashboard(deps: {
         uses("zoom") ? deps.zoom(now) : [],
         period && uses("revisions") ? deps.revisions(period.id) : [],
         uses("events") ? deps.events() : [],
+        uses("payments") ? deps.payments() : [],
         deps.myTasks(principal.userId),
       ]);
-    const sources: QueueSources = { finance, lpj, zoom, revisions, events };
+    const sources: QueueSources = { finance, lpj, zoom, revisions, events, payments };
     return {
       queues: queues
         .map((q) => ({

@@ -26,6 +26,7 @@ const event: PublicEvent = {
   attendanceNote: null,
   recapUrl: null,
   registration: null,
+  fee: null,
 };
 const member = { uid: "u1", email: "sari@example.org" };
 const setup = (overrides: Partial<Parameters<typeof createEventRegistration>[0]> = {}) => {

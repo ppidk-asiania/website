@@ -1,7 +1,13 @@
 import type { Database, Transaction } from "./store";
-import type { Snapshot } from "@website/audit";
+import type { AuditEvent, Snapshot } from "@website/audit";
 import {
   assertAttendanceMode,
+  assertCategoryOpen,
+  assertFeeReady,
+  assertNotOwnPayment,
+  canSendProof,
+  feeAmount,
+  findCategory,
   isLive,
   isRegistrationOpen,
   nextRegistrationStatus,
@@ -9,7 +15,9 @@ import {
   toPublicEvent,
   type EventEntity,
   type AttendanceMode,
+  type EventFee,
   type EventImage,
+  type PaymentState,
   type EventRegistrationSetup,
   type EventType,
   type PublicEvent,
@@ -19,9 +27,12 @@ import {
   type Speaker,
   type Sponsor,
 } from "@website/domain/events";
+import { cashEntryFromEventPayment, type CashEntry } from "@website/domain/finance";
 import { RuleViolationError } from "@website/domain/shared";
 import { safeId } from "@website/security/validation";
 import { getDocumentsByIds } from "./batch";
+import { createSqlAuditWriter } from "./audit";
+import { cashEntrySnapshot, storedEntry } from "./finance";
 import { createSluggedStore, toDate } from "./slugged";
 
 export interface RegistrantRow {
@@ -29,9 +40,30 @@ export interface RegistrantRow {
   readonly status: RegistrationStatus;
   readonly attendanceMode: AttendanceMode | null;
   readonly registeredAt: Date;
+  /** Paid events only (N1.3); `not_required` for a free one. */
+  readonly payment: PaymentState;
+  readonly feeCategory: string | null;
+  readonly hasProof: boolean;
+  readonly paymentNote: string | null;
+  /** Set once verified: the amount frozen at that moment. */
+  readonly amountMinor: number | null;
 }
 
+/** A proof file kept with the registration: a private file, image or PDF. */
+export interface PaymentProof {
+  readonly path: string;
+  readonly type: "pdf" | "jpeg" | "png" | "webp";
+}
+
+export type PaymentAudit = (before: Snapshot, after: Snapshot) => AuditEvent;
+export type PaymentCashAudit = (after: Snapshot, entry: CashEntry) => AuditEvent;
+
 export type EventFields = Omit<EventEntity, "id" | "version" | "createdAt" | "updatedAt">;
+
+function toFee(value: unknown): EventFee | null {
+  const fee = value as (Omit<EventFee, "earlyUntil"> & { earlyUntil: unknown }) | null | undefined;
+  return fee ? { ...fee, earlyUntil: toDate(fee.earlyUntil) } : null;
+}
 
 function toEvent(id: string, data: Record<string, unknown>): EventEntity {
   return {
@@ -66,6 +98,7 @@ function toEvent(id: string, data: Record<string, unknown>): EventEntity {
     attendanceNote: (data["attendanceNote"] as string | undefined) ?? null,
     recapUrl: (data["recapUrl"] as string | undefined) ?? null,
     registration: (data["registration"] as EventRegistrationSetup | null | undefined) ?? null,
+    fee: toFee(data["fee"]),
     version: data["version"] as number,
     createdAt: toDate(data["createdAt"]) as Date,
     updatedAt: toDate(data["updatedAt"]) as Date,
@@ -111,6 +144,14 @@ export function eventSnapshot(e: EventFields): Snapshot {
           attendanceModes: [...e.registration.attendanceModes],
           showOnTicket: e.registration.showOnTicket,
           shortUrl: e.registration.shortUrl,
+        }
+      : null,
+    fee: e.fee
+      ? {
+          ...e.fee,
+          categories: e.fee.categories.map((c) => ({ ...c })),
+          earlyUntil: iso(e.fee.earlyUntil),
+          payImage: e.fee.payImage ? { ...e.fee.payImage } : null,
         }
       : null,
   };
@@ -160,13 +201,42 @@ export function createSqlEventReader(db: Database) {
       const event = await store.findBySlug(slug);
       return event && isLive(event, now) ? toPublicEvent(event) : null;
     },
+
+    /** A paid event with its payment instructions: shown to the people registered for it only (N1.3). */
+    async findPaymentGuide(
+      slug: string,
+      now = new Date(),
+    ): Promise<{ event: PublicEvent; fee: EventFee } | null> {
+      const event = await store.findBySlug(slug);
+      return event && isLive(event, now) && event.fee?.paid
+        ? { event: toPublicEvent(event), fee: event.fee }
+        : null;
+    },
   };
 }
 
 export type SqlEventReader = ReturnType<typeof createSqlEventReader>;
 
+const paymentSnapshot = (doc: { get(field: string): unknown }): Snapshot => ({
+  status: doc.get("status") as string,
+  payment: (doc.get("payment") as string | undefined) ?? null,
+  paymentNote: (doc.get("paymentNote") as string | undefined) ?? null,
+  amountMinor: (doc.get("amountMinor") as number | undefined) ?? null,
+  feeCategory: (doc.get("feeCategory") as string | undefined) ?? null,
+});
+
+const paymentFields = (doc: { get(field: string): unknown }) => ({
+  payment: (doc.get("payment") as PaymentState | undefined) ?? "not_required",
+  feeCategory: (doc.get("feeCategory") as string | undefined) ?? null,
+  hasProof: Boolean(doc.get("proof")),
+  paymentNote: (doc.get("paymentNote") as string | undefined) ?? null,
+  amountMinor: (doc.get("amountMinor") as number | undefined) ?? null,
+});
+
 export function createSqlRegistrationStore(db: Database) {
   const registrationsRef = db.collection("eventRegistrations");
+  const cash = db.collection("cashEntries");
+  const audit = createSqlAuditWriter(db);
   const store = {
     /**
      * The registration itself, inside a transaction of the caller: the wizard writes the form response in
@@ -187,6 +257,10 @@ export function createSqlRegistrationStore(db: Database) {
       if (event.registration && details === null) {
         throw new RuleViolationError("This event asks questions: register on its form page.");
       }
+      const fee = event.fee?.paid ? event.fee : null;
+      if (fee && !event.registration) {
+        throw new RuleViolationError("This paid event registers on its form page.");
+      }
       if (!event.registration && details !== null) {
         throw new RuleViolationError("This event has no registration form.");
       }
@@ -200,7 +274,15 @@ export function createSqlRegistrationStore(db: Database) {
       const counter = await tx.get(counterRef);
       const confirmed = (counter.get("confirmed") as number | undefined) ?? 0;
       const waitlisted = (counter.get("waitlisted") as number | undefined) ?? 0;
-      const status = nextRegistrationStatus(event, confirmed);
+      const held = (counter.get("categories") as Record<string, number> | undefined) ?? {};
+      const category = fee ? (assertFeeReady(fee), findCategory(fee, details!.feeCategory)) : null;
+      if (!fee && details?.feeCategory) {
+        throw new RuleViolationError("This event has no ticket categories.");
+      }
+      if (category) assertCategoryOpen(category, held[category.id] ?? 0);
+      const seat = nextRegistrationStatus(event, confirmed);
+      // A paid event holds the seat as `pending` until the payment is verified (DEC-26).
+      const status = category && seat === "confirmed" ? "pending" : seat;
       tx.set(ref, {
         eventId,
         userId,
@@ -208,13 +290,15 @@ export function createSqlRegistrationStore(db: Database) {
         createdAt: now,
         updatedAt: now,
         ...(details ?? {}),
+        ...(category ? { payment: status === "pending" ? "unpaid" : "not_required" } : {}),
       });
-      tx.set(
-        counterRef,
-        status === "confirmed"
-          ? { confirmed: confirmed + 1, waitlisted }
-          : { confirmed, waitlisted: waitlisted + 1 },
-      );
+      const seated = seat === "confirmed";
+      tx.set(counterRef, {
+        confirmed: seated ? confirmed + 1 : confirmed,
+        waitlisted: seated ? waitlisted : waitlisted + 1,
+        categories:
+          category && seated ? { ...held, [category.id]: (held[category.id] ?? 0) + 1 } : held,
+      });
       return { status, created: true };
     },
 
@@ -242,8 +326,165 @@ export function createSqlRegistrationStore(db: Database) {
           status: doc.get("status") as RegistrationStatus,
           attendanceMode: (doc.get("attendanceMode") as AttendanceMode | undefined) ?? null,
           registeredAt: toDate(doc.get("createdAt")) as Date,
+          ...paymentFields(doc),
         }))
         .sort((a, b) => a.registeredAt.getTime() - b.registeredAt.getTime());
+    },
+
+    /** The person's own registration, for the ticket page (null = not registered). */
+    async ownRegistration(eventId: string, userId: string) {
+      const snap = await registrationsRef.doc(safeId.parse(registrationId(eventId, userId))).get();
+      if (!snap.exists) return null;
+      return {
+        status: snap.get("status") as RegistrationStatus,
+        registeredAt: toDate(snap.get("createdAt")) as Date,
+        ...paymentFields(snap),
+      };
+    },
+
+    /** The proof is kept with the registration; a re-send replaces it (the old path is returned to delete). */
+    submitProof(
+      eventId: string,
+      userId: string,
+      proof: PaymentProof,
+      now: Date,
+    ): Promise<{ replaced: string | null }> {
+      return db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(registrationId(eventId, userId)));
+        const snap = await tx.get(ref);
+        const state = snap.get("payment") as PaymentState | undefined;
+        if (!snap.exists || snap.get("status") !== "pending" || !state || !canSendProof(state)) {
+          throw new RuleViolationError("There is no payment waiting for a proof.");
+        }
+        const before = snap.get("proof") as { path: string } | undefined;
+        tx.update(ref, {
+          proof: { ...proof, uploadedAt: now },
+          payment: "submitted",
+          paymentNote: null,
+          updatedAt: now,
+        });
+        return { replaced: before?.path ?? null };
+      });
+    },
+
+    /** The private file of a registration's proof, for the checker. */
+    async proofOf(id: string): Promise<PaymentProof | null> {
+      const snap = await registrationsRef.doc(safeId.parse(id)).get();
+      return (snap.get("proof") as PaymentProof | undefined) ?? null;
+    },
+
+    /** Proofs waiting for a check (the dashboard queue). */
+    async listSubmitted(): Promise<Array<{ id: string; eventId: string; at: Date }>> {
+      const snapshot = await registrationsRef.where("payment", "==", "submitted").get();
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        eventId: doc.get("eventId") as string,
+        at: toDate(doc.get("updatedAt")) as Date,
+      }));
+    },
+
+    /**
+     * Verify: the registration becomes confirmed with the amount frozen, and the cash book gets ONE income
+     * line (its id is the registration id), in the same transaction. A second verify writes nothing (DEC-26).
+     */
+    verifyPayment(
+      id: string,
+      verifiedBy: string,
+      now: Date,
+      auditFor: PaymentAudit,
+      cashAuditFor: PaymentCashAudit,
+    ): Promise<{ changed: boolean; eventId: string; userId: string }> {
+      return db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(id));
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new RuleViolationError("This registration does not exist.");
+        const eventId = snap.get("eventId") as string;
+        const userId = snap.get("userId") as string;
+        if (snap.get("payment") === "verified") return { changed: false, eventId, userId };
+        if (snap.get("payment") !== "submitted") {
+          throw new RuleViolationError("There is no proof to check yet.");
+        }
+        assertNotOwnPayment(verifiedBy, userId);
+        const eventSnap = await tx.get(db.collection("events").doc(safeId.parse(eventId)));
+        const event = eventSnap.exists ? toEvent(eventSnap.id, eventSnap.data()!) : null;
+        if (!event?.fee?.paid) throw new RuleViolationError("This event is not a paid event.");
+        const active = await tx.get(db.collection("settings").doc("activePeriod"));
+        const periodId = active.get("periodId") as string | undefined;
+        if (!periodId) throw new RuleViolationError("Activate a board period first.");
+        if ((await tx.get(cash.doc(ref.id))).exists) {
+          throw new RuleViolationError("This payment is already in the cash book.");
+        }
+        const log = await audit.begin(tx);
+        const category = findCategory(event.fee, snap.get("feeCategory") as string);
+        const amountMinor = feeAmount(
+          event.fee,
+          category.id,
+          toDate(snap.get("createdAt")) as Date,
+        );
+        const before = paymentSnapshot(snap);
+        const next = {
+          status: "confirmed",
+          payment: "verified",
+          amountMinor,
+          currency: event.fee.currency,
+          reviewedBy: verifiedBy,
+          reviewedAt: now,
+          updatedAt: now,
+        };
+        tx.update(ref, next);
+        log.append(
+          auditFor(before, {
+            ...before,
+            status: "confirmed",
+            payment: "verified",
+            amountMinor,
+            reviewedBy: verifiedBy,
+            reviewedAt: now.toISOString(),
+          }),
+        );
+        const entry = cashEntryFromEventPayment({
+          registrationId: ref.id,
+          periodId,
+          title: `${event.title}: ${category.label}`,
+          amountMinor,
+          currency: event.fee.currency,
+          at: now,
+          verifiedBy,
+        });
+        tx.create(cash.doc(entry.id), storedEntry(entry));
+        log.append(cashAuditFor(cashEntrySnapshot(entry), entry));
+        return { changed: true, eventId, userId };
+      });
+    },
+
+    /** Reject with a note; the person may send another proof. */
+    rejectPayment(
+      id: string,
+      reviewedBy: string,
+      note: string,
+      now: Date,
+      auditFor: PaymentAudit,
+    ): Promise<{ eventId: string; userId: string }> {
+      return db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(id));
+        const snap = await tx.get(ref);
+        if (!snap.exists || snap.get("payment") !== "submitted") {
+          throw new RuleViolationError("There is no proof to check.");
+        }
+        const userId = snap.get("userId") as string;
+        assertNotOwnPayment(reviewedBy, userId);
+        const log = await audit.begin(tx);
+        const before = paymentSnapshot(snap);
+        tx.update(ref, {
+          payment: "rejected",
+          paymentNote: note,
+          reviewedBy,
+          reviewedAt: now,
+          updatedAt: now,
+        });
+        log.append(auditFor(before, { ...before, payment: "rejected", paymentNote: note }));
+        return { eventId: snap.get("eventId") as string, userId };
+      });
     },
 
     /** Who is told when an event is cancelled: everyone who still holds a place or a waitlist spot. */

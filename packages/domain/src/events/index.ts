@@ -4,6 +4,8 @@ import { FeaturedImageSchema, type FeaturedImage } from "../content";
 import { TimezoneSchema } from "../members/profile";
 import { isValidSlug, type EntityMeta } from "../shared";
 import { isLive } from "./lifecycle";
+import type { EventFee, PublicFee } from "./payment";
+import { toPublicFee } from "./payment";
 import type { AttendanceMode, EventRegistrationSetup } from "./registration";
 
 export const EVENT_TYPES = [
@@ -72,6 +74,8 @@ export interface EventEntity extends EntityMeta {
   readonly recapUrl: string | null;
   /** The form asked at registration; null = one-click registration. */
   readonly registration: EventRegistrationSetup | null;
+  /** Fee categories and payment instructions (N1.3); null = a free event. */
+  readonly fee: EventFee | null;
 }
 
 export function sortedSponsors(sponsors: readonly Sponsor[]): Sponsor[] {
@@ -102,6 +106,7 @@ export interface PublicEvent {
   readonly recapUrl: string | null;
   /** Set when the event asks questions: the register button leads to the wizard page. */
   readonly registration: { readonly attendanceModes: readonly AttendanceMode[] } | null;
+  readonly fee: PublicFee | null;
 }
 
 export function toPublicEvent(e: EventEntity): PublicEvent {
@@ -128,6 +133,7 @@ export function toPublicEvent(e: EventEntity): PublicEvent {
     attendanceNote: e.attendanceNote,
     recapUrl: e.recapUrl,
     registration: e.registration && { attendanceModes: e.registration.attendanceModes },
+    fee: toPublicFee(e.fee),
   };
 }
 
@@ -214,7 +220,8 @@ export function isRegistrationOpen(
   return now < closesAt;
 }
 
-export type RegistrationStatus = "confirmed" | "waitlisted" | "cancelled";
+/** `pending` = a seat held for a paid event until the payment is verified (N1.3). */
+export type RegistrationStatus = "pending" | "confirmed" | "waitlisted" | "cancelled";
 
 export interface EventRegistration {
   readonly id: string;
@@ -266,4 +273,5 @@ export interface CalendarFeed {
 }
 
 export * from "./lifecycle";
+export * from "./payment";
 export * from "./registration";

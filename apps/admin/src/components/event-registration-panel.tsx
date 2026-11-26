@@ -7,12 +7,15 @@ import { ATTENDANCE_MODES, type AttendanceMode } from "@website/domain/events";
 import {
   createEventShortLinkAction,
   listEventRegistrantsAction,
+  rejectEventPaymentAction,
   saveEventRegistrationAction,
+  verifyEventPaymentAction,
 } from "@/app/(panel)/events/actions";
 import { actionMessage } from "@/components/action-message";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Select } from "@/components/ui/select";
+import { EventFeePanel } from "./event-fee-panel";
 import type { EventItem } from "./events-model";
 import type { RegistrantRow } from "@/server/event-registration";
 
@@ -33,10 +36,11 @@ export function EventRegistrationPanel(props: {
   forms: readonly RegistrationFormChoice[];
   canEdit: boolean;
   canSeeRegistrants: boolean;
+  canCheckPayments: boolean;
   publicBase: string;
   show: (message: string) => void;
 }) {
-  const { event, forms, canEdit, canSeeRegistrants, publicBase, show } = props;
+  const { event, forms, canEdit, canSeeRegistrants, canCheckPayments, publicBase, show } = props;
   const router = useRouter();
   const saved = event.registration;
   const [formId, setFormId] = useState(saved?.formId ?? "");
@@ -49,6 +53,7 @@ export function EventRegistrationPanel(props: {
   const [qr, setQr] = useState<string | null>(null);
   const [people, setPeople] = useState<Registrants | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
 
   const registerPath = `/events/${event.url}/register`;
   // Anyone may try the form: practice mode stores nothing (the event must already be public).
@@ -105,11 +110,87 @@ export function EventRegistrationPanel(props: {
     else setPeople(result.data);
   };
 
+  const decide = async (row: RegistrantRow, verify: boolean) => {
+    setBusy(true);
+    const result = verify
+      ? await verifyEventPaymentAction({ registrationId: row.registrationId })
+      : await rejectEventPaymentAction({ registrationId: row.registrationId, note: rejectNote });
+    setBusy(false);
+    if (!result.ok) {
+      show(actionMessage(result));
+      return;
+    }
+    show(verify ? "Payment verified" : "Proof rejected, the person is told");
+    if (!verify) setRejectNote("");
+    await loadPeople();
+  };
+
+  const paid = people?.rows.some((r) => r.payment !== "not_required") ?? false;
+  const paymentColumns: Column<RegistrantRow>[] = paid
+    ? [
+        { key: "category", header: "Category", render: (r) => r.category },
+        { key: "amount", header: "Amount", render: (r) => r.amount },
+        {
+          key: "payment",
+          header: "Payment",
+          render: (r) => (
+            <>
+              {r.payment.replace("_", " ")}
+              {r.hasProof && canCheckPayments ? (
+                <>
+                  {" "}
+                  <a
+                    className="admin-link"
+                    href={`/api/event-payments/${r.registrationId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Proof
+                  </a>
+                </>
+              ) : null}
+              {r.paymentNote ? <small> ({r.paymentNote})</small> : null}
+            </>
+          ),
+        },
+        ...(canCheckPayments
+          ? [
+              {
+                key: "check",
+                header: "",
+                render: (r: RegistrantRow) =>
+                  r.payment === "submitted" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void decide(r, true)}
+                      >
+                        Verify
+                      </Button>{" "}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || rejectNote.trim().length < 3}
+                        onClick={() => void decide(r, false)}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  ) : null,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
   const columns: Column<RegistrantRow>[] = [
     { key: "name", header: "Name", render: (r) => r.name || r.email },
     { key: "email", header: "Email", render: (r) => r.email },
     { key: "status", header: "Status", render: (r) => r.status },
     { key: "mode", header: "Attends", render: (r) => r.attendanceMode ?? "" },
+    ...paymentColumns,
     ...(people?.columns ?? []).map((header, i) => ({
       key: `a${i}`,
       header,
@@ -205,11 +286,27 @@ export function EventRegistrationPanel(props: {
           ) : null}
         </>
       ) : null}
+      {saved && canEdit ? (
+        <EventFeePanel event={event} version={version} onSaved={setVersion} show={show} />
+      ) : null}
       {saved && canSeeRegistrants ? (
         <>
           <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadPeople()}>
             {people ? "Refresh registrants" : "Show registrants"}
           </Button>
+          {people && paid && canCheckPayments ? (
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="event-reject-note">
+                Reason to reject a proof (the person reads it)
+              </label>
+              <input
+                id="event-reject-note"
+                className="admin-input"
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+              />
+            </div>
+          ) : null}
           {people ? (
             <DataTable
               columns={columns}

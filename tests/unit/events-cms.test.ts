@@ -173,6 +173,7 @@ describe("public event (DTO)", () => {
       attendanceNote: "80 online, 40 on site",
       recapUrl: null,
       registration: null,
+      fee: null,
     });
     expect(dto).not.toHaveProperty("rejectionNote");
     expect(dto).not.toHaveProperty("approvedBy");

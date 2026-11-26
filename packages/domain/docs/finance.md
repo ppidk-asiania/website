@@ -86,7 +86,7 @@ incomplete):
 ## Cash book (I2)
 
 `cashEntries/{id}`: lines of money that really moved, per board period, each in its own
-currency (minor units). Two ways in, nothing else writes the book:
+currency (minor units). Three ways in, nothing else writes the book:
 
 - **Mark paid** writes `cashEntries/{requestId}` in the SAME transaction as the request's
   `paid` status (`createSqlFinanceStore().pay`): a paid request without its line, or a line
@@ -94,6 +94,11 @@ currency (minor units). Two ways in, nothing else writes the book:
   map: receipt → in/receipt, disbursement → out/disbursement, reimbursement →
   out/reimbursement; **budget requests write nothing** (a plan, not a money movement). The line
   carries the amount actually paid, the payment day (UTC) and the proof.
+- **Verified event payment** (N1.3, DEC-26) writes `cashEntries/{registrationId}` (in/event, source
+  `event`) in the SAME transaction as the registration's `verified` state
+  (`createSqlRegistrationStore().verifyPayment`); the id makes a second line impossible. The line
+  carries the frozen amount, the event's currency and the verification day (UTC). It needs an
+  active board period. A refund is a manual out line.
 - **Manual lines** (`finance.cashbook`, global): opening balance, member dues, donations,
   receipts, bank interest, other income; activity, operational, reimbursement, disbursement,
   other spending. The category must belong to the kind (in/out); amount > 0; an optional unit of

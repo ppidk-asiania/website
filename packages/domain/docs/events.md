@@ -97,6 +97,35 @@ An event may link a **public Form answered with an account** (`events.registrati
 - Known limits: changing the linked form after people registered leaves their answers on the old form;
   a re-submit updates the answers but not the attendance mode.
 
+## Paid events (N1.3, DEC-26)
+
+Rules in `packages/domain/src/events/payment.ts`; store in `packages/db/src/sql/events.ts`; admin in
+`apps/admin/src/server/event-registration.ts`; web in `apps/web/src/server/event-proof.ts` and the page
+`/events/[slug]/ticket`. Money moves outside the platform; there is no gateway.
+
+- **Fee** (`events.fee`, `events.edit`): `paid`, currency, categories (name, price, optional early price,
+  optional places), `earlyUntil`, instructions and a public image (QR or account details). "Paid" is
+  separate from the prices: with no category yet nobody can register ("price not set"). A paid event needs
+  the registration form (N1.2), because the category is chosen there. The public page shows the prices,
+  never the instructions; those are on the ticket page of a registered person.
+- **Registration**: the amount is the early price when registered on or before `earlyUntil`, else the
+  normal one. The seat is held as status `pending` (payment `unpaid`) and counts against the event capacity
+  and the category's places (`eventCounters/{id}.categories`); a full event waitlists with no payment.
+  A category holds one place per registration that was not cancelled, including a rejected one, which may
+  send a new proof.
+- **Proof**: the member sends an image or PDF (first bytes checked, up to 5 MB) on the ticket page; it is
+  stored privately and the payment becomes `submitted`. A new proof is accepted while unpaid or after a
+  rejection.
+- **Check** (`events.payments`, in the registrants list; the dashboard queue "Payments waiting for a check"
+  counts them): **Verify** → registration `confirmed`, payment `verified`, amount frozen, one cash book entry,
+  all in one transaction; a second verify changes nothing. **Reject** needs a reason, keeps the seat and the
+  member is told. The checker is never the payer. Who checked and when is on the registration and in the
+  Audit Log.
+- Not built: group payment, automatic refunds, bank statement matching, payment links, notice to checkers
+  when a proof arrives (the web app has no checker list; the dashboard queue is the signal).
+- Changing the fee: a category people registered for cannot be removed, and the fee cannot be turned off
+  while someone still owes or waits for a check; amounts frozen at verification never change.
+
 ## Public pages and registration
 
 `toPublicEvent` is what the website shows (no version or capacity). The web reader

@@ -32,6 +32,8 @@ export interface RegistrationDetails {
   readonly attendanceMode: AttendanceMode | null;
   readonly responseId: string | null;
   readonly formVersion: number | null;
+  /** The ticket category of a paid event (N1.3); null for a free one. */
+  readonly feeCategory: string | null;
 }
 
 export function assertAttendanceMode(

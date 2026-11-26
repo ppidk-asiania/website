@@ -38,6 +38,7 @@ describe("admin dashboard: only what needs the viewer", () => {
     zoom: () => Promise.resolve(zoom),
     revisions: () => Promise.resolve(revisions),
     events: () => Promise.resolve(events),
+    payments: () => Promise.resolve(payments),
     myTasks: () => Promise.resolve(tasks),
     now: () => now,
   });
@@ -79,6 +80,13 @@ describe("admin dashboard: only what needs the viewer", () => {
       ["Events waiting for approval", 1],
     ]);
     expect(await counts(staff(["events.edit"]))).toEqual([]);
+  });
+
+  it("payment proofs waiting go to the holders of events.payments", async () => {
+    const counts = async (principal: Principal) =>
+      (await dashboard(principal)).queues.map((q) => [q.label, q.count]);
+    expect(await counts(staff(["events.payments"]))).toEqual([["Payments waiting for a check", 3]]);
+    expect(await counts(staff(["events.publish"]))).toEqual([["Events waiting for approval", 2]]);
   });
 
   it("queues count only what waits at my desks, in my units, that the module would let me do", async () => {
@@ -123,6 +131,7 @@ const waiting = {
   deletedAt: null,
   rejectionNote: null,
 };
+const payments = [{ chapterId: null }, { chapterId: null }, { chapterId: "jp" }];
 const events = [
   { id: "e1", chapterId: null, ...waiting },
   { id: "e2", chapterId: "jp", ...waiting },

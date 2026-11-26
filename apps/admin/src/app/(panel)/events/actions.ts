@@ -67,3 +67,17 @@ export async function createEventShortLinkAction(input: unknown) {
 export async function listEventRegistrantsAction(input: unknown) {
   return eventRegistrationActions().registrants(getPrincipal, getAuditContext)(input);
 }
+
+export async function saveEventFeeAction(input: unknown) {
+  const result = await eventRegistrationActions().saveFee(getPrincipal, getAuditContext)(input);
+  if (result.ok) revalidatePath("/events", "layout");
+  return result;
+}
+
+export async function verifyEventPaymentAction(input: unknown) {
+  return eventRegistrationActions().verify(getPrincipal, getAuditContext)(input);
+}
+
+export async function rejectEventPaymentAction(input: unknown) {
+  return eventRegistrationActions().reject(getPrincipal, getAuditContext)(input);
+}

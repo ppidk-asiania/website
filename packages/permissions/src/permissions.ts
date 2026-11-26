@@ -18,7 +18,10 @@ export const ADMIN_PAGES = {
   tools: { label: "Tools" },
   events: {
     label: "Event",
-    extras: { publish: "Publish events (approve requests, schedule, make public)" },
+    extras: {
+      publish: "Publish events (approve requests, schedule, make public)",
+      payments: "Verify or reject payment proofs of paid events",
+    },
   },
   registrants: { label: "Event registrants", extras: { export: "Export registrants" } },
   gallery: { label: "Gallery" },

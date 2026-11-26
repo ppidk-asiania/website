@@ -85,6 +85,7 @@ const kept = (current: EventEntity | null) => ({
   attendanceNote: current?.attendanceNote ?? null,
   recapUrl: current?.recapUrl ?? null,
   registration: current?.registration ?? null,
+  fee: current?.fee ?? null,
 });
 
 export function createEventActions(deps: EventDeps) {

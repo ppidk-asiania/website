@@ -133,7 +133,7 @@ export const cashEntrySnapshot = (e: CashEntry): Snapshot => ({
   proof: e.proof?.name ?? null,
 });
 
-const storedEntry = (e: CashEntry) => ({
+export const storedEntry = (e: CashEntry) => ({
   ...cashEntrySnapshot(e),
   proof: e.proof,
   createdBy: e.createdBy,

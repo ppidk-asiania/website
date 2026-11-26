@@ -147,6 +147,12 @@ export const eventRegistrationActions = lazyEnv(() =>
     registrations: adminStores().eventRegistrations,
     users: (uids) => adminStores().accounts.getMany(uids),
     shorten: (url, title) => linkActions().shorten(url, title, "events"),
+    storage: imageStorage(),
+    notify: {
+      paymentDecided: (event, uid, verified, note, at) =>
+        notices().eventPaymentDecided(event, uid, verified, note, at),
+    },
+    uuid: randomUUID,
     webUrl: getAppUrls().WEB_URL ?? "",
     now: () => new Date(),
   }),
@@ -789,6 +795,14 @@ export const dashboard = lazyEnv(() =>
       adminStores().zoom.listBetween(from, new Date(from.getTime() + 365 * 86_400_000)),
     revisions: (periodId) => adminStores().programs.listPendingRevisions(periodId),
     events: () => adminStores().events.listForAdmin(),
+    payments: async () => {
+      const [waiting, events] = await Promise.all([
+        adminStores().eventRegistrations.listSubmitted(),
+        adminStores().events.listForAdmin(),
+      ]);
+      const chapters = new Map(events.map((e) => [e.id, e.chapterId]));
+      return waiting.map((w) => ({ chapterId: chapters.get(w.eventId) ?? null }));
+    },
     myTasks: (uid) => tasks().mine(uid),
     now: () => new Date(),
   }),

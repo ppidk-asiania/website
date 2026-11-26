@@ -1,21 +1,47 @@
 import "server-only";
 import { z } from "zod";
-import type { SqlEventStore, SqlFormStore, SqlRegistrationStore } from "@website/db/sql";
+import type {
+  PaymentCashAudit,
+  SqlEventStore,
+  SqlFormStore,
+  SqlRegistrationStore,
+} from "@website/db/sql";
 import {
+  EventFeeInputSchema,
   EventRegistrationSetupSchema,
+  feeAmount,
+  registrationId,
   type EventEntity,
+  type PaymentState,
   type RegistrationStatus,
 } from "@website/domain/events";
 import { answerColumns, answerText, type FormResponse } from "@website/domain/forms";
-import { RuleViolationError } from "@website/domain/shared";
-import { safeId } from "@website/security/validation";
+import { formatMoney, RuleViolationError } from "@website/domain/shared";
+import { can, type Principal } from "@website/permissions";
+import { jsonError } from "@website/security";
+import { safeId, safeText } from "@website/security/validation";
 import { eventAudit } from "./events";
-import { createGuardedAction } from "./guarded-action";
+import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 
 export interface EventRegistrationDeps {
   readonly events: Pick<SqlEventStore, "get" | "write">;
   readonly forms: Pick<SqlFormStore, "get" | "listResponses" | "listVersions">;
-  readonly registrations: Pick<SqlRegistrationStore, "listForEvent">;
+  readonly registrations: Pick<
+    SqlRegistrationStore,
+    "listForEvent" | "verifyPayment" | "rejectPayment" | "proofOf"
+  >;
+  /** A private file link, short-lived (the proof of a payment). */
+  readonly storage: { signedReadUrl(path: string): Promise<string> };
+  readonly notify: {
+    paymentDecided(
+      event: EventEntity,
+      uid: string,
+      verified: boolean,
+      note: string | null,
+      at: Date,
+    ): Promise<void>;
+  };
+  readonly uuid: () => string;
   readonly users: (
     uids: readonly string[],
   ) => Promise<ReadonlyMap<string, { name: string | null; email: string | null }>>;
@@ -37,7 +63,48 @@ export interface RegistrantRow {
   readonly registeredAt: string;
   /** One text per column, in the order of `columns`. */
   readonly answers: readonly string[];
+  readonly registrationId: string;
+  readonly payment: PaymentState;
+  /** Ticket category name and amount to pay (or paid), empty for a free event. */
+  readonly category: string;
+  readonly amount: string;
+  readonly hasProof: boolean;
+  readonly paymentNote: string | null;
 }
+
+const noStore = { "Cache-Control": "no-store" };
+
+const paymentAudit =
+  (audit: AuditBuilder, id: string) =>
+  (before: Parameters<AuditBuilder>[0]["before"], after: Parameters<AuditBuilder>[0]["after"]) =>
+    audit({
+      module: "events",
+      action: "UPDATE",
+      resourceType: "eventRegistration",
+      resourceId: id,
+      title: "Payment check",
+      before,
+      after,
+      versionBefore: null,
+      versionAfter: null,
+      revertible: false,
+    });
+
+const cashAudit =
+  (audit: AuditBuilder): PaymentCashAudit =>
+  (after, entry) =>
+    audit({
+      module: "finance",
+      action: "CREATE",
+      resourceType: "cashEntry",
+      resourceId: entry.id,
+      title: `${entry.description} (${formatMoney(entry)})`,
+      before: null,
+      after,
+      versionBefore: null,
+      versionAfter: 1,
+      revertible: false,
+    });
 
 export function createEventRegistrationActions(deps: EventRegistrationDeps) {
   const save = createGuardedAction({
@@ -61,6 +128,11 @@ export function createEventRegistrationActions(deps: EventRegistrationDeps) {
         version,
         (current) => {
           const event = current as EventEntity;
+          if (!setup && event.fee?.paid) {
+            throw new RuleViolationError(
+              "A paid event needs its registration form. Turn the fee off first.",
+            );
+          }
           return {
             ...event,
             registration: setup && { ...setup, shortUrl: event.registration?.shortUrl ?? null },
@@ -104,6 +176,8 @@ export function createEventRegistrationActions(deps: EventRegistrationDeps) {
 
   const registrants = createGuardedAction({
     permission: "registrants.read",
+    // Whoever checks payments needs to see who paid.
+    orIf: (principal: Principal) => Promise.resolve(can(principal, "events.payments")),
     input: z.object({ eventId: safeId }).strict(),
     handler: async ({ eventId }) => {
       const event = await deps.events.get(eventId);
@@ -130,10 +204,123 @@ export function createEventRegistrationActions(deps: EventRegistrationDeps) {
           attendanceMode: r.attendanceMode,
           registeredAt: r.registeredAt.toISOString(),
           answers: [...columns.keys()].map((q) => answerText(byUser.get(r.userId)?.answers[q])),
+          registrationId: registrationId(eventId, r.userId),
+          payment: r.payment,
+          category: event.fee?.categories.find((c) => c.id === r.feeCategory)?.label ?? "",
+          amount:
+            event.fee && r.feeCategory
+              ? formatMoney({
+                  amountMinor: r.amountMinor ?? feeAmount(event.fee, r.feeCategory, r.registeredAt),
+                  currency: event.fee.currency,
+                })
+              : "",
+          hasProof: r.hasProof,
+          paymentNote: r.paymentNote,
         })),
       };
     },
   });
 
-  return { save, shortLink, registrants };
+  const saveFee = createGuardedAction({
+    permission: "events.edit",
+    input: Ref.extend({ fee: EventFeeInputSchema.nullable() }).strict(),
+    handler: async ({ id, version, fee }, _principal, audit) => {
+      const people = await deps.registrations.listForEvent(id);
+      const kept = new Set(fee?.categories.map((c) => c.id));
+      if (people.some((r) => r.feeCategory !== null && !kept.has(r.feeCategory))) {
+        throw new RuleViolationError("A category that people registered for cannot be removed.");
+      }
+      if (
+        !fee?.paid &&
+        people.some(
+          (r) => r.payment === "unpaid" || r.payment === "submitted" || r.payment === "rejected",
+        )
+      ) {
+        throw new RuleViolationError(
+          "Some people still have to pay or wait for a check. Settle them first.",
+        );
+      }
+      const saved = await deps.events.write(
+        id,
+        version,
+        (current) => {
+          const event = current as EventEntity;
+          if (fee?.paid && !event.registration) {
+            throw new RuleViolationError(
+              "A paid event registers on its form page: choose the registration form first.",
+            );
+          }
+          return {
+            ...event,
+            fee: fee && {
+              ...fee,
+              categories: fee.categories.map((c) => ({
+                ...c,
+                id: c.id || deps.uuid().replace(/-/g, "").slice(0, 10),
+              })),
+            },
+          };
+        },
+        eventAudit(audit, "UPDATE"),
+        deps.now(),
+      );
+      return { version: saved.version };
+    },
+  });
+
+  const Registration = z.object({ registrationId: safeId }).strict();
+
+  const verify = createGuardedAction({
+    permission: "events.payments",
+    input: Registration,
+    handler: async ({ registrationId: id }, principal, audit) => {
+      const now = deps.now();
+      const done = await deps.registrations.verifyPayment(
+        id,
+        principal.userId,
+        now,
+        paymentAudit(audit, id),
+        cashAudit(audit),
+      );
+      const event = done.changed ? await deps.events.get(done.eventId) : null;
+      if (event) await deps.notify.paymentDecided(event, done.userId, true, null, now);
+      return { changed: done.changed };
+    },
+  });
+
+  const reject = createGuardedAction({
+    permission: "events.payments",
+    input: Registration.extend({
+      note: safeText(500, { multiline: true }).pipe(
+        z.string().min(3, "Write a short reason (at least 3 characters)."),
+      ),
+    }).strict(),
+    handler: async ({ registrationId: id, note }, principal, audit) => {
+      const now = deps.now();
+      const done = await deps.registrations.rejectPayment(
+        id,
+        principal.userId,
+        note,
+        now,
+        paymentAudit(audit, id),
+      );
+      const event = await deps.events.get(done.eventId);
+      if (event) await deps.notify.paymentDecided(event, done.userId, false, note, now);
+      return { changed: true };
+    },
+  });
+
+  /** The checker opens the proof: a short-lived link to the private file. */
+  const openProof = async (id: string, principal: Principal | null): Promise<Response> => {
+    if (principal === null || !principal.active) return jsonError("unauthenticated");
+    if (!can(principal, "events.payments")) return jsonError("forbidden");
+    const proof = safeId.safeParse(id).success ? await deps.registrations.proofOf(id) : null;
+    if (!proof) return Response.json({ error: "not_found" }, { status: 404, headers: noStore });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: await deps.storage.signedReadUrl(proof.path), ...noStore },
+    });
+  };
+
+  return { save, shortLink, registrants, saveFee, verify, reject, openProof };
 }

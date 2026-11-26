@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { AttendanceMode } from "@website/domain/events";
+import { feeAmount, type AttendanceMode, type PublicFee } from "@website/domain/events";
+import { formatMoney } from "@website/domain/shared";
 import type { Question } from "@website/domain/forms";
 import { FormFields } from "@/components/form-fields";
 import type { Dictionary } from "@/i18n/dictionaries";
@@ -16,6 +17,7 @@ export function RegisterWizard(props: {
   version: number;
   questions: readonly Question[];
   modes: readonly AttendanceMode[];
+  fee: PublicFee | null;
   practice: boolean;
   profile: { name: string; email: string; fields: ReadonlyArray<{ label: string; value: string }> };
   initial: FieldValues;
@@ -24,6 +26,7 @@ export function RegisterWizard(props: {
   const { events: e, forms: t } = props.labels;
   const [value, setValue] = useState<FieldValues>(props.initial);
   const [mode, setMode] = useState<AttendanceMode | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -33,13 +36,18 @@ export function RegisterWizard(props: {
   const describe = (result: FormRegistrationResult): string => {
     if (result.ok) {
       if (result.practice) return e.practiceOk;
-      return result.status === "confirmed" ? e.confirmed : e.waitlisted;
+      return result.status === "pending"
+        ? e.mailPending
+        : result.status === "confirmed"
+          ? e.confirmed
+          : e.waitlisted;
     }
     if (result.error === "captcha") return t.captchaFailed;
     if (result.error === "closed") return e.closed;
     if (result.error === "changed") return t.changed;
     if (result.error === "answers") return t.checkAnswers;
     if (result.error === "mode") return e.modeNeeded;
+    if (result.error === "category") return props.fee ? e.categoryClosed : e.categoryNeeded;
     if (result.error === "signin") return e.signInToRegister;
     if (result.error === "profile") return e.profileNeeded;
     return e.failed;
@@ -54,6 +62,7 @@ export function RegisterWizard(props: {
         slug: props.slug,
         version: props.version,
         attendanceMode: mode,
+        feeCategory: category,
         answers: answersFrom(props.questions, value),
         ...(props.practice && { practice: true }),
         token,
@@ -128,6 +137,34 @@ export function RegisterWizard(props: {
               {m === "online" ? e.online : e.onsite}
             </label>
           ))}
+        </fieldset>
+      )}
+
+      {props.fee && (
+        <fieldset className="ui-field">
+          <legend>{e.ticketCategory} *</legend>
+          {props.fee.categories.map((c) => (
+            <label key={c.id}>
+              <input
+                type="radio"
+                name="fee-category"
+                value={c.id}
+                checked={category === c.id}
+                onChange={() => setCategory(c.id)}
+                required
+              />{" "}
+              {c.label} ·{" "}
+              {formatMoney({
+                amountMinor: feeAmount(props.fee!, c.id, new Date()),
+                currency: props.fee!.currency,
+              })}
+            </label>
+          ))}
+          {props.fee.earlyUntil && (
+            <p className="site-muted">
+              {e.earlyUntil.replace("{date}", props.fee.earlyUntil.toISOString().slice(0, 10))}
+            </p>
+          )}
         </fieldset>
       )}
 

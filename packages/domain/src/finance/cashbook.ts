@@ -7,7 +7,7 @@ export const CASH_KINDS = ["in", "out"] as const;
 export type CashKind = (typeof CASH_KINDS)[number];
 
 export const CASH_CATEGORIES = {
-  in: ["opening_balance", "dues", "donation", "receipt", "interest", "other_in"],
+  in: ["opening_balance", "dues", "donation", "receipt", "event", "interest", "other_in"],
   out: ["activity", "operational", "reimbursement", "disbursement", "other_out"],
 } as const satisfies Record<CashKind, readonly string[]>;
 export type CashCategory = (typeof CASH_CATEGORIES)[CashKind][number];
@@ -21,6 +21,7 @@ export const CASH_CATEGORY_LABELS: Readonly<Record<CashCategory, string>> = {
   dues: "Member dues",
   donation: "Donation / sponsor",
   receipt: "Receipt of funds",
+  event: "Event income",
   interest: "Bank interest",
   other_in: "Other income",
   activity: "Activity / programme",
@@ -50,7 +51,7 @@ export type CashEntryInput = z.infer<typeof CashEntryInputSchema>;
 export interface CashEntry extends CashEntryInput {
   readonly id: string;
   readonly periodId: string;
-  readonly source: "request" | "manual";
+  readonly source: "request" | "manual" | "event";
   readonly requestId: string | null;
   readonly proof: FinanceFile | null;
   readonly createdBy: string;
@@ -82,6 +83,34 @@ export function cashEntryFromRequest(request: FinanceRequest): CashEntry | null 
     requestId: request.id,
     proof: payment.proof,
     createdBy: payment.uid,
+    createdAt: payment.at,
+  };
+}
+
+/** A verified event payment is one income line; its id is the registration id, so it cannot be written twice (N1.3). */
+export function cashEntryFromEventPayment(payment: {
+  registrationId: string;
+  periodId: string;
+  title: string;
+  amountMinor: number;
+  currency: CashEntry["currency"];
+  at: Date;
+  verifiedBy: string;
+}): CashEntry {
+  return {
+    id: payment.registrationId,
+    periodId: payment.periodId,
+    orgUnitId: null,
+    date: payment.at.toISOString().slice(0, 10),
+    kind: "in",
+    category: "event",
+    description: payment.title,
+    amountMinor: payment.amountMinor,
+    currency: payment.currency,
+    source: "event",
+    requestId: null,
+    proof: null,
+    createdBy: payment.verifiedBy,
     createdAt: payment.at,
   };
 }

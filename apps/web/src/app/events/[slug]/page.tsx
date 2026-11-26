@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { isPast, isRegistrationOpen } from "@website/domain/events";
-import { isValidSlug } from "@website/domain/shared";
+import { formatMoney, isValidSlug } from "@website/domain/shared";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { cityOf, formatEventDate, formatEventTimeRange } from "@/lib/event-time";
 import { publicEventBySlug } from "@/server/events";
@@ -129,6 +129,28 @@ export default async function EventPage({ params }: PageProps<"/events/[slug]">)
               </a>
             )}
           </div>
+          {event.fee && (
+            <p className="site-muted">
+              {t.events.fees}:{" "}
+              {event.fee.categories
+                .map(
+                  (c) =>
+                    `${c.label} ${formatMoney({ amountMinor: c.amountMinor, currency: event.fee!.currency })}`,
+                )
+                .join(" · ")}
+              {event.fee.earlyUntil && (
+                <>
+                  {" "}
+                  (
+                  {t.events.earlyUntil.replace(
+                    "{date}",
+                    event.fee.earlyUntil.toISOString().slice(0, 10),
+                  )}
+                  )
+                </>
+              )}
+            </p>
+          )}
         </header>
 
         {past && (hasRecap || album) && (

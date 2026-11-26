@@ -350,6 +350,35 @@ export function createNotices(deps: NoticeDeps) {
       );
     });
 
+  // A person may be rejected, send a new proof and be decided again: the time makes each decision new.
+  const eventPaymentDecided = (
+    event: EventEntity,
+    uid: string,
+    verified: boolean,
+    note: string | null,
+    at: Date,
+  ) =>
+    safely("eventPaymentDecided", event.id, async () => {
+      const [id, en] = verified
+        ? [
+            "Pembayaranmu terverifikasi. Pendaftaranmu dikonfirmasi.",
+            "Your payment is verified. Your registration is confirmed.",
+          ]
+        : [
+            "Bukti pembayaranmu belum diterima. Kirim bukti yang baru.",
+            "Your proof of payment was not accepted. Please send a new one.",
+          ];
+      await tell(
+        [uid],
+        {
+          subject: `Acara / Event: ${event.title}`,
+          text: `${both(id, en)}${note ? `\n\n${note}` : ""}\n\n${deps.webUrl}/events/${event.slug}/ticket`,
+        },
+        (to) =>
+          `event:${event.id}:payment:${verified ? "verified" : "rejected"}:${to}:${at.getTime()}`,
+      );
+    });
+
   return {
     application,
     proof,
@@ -361,6 +390,7 @@ export function createNotices(deps: NoticeDeps) {
     eventApprovalAsked,
     eventApprovalDecided,
     eventCancelled,
+    eventPaymentDecided,
   };
 }
 

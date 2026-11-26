@@ -5,6 +5,7 @@ import type { Message } from "@website/domain/messaging";
 import {
   ATTENDANCE_MODES,
   assertAttendanceMode,
+  TicketUnavailableError,
   type AttendanceMode,
   type PublicEvent,
   type RegistrationStatus,
@@ -44,7 +45,12 @@ async function confirmByEmail(
   language: Language,
 ) {
   const t = DICTIONARIES[language].events;
-  const line = status === "confirmed" ? t.mailConfirmed : t.mailWaitlisted;
+  const line =
+    status === "pending"
+      ? t.mailPending
+      : status === "confirmed"
+        ? t.mailConfirmed
+        : t.mailWaitlisted;
   await deps.send(
     {
       channel: "email",
@@ -86,7 +92,8 @@ export type FormRegistrationResult =
   | { ok: true; status: RegistrationStatus; practice: boolean }
   | {
       ok: false;
-      error: "signin" | "profile" | "invalid" | "captcha" | "closed" | "changed" | "mode";
+      error:
+        "signin" | "profile" | "invalid" | "captcha" | "closed" | "changed" | "mode" | "category";
     }
   | { ok: false; error: "answers"; fields: Readonly<Record<string, string>> };
 
@@ -101,9 +108,14 @@ export function createFormRegistrationTransaction(stores: {
   registrations: Pick<SqlRegistrationStore, "registerIn" | "setupOf">;
 }) {
   return async (
-    event: Pick<PublicEvent, "id">,
+    event: Pick<PublicEvent, "id" | "fee">,
     user: Account,
-    input: { version: number; attendanceMode: AttendanceMode | null; answers: unknown },
+    input: {
+      version: number;
+      attendanceMode: AttendanceMode | null;
+      feeCategory: string | null;
+      answers: unknown;
+    },
     now: Date,
     practice: boolean,
   ): Promise<FormRegistrationResult> => {
@@ -113,6 +125,13 @@ export function createFormRegistrationTransaction(stores: {
       assertAttendanceMode(setup, input.attendanceMode);
     } catch {
       return { ok: false, error: "mode" };
+    }
+    // A paid event needs one of its categories; a free one none (fullness is checked in the transaction).
+    const categories = event.fee?.categories ?? null;
+    if (
+      categories ? !categories.some((c) => c.id === input.feeCategory) : input.feeCategory !== null
+    ) {
+      return { ok: false, error: "category" };
     }
     const token = await stores.forms.tokenOf(setup.formId);
     if (token === null) return { ok: false, error: "closed" };
@@ -140,6 +159,7 @@ export function createFormRegistrationTransaction(stores: {
             attendanceMode: input.attendanceMode,
             responseId: saved.responseId,
             formVersion: saved.version,
+            feeCategory: input.feeCategory,
           });
         },
       );
@@ -151,6 +171,7 @@ export function createFormRegistrationTransaction(stores: {
       }
     } catch (error) {
       // Registration closed, or the form changed under us: nothing was written.
+      if (error instanceof TicketUnavailableError) return { ok: false, error: "category" };
       if (error instanceof RuleViolationError) return { ok: false, error: "closed" };
       throw error;
     }
@@ -166,6 +187,7 @@ const FormInput = z
     slug: z.string().refine(isValidSlug),
     version: z.number().int().min(1),
     attendanceMode: z.enum(ATTENDANCE_MODES).nullable(),
+    feeCategory: z.string().max(40).nullable().default(null),
     answers: z.record(z.string().max(40), z.unknown()),
     practice: z.boolean().optional(),
     token: z.string().max(4000),

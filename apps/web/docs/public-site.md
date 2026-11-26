@@ -45,7 +45,7 @@ chips). Drafts, future and deleted articles are never shown; an unknown slug sho
 response is already streaming).
 Old `/articles` links redirect to `/news`.
 
-**Events**: an event with a registration form sends the register button to `/events/[slug]/register` (sign-in, the member's own data, attendance mode, the form's questions; `?practice=1` stores nothing); see `packages/domain/docs/events.md`. `/events` lists published events as cards (newest first), filtered by type and a
+**Events**: an event with a registration form sends the register button to `/events/[slug]/register` (sign-in, the member's own data, attendance mode, the form's questions; `?practice=1` stores nothing); see `packages/domain/docs/events.md`; a paid event also shows its prices, asks for a ticket category and has `/events/[slug]/ticket` (how to pay, upload the proof, payment state). `/events` lists published events as cards (newest first), filtered by type and a
 date range (`?type=webinar&from=2026-01-01&to=2026-12-31`, 12 per page; the country filter comes
 with chapters, step 2.7). `/events/[slug]` shows banner, type, date and time on the event's clock
 (and, in the browser, in the visitor's own zone), location, deadline, description, schedule,

@@ -116,6 +116,7 @@ const event = (
     showOnTicket: "",
     shortUrl: null,
   },
+  fee: null,
   ...fields,
 });
 

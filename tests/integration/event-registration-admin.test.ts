@@ -94,6 +94,11 @@ const registrationActions = () =>
         new Map(uids.map((uid) => [uid, { name: `Name ${uid}`, email: `${uid}@example.org` }])),
       ),
     shorten,
+    storage: {
+      signedReadUrl: (path) => Promise.resolve(`https://web.test/private-files?t=${path}`),
+    },
+    notify: { paymentDecided: () => Promise.resolve() },
+    uuid: () => crypto.randomUUID(),
     webUrl: "https://ppi.example.org",
     now: () => now,
   });
