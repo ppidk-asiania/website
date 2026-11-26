@@ -160,6 +160,8 @@ export {
   createSqlRegistrationStore,
   eventSnapshot,
   type EventFields,
+  type CheckInAudit,
+  type CheckInResult,
   type PaymentAudit,
   type PaymentCashAudit,
   type PaymentProof,

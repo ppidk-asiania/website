@@ -221,7 +221,7 @@ published) belong to the board period that was active when the sponsor was added
 that period. The public pages show the sponsors of the active period only, so activating a new
 period empties the home strip until the new board adds its own (there is no copy feature). Writes
 need `sponsors.edit`; delete is soft; the audit entries are not revertible. `reachRows` lists the
-past, uncancelled events of the period with their `finalAttendance` for the sponsorship page. Code:
+past, uncancelled events of the period with their `finalAttendance` (else the number checked in) for the sponsorship page. Code:
 `packages/domain/src/organizations/sponsors.ts`, `packages/db/src/sql/sponsors.ts`,
 `apps/admin/src/server/sponsors.ts`. Tests: `tests/unit/sponsors.test.ts`,
 `tests/integration/sponsors.test.ts`.

@@ -33,7 +33,16 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["firebase-admin", "mysql2"],
   ...standalone,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // The door scanner is the one page that may use the camera (N1.4); a later rule overrides the first.
+      {
+        source: "/events/:id/scan",
+        headers: [
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
   },
 };
 

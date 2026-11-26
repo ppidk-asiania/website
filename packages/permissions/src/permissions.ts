@@ -21,6 +21,7 @@ export const ADMIN_PAGES = {
     extras: {
       publish: "Publish events (approve requests, schedule, make public)",
       payments: "Verify or reject payment proofs of paid events",
+      checkin: "Check people in at the door (scan or by hand; undo only your own for 10 minutes)",
     },
   },
   registrants: { label: "Event registrants", extras: { export: "Export registrants" } },

@@ -77,6 +77,7 @@ import { createNewsletterActions } from "./newsletter";
 import { createNewsActions } from "./news";
 import { createOrgUnitActions } from "./org-units";
 import { createPeriodActions } from "./periods";
+import { createCheckInActions } from "./event-checkin";
 import { createDonationActions } from "./donations";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
@@ -156,6 +157,15 @@ export const eventRegistrationActions = lazyEnv(() =>
     },
     uuid: randomUUID,
     webUrl: getAppUrls().WEB_URL ?? "",
+    now: () => new Date(),
+  }),
+);
+
+export const checkInActions = lazyEnv(() =>
+  createCheckInActions({
+    events: adminStores().events,
+    registrations: adminStores().eventRegistrations,
+    users: (uids) => adminStores().accounts.getMany(uids),
     now: () => new Date(),
   }),
 );

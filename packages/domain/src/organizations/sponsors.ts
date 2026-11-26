@@ -76,7 +76,7 @@ export interface ReachRow {
   readonly title: string;
   readonly startsAt: Date;
   readonly timezone: string;
-  /** `finalAttendance` once the organisers entered it; null until then. */
+  /** `finalAttendance` once the organisers entered it, else the people checked in (N1.4); null when neither exists. */
   readonly attendance: number | null;
 }
 
@@ -85,6 +85,7 @@ export function reachRows(
   events: readonly PublicEvent[],
   period: { readonly startsOn: string; readonly endsOn: string },
   now: Date,
+  checkedIn: ReadonlyMap<string, number> = new Map(),
 ): ReachRow[] {
   const from = new Date(`${period.startsOn}T00:00:00Z`);
   const to = new Date(`${period.endsOn}T23:59:59.999Z`);
@@ -98,6 +99,6 @@ export function reachRows(
       title: e.title,
       startsAt: e.startsAt,
       timezone: e.timezone,
-      attendance: e.finalAttendance,
+      attendance: e.finalAttendance ?? checkedIn.get(e.id) ?? null,
     }));
 }

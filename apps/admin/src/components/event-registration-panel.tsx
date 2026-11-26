@@ -272,6 +272,11 @@ export function EventRegistrationPanel(props: {
                 </a>
               </>
             ) : null}
+            {canSeeRegistrants ? (
+              <a className="admin-link" href={`/events/${event.id}/scan`}>
+                Door scanner
+              </a>
+            ) : null}
           </div>
           {shortUrl ? (
             <p className="admin-event-registration__link">

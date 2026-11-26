@@ -7,7 +7,8 @@ import {
   createSqlRegistrationStore,
   type SignedInAccount,
 } from "@website/db/sql";
-import type { PublicEvent } from "@website/domain/events";
+import { checkInOutcome, registrationId, type PublicEvent } from "@website/domain/events";
+import { keyedHash, sha256Hex } from "@website/security";
 import { createRecaptchaVerifier, passesCaptcha } from "./captcha";
 import { webDb, webStorage } from "./db";
 import { randomUUID } from "node:crypto";
@@ -101,10 +102,29 @@ export const uploadEventProof = lazyEnv(() =>
   }),
 );
 
-/** What the ticket page shows: the event, how to pay and the member's own registration (null: not theirs to see). */
+/**
+ * What the ticket page shows: the event, how to pay (paid events) and the member's own registration (null: not
+ * theirs to see). A confirmed registration also gets its QR token (N1.4): the token is derived from a keyed hash
+ * of the registration id, so it can be shown again at any time, and only its hash is stored for the scanner.
+ */
 export async function eventTicket(slug: string, user: SignedInAccount) {
-  const guide = await reader().findPaymentGuide(slug);
-  if (!guide) return null;
-  const mine = await registrations().ownRegistration(guide.event.id, user.uid);
-  return mine && { ...guide, mine };
+  const found = await reader().findTicketEvent(slug);
+  if (!found) return null;
+  const mine = await registrations().ownRegistration(found.event.id, user.uid);
+  if (!mine) return null;
+  const secret = getWebEnv().SUBSCRIBER_HASH_SECRET;
+  const mayEnter = checkInOutcome({ ...mine, checkedInAt: null }) === "checked_in";
+  let ticketToken: string | null = null;
+  if (mayEnter && secret) {
+    ticketToken = keyedHash("event-ticket", registrationId(found.event.id, user.uid), secret).slice(
+      0,
+      32,
+    );
+    await registrations().setTicketHash(
+      found.event.id,
+      user.uid,
+      sha256Hex(new TextEncoder().encode(ticketToken)),
+    );
+  }
+  return { ...found, mine, ticketToken };
 }

@@ -2,6 +2,10 @@ import type { Database, Transaction } from "./store";
 import type { AuditEvent, Snapshot } from "@website/audit";
 import {
   assertAttendanceMode,
+  canUndoCheckIn,
+  checkInOutcome,
+  type CheckInMethod,
+  type CheckInOutcome,
   assertCategoryOpen,
   assertFeeReady,
   assertNotOwnPayment,
@@ -45,6 +49,10 @@ export interface RegistrantRow {
   readonly feeCategory: string | null;
   readonly hasProof: boolean;
   readonly paymentNote: string | null;
+  /** Marked present (N1.4): when, and how (self, scan or manual). */
+  readonly checkedInAt: Date | null;
+  readonly checkedInBy: string | null;
+  readonly checkInMethod: CheckInMethod | null;
   /** Set once verified: the amount frozen at that moment. */
   readonly amountMinor: number | null;
 }
@@ -54,6 +62,23 @@ export interface PaymentProof {
   readonly path: string;
   readonly type: "pdf" | "jpeg" | "png" | "webp";
 }
+
+export type CheckInAudit = (before: Snapshot, after: Snapshot) => AuditEvent;
+
+/** What a scan or a manual check-in found, for the card the door staff reads. */
+export interface CheckInResult {
+  readonly outcome: CheckInOutcome;
+  readonly userId: string | null;
+  readonly category: string | null;
+  /** When the person was (or already had been) checked in. */
+  readonly at: Date | null;
+}
+
+const checkInSnapshot = (doc: { get(field: string): unknown }): Snapshot => ({
+  status: doc.get("status") as string,
+  checkedInAt: toDate(doc.get("checkedInAt"))?.toISOString() ?? null,
+  checkInMethod: (doc.get("checkInMethod") as string | undefined) ?? null,
+});
 
 export type PaymentAudit = (before: Snapshot, after: Snapshot) => AuditEvent;
 export type PaymentCashAudit = (after: Snapshot, entry: CashEntry) => AuditEvent;
@@ -202,6 +227,21 @@ export function createSqlEventReader(db: Database) {
       return event && isLive(event, now) ? toPublicEvent(event) : null;
     },
 
+    /** An event for the ticket page of someone registered for it: its fee (null = free) and what the ticket prints (N1.4). */
+    async findTicketEvent(
+      slug: string,
+      now = new Date(),
+    ): Promise<{ event: PublicEvent; fee: EventFee | null; showOnTicket: string } | null> {
+      const event = await store.findBySlug(slug);
+      return event && isLive(event, now)
+        ? {
+            event: toPublicEvent(event),
+            fee: event.fee?.paid ? event.fee : null,
+            showOnTicket: event.registration?.showOnTicket ?? "",
+          }
+        : null;
+    },
+
     /** A paid event with its payment instructions: shown to the people registered for it only (N1.3). */
     async findPaymentGuide(
       slug: string,
@@ -231,6 +271,9 @@ const paymentFields = (doc: { get(field: string): unknown }) => ({
   hasProof: Boolean(doc.get("proof")),
   paymentNote: (doc.get("paymentNote") as string | undefined) ?? null,
   amountMinor: (doc.get("amountMinor") as number | undefined) ?? null,
+  checkedInAt: toDate(doc.get("checkedInAt")),
+  checkedInBy: (doc.get("checkedInBy") as string | undefined) ?? null,
+  checkInMethod: (doc.get("checkInMethod") as CheckInMethod | undefined) ?? null,
 });
 
 export function createSqlRegistrationStore(db: Database) {
@@ -485,6 +528,125 @@ export function createSqlRegistrationStore(db: Database) {
         log.append(auditFor(before, { ...before, payment: "rejected", paymentNote: note }));
         return { eventId: snap.get("eventId") as string, userId };
       });
+    },
+
+    /**
+     * The ticket page stores the HASH of the member's ticket token (the token itself is never stored).
+     * Only a confirmed registration has a ticket; the call is idempotent.
+     */
+    async setTicketHash(eventId: string, userId: string, hash: string): Promise<void> {
+      await db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(registrationId(eventId, userId)));
+        const snap = await tx.get(ref);
+        if (!snap.exists || snap.get("status") !== "confirmed") return;
+        if (snap.get("ticketHash") !== hash) tx.update(ref, { ticketHash: hash });
+      });
+    },
+
+    /** The registration that owns a ticket hash (null: no such ticket). */
+    async findByTicketHash(
+      hash: string,
+    ): Promise<{ id: string; eventId: string; userId: string } | null> {
+      const snapshot = await registrationsRef.where("ticketHash", "==", hash).limit(1).get();
+      const doc = snapshot.docs[0];
+      return doc
+        ? { id: doc.id, eventId: doc.get("eventId") as string, userId: doc.get("userId") as string }
+        : null;
+    },
+
+    /**
+     * Marks a registration present. Only a confirmed (and, when paid, verified) registration of THIS event
+     * can enter; everything else answers with its reason and writes nothing.
+     */
+    checkIn(
+      id: string,
+      eventId: string,
+      by: string,
+      method: CheckInMethod,
+      now: Date,
+      auditFor: CheckInAudit,
+      /** Practice: the card is shown but nothing is stored. */
+      practice = false,
+    ): Promise<CheckInResult> {
+      return db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(id));
+        const snap = await tx.get(ref);
+        if (!snap.exists || snap.get("eventId") !== eventId) {
+          return { outcome: "unknown", userId: null, category: null, at: null };
+        }
+        const fields = paymentFields(snap);
+        const outcome = checkInOutcome({
+          status: snap.get("status") as RegistrationStatus,
+          payment: fields.payment,
+          checkedInAt: fields.checkedInAt,
+        });
+        const result = {
+          outcome,
+          userId: snap.get("userId") as string,
+          category: fields.feeCategory,
+          at: outcome === "checked_in" ? now : fields.checkedInAt,
+        };
+        if (outcome !== "checked_in" || practice) return result;
+        const log = await audit.begin(tx);
+        const before = checkInSnapshot(snap);
+        tx.update(ref, {
+          checkedIn: true,
+          checkedInAt: now,
+          checkedInBy: by,
+          checkInMethod: method,
+          updatedAt: now,
+        });
+        log.append(
+          auditFor(before, { ...before, checkedInAt: now.toISOString(), checkInMethod: method }),
+        );
+        return result;
+      });
+    },
+
+    /** Undo: the person who checked in for 10 minutes, a holder of `registrants.edit` at any time. */
+    undoCheckIn(
+      id: string,
+      eventId: string,
+      actor: { userId: string; canEditRegistrants: boolean },
+      now: Date,
+      auditFor: CheckInAudit,
+    ): Promise<{ userId: string }> {
+      return db.runTransaction(async (tx) => {
+        const ref = registrationsRef.doc(safeId.parse(id));
+        const snap = await tx.get(ref);
+        const at = snap.exists ? toDate(snap.get("checkedInAt")) : null;
+        if (!snap.exists || snap.get("eventId") !== eventId || !at) {
+          throw new RuleViolationError("This person is not checked in.");
+        }
+        const by = (snap.get("checkedInBy") as string | undefined) ?? null;
+        if (!canUndoCheckIn({ by, at }, actor, now)) {
+          throw new RuleViolationError(
+            "Only the person who checked this one in can undo it, within 10 minutes.",
+          );
+        }
+        const log = await audit.begin(tx);
+        const before = checkInSnapshot(snap);
+        tx.update(ref, {
+          checkedIn: false,
+          checkedInAt: null,
+          checkedInBy: null,
+          checkInMethod: null,
+          updatedAt: now,
+        });
+        log.append(auditFor(before, { ...before, checkedInAt: null, checkInMethod: null }));
+        return { userId: snap.get("userId") as string };
+      });
+    },
+
+    /** People present per event, for the sponsorship reach when the organisers entered no final number. */
+    async checkedInCounts(): Promise<Map<string, number>> {
+      const snapshot = await registrationsRef.where("checkedIn", "==", true).get();
+      const counts = new Map<string, number>();
+      for (const doc of snapshot.docs) {
+        const eventId = doc.get("eventId") as string;
+        counts.set(eventId, (counts.get(eventId) ?? 0) + 1);
+      }
+      return counts;
     },
 
     /** Who is told when an event is cancelled: everyone who still holds a place or a waitlist spot. */

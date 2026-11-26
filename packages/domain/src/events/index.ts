@@ -272,6 +272,7 @@ export interface CalendarFeed {
   render(events: readonly EventEntity[]): string;
 }
 
+export * from "./checkin";
 export * from "./lifecycle";
 export * from "./payment";
 export * from "./registration";

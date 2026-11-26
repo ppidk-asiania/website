@@ -75,4 +75,33 @@ describe("sponsors directory (N5.3)", () => {
       ["early", 40],
     ]);
   });
+
+  it("reach falls back to the people checked in when no final number was entered", () => {
+    const event = (id: string, over: Partial<PublicEvent> = {}) =>
+      ({
+        id,
+        slug: id,
+        title: id,
+        startsAt: new Date("2026-02-01T00:00:00Z"),
+        endsAt: null,
+        timezone: "Asia/Tokyo",
+        cancelledAt: null,
+        finalAttendance: null,
+        ...over,
+      }) as PublicEvent;
+    const rows = reachRows(
+      [event("a"), event("b", { finalAttendance: 10 }), event("c")],
+      { startsOn: "2026-01-01", endsOn: "2026-12-31" },
+      new Date("2026-11-26T00:00:00Z"),
+      new Map([
+        ["a", 25],
+        ["b", 99],
+      ]),
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.slug, r.attendance]))).toEqual({
+      a: 25,
+      b: 10,
+      c: null,
+    });
+  });
 });

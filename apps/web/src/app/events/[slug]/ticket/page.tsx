@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import QRCode from "qrcode";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { feeAmount } from "@website/domain/events";
@@ -11,7 +12,7 @@ import { ProofForm } from "./proof-form";
 export const instant = false;
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-/** The member's own ticket: for a paid event, how to pay and the state of the payment (N1.3). */
+/** The member's own ticket: the QR for the door, and for a paid event how to pay and the state of the payment (N1.3, N1.4). */
 export default async function EventTicketPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isValidSlug(slug)) notFound();
@@ -20,28 +21,56 @@ export default async function EventTicketPage({ params }: { params: Promise<{ sl
   const ticket = await eventTicket(slug, user);
   if (!ticket) notFound();
   const t = DICTIONARIES[languageFrom((await cookies()).get(LANG_COOKIE)?.value)].events;
-  const { event, fee, mine } = ticket;
+  const { event, fee, mine, ticketToken, showOnTicket } = ticket;
   const amount =
-    mine.amountMinor ??
-    (mine.feeCategory ? feeAmount(fee, mine.feeCategory, mine.registeredAt) : null);
-  const category = fee.categories.find((c) => c.id === mine.feeCategory);
+    fee && mine.amountMinor === null && mine.feeCategory
+      ? feeAmount(fee, mine.feeCategory, mine.registeredAt)
+      : mine.amountMinor;
+  const category = fee?.categories.find((c) => c.id === mine.feeCategory);
+  const qr = ticketToken
+    ? await QRCode.toDataURL(ticketToken, { errorCorrectionLevel: "M", margin: 2, width: 260 })
+    : null;
 
   return (
     <main className="ui-shell">
       <h1 className="ui-shell-title">{event.title}</h1>
-      {category && amount !== null && (
+      {fee && category && amount !== null && (
         <p>
           {category.label} · {t.amountDue}:{" "}
           <strong>{formatMoney({ amountMinor: amount, currency: fee.currency })}</strong>
         </p>
       )}
-      {mine.payment === "verified" ? (
-        <p role="status" className="site-notice">
-          {t.proofVerified}
-        </p>
-      ) : mine.status === "waitlisted" ? (
+      {mine.status === "waitlisted" ? (
         <p className="site-notice">{t.waitlisted}</p>
-      ) : (
+      ) : mine.status === "confirmed" &&
+        mine.payment !== "unpaid" &&
+        mine.payment !== "submitted" &&
+        mine.payment !== "rejected" ? (
+        <section aria-labelledby="ticket-qr">
+          {mine.payment === "verified" && (
+            <p role="status" className="site-notice">
+              {t.proofVerified}
+            </p>
+          )}
+          <h2 id="ticket-qr">{t.ticket}</h2>
+          {user.name && (
+            <p>
+              {t.ticketHolder}: <strong>{user.name}</strong>
+            </p>
+          )}
+          {category && <p>{category.label}</p>}
+          {showOnTicket && <p>{showOnTicket}</p>}
+          {qr ? (
+            <>
+              <p>{t.ticketShow}</p>
+              {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL, nothing to optimise */}
+              <img src={qr} alt={t.ticketQrAlt} width={260} height={260} />
+            </>
+          ) : (
+            <p className="site-muted">{t.ticketNoQr}</p>
+          )}
+        </section>
+      ) : fee ? (
         <>
           <p className="site-muted">{t.payFirst}</p>
           <section aria-labelledby="ticket-pay">
@@ -74,7 +103,7 @@ export default async function EventTicketPage({ params }: { params: Promise<{ sl
             )}
           </section>
         </>
-      )}
+      ) : null}
       <p>
         <a href={`/events/${event.slug}`}>{event.title}</a>
       </p>

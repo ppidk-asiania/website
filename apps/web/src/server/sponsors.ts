@@ -3,7 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
 import { createSqlSponsorReader } from "@website/db/sql";
 import { reachRows, type PublicSponsor, type ReachRow } from "@website/domain/organizations";
-import { publicEvents } from "./events";
+import { publicEvents, registrations } from "./events";
 import { webDb } from "./db";
 
 const reader = lazyEnv(() => createSqlSponsorReader(webDb()));
@@ -22,5 +22,13 @@ export async function publicSponsors(): Promise<{
 export async function sponsorshipReach(
   period: { startsOn: string; endsOn: string } | null,
 ): Promise<ReachRow[]> {
-  return period ? reachRows(await publicEvents(), period, new Date()) : [];
+  "use cache";
+  cacheTag("sponsors");
+  cacheLife("minutes");
+  if (!period) return [];
+  const [events, checkedIn] = await Promise.all([
+    publicEvents(),
+    registrations().checkedInCounts(),
+  ]);
+  return reachRows(events, period, new Date(), checkedIn);
 }

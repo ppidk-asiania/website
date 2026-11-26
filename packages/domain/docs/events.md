@@ -126,6 +126,33 @@ Rules in `packages/domain/src/events/payment.ts`; store in `packages/db/src/sql/
 - Changing the fee: a category people registered for cannot be removed, and the fee cannot be turned off
   while someone still owes or waits for a check; amounts frozen at verification never change.
 
+## Ticket QR and door scanner (N1.4)
+
+- Ticket: `/events/[slug]/ticket` (web) shows, for a registration that may enter (confirmed; on a paid event
+  also verified), the name, category, the organiser's `showOnTicket` text and a QR code. The QR holds a token
+  derived with a keyed hash (`keyedHash("event-ticket", registrationId, SUBSCRIBER_HASH_SECRET)`), so it can be
+  shown again at any time and never contains the registration id; only its SHA-256 is stored
+  (`eventRegistrations.ticketHash`, written when the page is opened). Without the secret the page says the QR is
+  not available and the door staff use the name search. Rotating the secret makes every open ticket page store
+  a new hash on its next view; printed or saved tickets of the old token stop working.
+- Scanner: admin `/events/[id]/scan` (link "Door scanner" in the event's registration panel). Allowed for the
+  extra `events.checkin` or `registrants.edit`. Present / registered is on top; the camera (getUserMedia +
+  `jsqr`; the Permissions-Policy of this route alone allows `camera=(self)`) or a name search gives one card:
+  checked in, already checked in at (time), not paid, on the waiting list, cancelled, or "not a ticket for this
+  event" (one neutral answer for a wrong, old or other-event token).
+- One field for every way in: `checkedIn`, `checkedInAt`, `checkedInBy`, `checkInMethod` = `self | scan |
+manual` (self check-in, main plan 9.4/2, is not built yet). Manual check-in shows the state first; an unpaid,
+  waiting or cancelled registration has no button.
+- Undo: the person who checked someone in, for 10 minutes; a holder of `registrants.edit` at any time. Check-in
+  and undo are in the Audit Log ("Check-in", "Check-in undone").
+- Practice: before the event day (in the event's time zone) a scan shows its result and stores nothing.
+- Sponsorship reach uses `finalAttendance`, else the number checked in.
+- Not built: separate committee tickets (N1.5), the check-in notice to the registrant (N4.1),
+  an offline mode of the scanner.
+- Code: `packages/domain/src/events/checkin.ts`, `packages/db/src/sql/events.ts`,
+  `apps/admin/src/server/event-checkin.ts`, `apps/admin/src/components/event-scan-page.tsx`. Tests:
+  `tests/unit/event-checkin.test.ts`, `tests/integration/events-checkin.test.ts`.
+
 ## Public pages and registration
 
 `toPublicEvent` is what the website shows (no version or capacity). The web reader
