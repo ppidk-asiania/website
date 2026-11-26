@@ -46,6 +46,7 @@ const id = {
     rights: "Hak cipta dilindungi",
     terms: "Syarat dan Ketentuan",
     documents: "Dokumen Organisasi",
+    universities: "Universitas",
     privacy: "Kebijakan Privasi",
   },
   home: {
@@ -497,6 +498,15 @@ const id = {
     linkExpiry: "Tautan unduh berlaku 15 menit; cari lagi bila sudah lewat.",
     recaptchaNotice: "Halaman ini dilindungi reCAPTCHA Google.",
   },
+  universities: {
+    title: "Universitas",
+    intro: "Kampus di kawasan Asia-Oseania dan PPI yang menaunginya.",
+    country: "Negara",
+    allCountries: "Semua negara",
+    search: "Cari kampus atau kota",
+    searchButton: "Cari",
+    empty: "Tidak ada kampus yang cocok.",
+  },
   documents: {
     title: "Dokumen Organisasi",
     intro: "Anggaran dasar, pedoman, dan dokumen tetap organisasi.",
@@ -925,6 +935,7 @@ const en: Dictionary = {
     rights: "All Rights Reserved",
     terms: "Terms of Use",
     documents: "Organisation documents",
+    universities: "Universities",
     privacy: "Privacy Policy",
   },
   home: {
@@ -1379,6 +1390,15 @@ const en: Dictionary = {
     downloadSheet: "Download PDF",
     linkExpiry: "Download links work for 15 minutes; search again after that.",
     recaptchaNotice: "This page is protected by Google reCAPTCHA.",
+  },
+  universities: {
+    title: "Universities",
+    intro: "Campuses in the Asia-Oceania region and the PPI chapter that covers each one.",
+    country: "Country",
+    allCountries: "All countries",
+    search: "Search campus or city",
+    searchButton: "Search",
+    empty: "No campus matches.",
   },
   documents: {
     title: "Organisation documents",

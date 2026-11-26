@@ -352,6 +352,15 @@ completeness test fail until both exist.
 by type, newest version first with older versions folded; the data is cached for minutes
 (`cacheTag("org-documents")`). Managed on the admin Organizations > Documents tab.
 
+## Universities directory
+
+`/universities` (footer link) lists the approved campuses (`universities`, status `approved`) of
+every active chapter's country, grouped by country, each country linking to its chapter page
+(`/map/[slug]`). A country filter and a name/city search are plain GET parameters read on the
+server (the page stays small; no list of thousands of names is sent to the browser). Pending and
+rejected proposals are never listed and no member counts are shown (small groups). Cached for
+minutes (`cacheTag("universities")`). Code: `apps/web/src/server/universities-directory.ts`.
+
 ## Configuration
 
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, `RECAPTCHA_MIN_SCORE` (captcha);

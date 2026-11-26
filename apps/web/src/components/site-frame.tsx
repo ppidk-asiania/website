@@ -126,6 +126,7 @@ export function SiteFooter({ t }: { t: Dictionary }) {
           {t.footer.rights} © <CopyrightYear /> | {ORGANISATION_NAME.id}
         </span>
         <nav className="site-footer__legal">
+          <a href="/universities">{t.footer.universities}</a>
           <a href="/documents">{t.footer.documents}</a>
           <a href="/terms">{t.footer.terms}</a>
           <a href="/privacy">{t.footer.privacy}</a>
