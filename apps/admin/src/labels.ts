@@ -187,6 +187,13 @@ export const QUESTION_TYPE_LABELS = {
   multi_choice: { id: "Kotak centang", en: "Checkboxes (several)" },
   file: { id: "Unggah berkas", en: "File upload" },
   consent: { id: "Persetujuan", en: "Consent" },
+  section: { id: "Judul bagian (tanpa jawaban)", en: "Section heading (no answer)" },
+  rating: { id: "Penilaian bintang (1-5)", en: "Star rating (1-5)" },
+  scale: { id: "Skala linier (1-10)", en: "Linear scale (1-10)" },
+  time: { id: "Waktu", en: "Time" },
+  phone: { id: "Telepon", en: "Phone" },
+  link: { id: "Tautan (https)", en: "Link (https)" },
+  dropdown: { id: "Daftar pilihan (satu)", en: "Dropdown list (one)" },
 } as const satisfies Record<QuestionType, Label>;
 
 export const APPLICATION_STATUS_LABELS = {

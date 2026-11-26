@@ -1,6 +1,6 @@
 "use client";
 
-import { TEXT_LIMITS, type Question } from "@website/domain/forms";
+import { RATING_MAX, SCALE_MAX, TEXT_LIMITS, type Question } from "@website/domain/forms";
 import { OTHER, type FieldValues } from "@/lib/form-answers";
 
 export interface FormFieldLabels {
@@ -98,6 +98,71 @@ export function FormFields(props: {
           );
         }
 
+        if (q.type === "section") {
+          return (
+            <div key={q.id} className="ui-field">
+              <h3>{q.label}</h3>
+              {help}
+            </div>
+          );
+        }
+
+        if (q.type === "rating" || q.type === "scale") {
+          const top = q.type === "rating" ? RATING_MAX : SCALE_MAX;
+          const [low, high] = q.type === "scale" ? q.options : [];
+          return (
+            <fieldset key={q.id} className="ui-field site-choices" {...aria}>
+              <legend>{title}</legend>
+              {help}
+              {low ? <span className="site-muted">1 = {low}</span> : null}
+              {Array.from({ length: top }, (_, n) => String(n + 1)).map((value) => (
+                <label key={value} className="site-choice">
+                  <input
+                    type="radio"
+                    name={id}
+                    required={q.required}
+                    checked={values[q.id] === value}
+                    onChange={() => set(q.id, value)}
+                  />
+                  {q.type === "rating" ? `${value} ★` : value}
+                </label>
+              ))}
+              {high ? (
+                <span className="site-muted">
+                  {top} = {high}
+                </span>
+              ) : null}
+              {message}
+            </fieldset>
+          );
+        }
+
+        if (q.type === "dropdown") {
+          const picked = typeof values[q.id] === "string" ? (values[q.id] as string) : "";
+          return (
+            <div key={q.id} className="ui-field">
+              <label htmlFor={id}>{title}</label>
+              {help}
+              <select
+                id={id}
+                className="ui-input"
+                required={q.required}
+                value={picked}
+                {...aria}
+                onChange={(e) => set(q.id, e.target.value)}
+              >
+                <option value="" />
+                {q.options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              {message}
+            </div>
+          );
+        }
+
         if (q.type === "consent") {
           return (
             <div key={q.id} className="ui-field">
@@ -180,7 +245,13 @@ export function FormFields(props: {
                       ? "number"
                       : q.type === "date"
                         ? "date"
-                        : "text"
+                        : q.type === "time"
+                          ? "time"
+                          : q.type === "phone"
+                            ? "tel"
+                            : q.type === "link"
+                              ? "url"
+                              : "text"
                 }
                 maxLength={q.type === "short_text" ? TEXT_LIMITS.short_text : undefined}
                 min={q.type === "number" ? (q.min ?? undefined) : undefined}

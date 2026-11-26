@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { QuestionSummary } from "@website/domain/forms";
 import { exportFormResponsesAction } from "@/app/(panel)/forms/actions";
+import { Bars } from "@/components/bars";
 import { actionMessage } from "@/components/action-message";
 import { downloadCsv } from "@/components/csv";
 import { esc } from "@/components/format";
@@ -23,6 +25,8 @@ export function FormResponsesPage(props: {
   header: string[];
   rows: ResponseRow[];
   canExport: boolean;
+  /** One summary per question of the current version, from the newest answers shown. */
+  summaries: QuestionSummary[];
 }) {
   const router = useRouter();
   const toast = useToastMessage();
@@ -88,6 +92,44 @@ export function FormResponsesPage(props: {
           </div>
         </div>
       </div>
+      {props.summaries.length > 0 && props.rows.length > 0 ? (
+        <Card className="admin-list-card">
+          <CardBody>
+            <h2 className="admin-section-title">Results</h2>
+            {props.summaries.map((s) => (
+              <section key={s.id} aria-label={s.label}>
+                <h3 className="admin-table__title">{s.label}</h3>
+                <p className="admin-table__sub">
+                  {s.answered} {s.answered === 1 ? "answer" : "answers"}
+                  {s.kind === "rating" && s.average !== null
+                    ? ` · average ${s.average} of ${s.max}`
+                    : ""}
+                  {s.kind === "number" && s.average !== null
+                    ? ` · min ${s.min} · average ${s.average} · max ${s.max}`
+                    : ""}
+                </p>
+                {s.kind === "choice" || s.kind === "rating" ? (
+                  <Bars
+                    rows={s.rows.map((r) => ({
+                      label: `${r.label} · ${r.percent}%`,
+                      count: r.count,
+                    }))}
+                  />
+                ) : null}
+                {s.kind === "text" ? (
+                  <ul>
+                    {s.latest.map((t, i) => (
+                      <li key={i} className="admin-table__sub">
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
       <Card className="admin-list-card">
         <CardBody flush>
           <DataTable

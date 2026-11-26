@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { responseTable } from "@website/domain/forms";
+import { responseTable, summarizeResponses } from "@website/domain/forms";
 import { can } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { FormResponsesPage } from "@/components/form-responses-page";
@@ -22,6 +22,7 @@ export default async function FormResponsesRoute({ params }: { params: Promise<{
     adminReads.listFormResponses(form.id, SHOWN),
   ]);
   const table = responseTable(versions, responses);
+  const current = versions.find((v) => v.number === form.currentVersion);
   return (
     <FormResponsesPage
       id={form.id}
@@ -30,6 +31,7 @@ export default async function FormResponsesRoute({ params }: { params: Promise<{
       header={table.header}
       rows={table.rows.map((cells, i) => ({ id: responses[i]?.id ?? String(i), cells }))}
       canExport={can(viewer.principal, "forms.export")}
+      summaries={summarizeResponses(current?.questions ?? [], responses)}
     />
   );
 }

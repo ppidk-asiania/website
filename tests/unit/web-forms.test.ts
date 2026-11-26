@@ -89,3 +89,25 @@ describe("public form answers (web renderer → server)", () => {
     });
   });
 });
+
+describe("rating, scale and section answers (N2.1)", () => {
+  const questions = [
+    q("q_r", "rating"),
+    q("q_s", "scale"),
+    q("q_h", "section"),
+    q("q_d", "dropdown", { allowOther: false }),
+  ];
+
+  it("sends ratings as numbers, nothing for a heading, and the server accepts it", () => {
+    const answers = answersFrom(questions, {
+      values: { q_r: "4", q_s: "9", q_h: "x", q_d: "Red" },
+      others: {},
+    });
+    expect(answers).toEqual({ q_r: 4, q_s: 9, q_d: "Red" });
+    expect(parseAnswers(questions, answers)).toMatchObject({ ok: true });
+  });
+
+  it("shows a saved rating again as the radio value", () => {
+    expect(valuesFrom(questions, { q_r: 4 }).values).toEqual({ q_r: "4" });
+  });
+});

@@ -18,7 +18,8 @@ export function answersFrom(
     const value = values[q.id];
     if (value === undefined) continue;
     const other = (others[q.id] ?? "").trim();
-    if (q.type === "number") {
+    if (q.type === "section") continue;
+    if (q.type === "number" || q.type === "rating" || q.type === "scale") {
       if (typeof value === "string" && value.trim() !== "") answers[q.id] = Number(value);
     } else if (q.type === "single_choice") {
       answers[q.id] = value === OTHER ? other : value;

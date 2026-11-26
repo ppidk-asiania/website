@@ -501,6 +501,27 @@ describe("who may answer (10.3)", () => {
     expect(await gated(ari)).toEqual({ ok: false, error: "committee" });
   });
 
+  it("the answer window also closes account and officers forms (N2.1)", async () => {
+    seed();
+    appoint("u1");
+    for (const respondents of ["account", "officers"]) {
+      const { id, publicToken } = await published({
+        respondents,
+        opensAt: "2026-10-21T00:00:00.000Z",
+        closesAt: "2026-10-22T00:00:00.000Z",
+      });
+      const ids = await questionIds(id);
+      clock = new Date("2026-10-20T05:00:00Z");
+      expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: false, error: "closed" });
+      expect(await reader(ari)(publicToken)).toMatchObject({ state: "upcoming" });
+      clock = new Date("2026-10-21T10:00:00Z");
+      expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: true });
+      clock = new Date("2026-10-23T00:00:00Z");
+      expect(await answerNow(publicToken, ids, ari)).toEqual({ ok: false, error: "closed" });
+      expect(await reader(ari)(publicToken)).toMatchObject({ state: "closed" });
+    }
+  });
+
   it("officers forms refuse accounts without an active seat in the active period", async () => {
     seed();
     appoint("u1", "ended");

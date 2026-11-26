@@ -784,6 +784,21 @@ function QuestionEditor({
           <FieldError id={`question-options-${i}-error`} hint="At least 2, each once." />
         </div>
       ) : null}
+      {q.type === "scale" ? (
+        <div className="admin-field admin-question__wide">
+          <label className="admin-field__label" htmlFor={`question-options-${i}`}>
+            End labels (optional: low on the first line, high on the second)
+          </label>
+          <textarea
+            id={`question-options-${i}`}
+            className="admin-input admin-textarea"
+            rows={2}
+            value={q.options}
+            onChange={(e) => onChange({ options: e.target.value })}
+          />
+          <FieldError id={`question-options-${i}-error`} hint="Both labels or none." />
+        </div>
+      ) : null}
       {q.type === "multi_choice" ? (
         <div className="admin-field">
           <label className="admin-field__label" htmlFor={`question-maxsel-${i}`}>
@@ -832,15 +847,17 @@ function QuestionEditor({
         </>
       ) : null}
       <div className="admin-question__flags">
-        <label className="admin-check-label">
-          <input
-            type="checkbox"
-            checked={q.required}
-            onChange={(e) => onChange({ required: e.target.checked })}
-          />
-          Required
-        </label>
-        {hasOptions(q.type) ? (
+        {q.type === "section" ? null : (
+          <label className="admin-check-label">
+            <input
+              type="checkbox"
+              checked={q.required}
+              onChange={(e) => onChange({ required: e.target.checked })}
+            />
+            Required
+          </label>
+        )}
+        {hasOptions(q.type) && q.type !== "dropdown" ? (
           <label className="admin-check-label">
             <input
               type="checkbox"

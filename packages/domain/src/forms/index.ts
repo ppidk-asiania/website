@@ -12,6 +12,14 @@ export const QUESTION_TYPES = [
   "multi_choice",
   "file",
   "consent",
+  // N2.1
+  "section",
+  "rating",
+  "scale",
+  "time",
+  "phone",
+  "link",
+  "dropdown",
 ] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
@@ -103,7 +111,12 @@ export interface FormResponse {
 export const versionDocId = (formId: string, n: number) => `${formId}_${n}`;
 
 const QUESTION_ID = /^q_[A-Za-z0-9]{1,32}$/;
-const isChoice = (type: QuestionType) => type === "single_choice" || type === "multi_choice";
+const isChoice = (type: QuestionType) =>
+  type === "single_choice" || type === "multi_choice" || type === "dropdown";
+
+/** Rating: stars 1 to 5. Scale: 1 to 10 with an optional label at each end (kept in `options`: low, high). */
+export const RATING_MAX = 5;
+export const SCALE_MAX = 10;
 
 export const newQuestionId = (uuid: string) => `q_${uuid.replace(/-/g, "").slice(0, 8)}`;
 
@@ -143,6 +156,13 @@ export const QuestionInputSchema = z
         });
       }
     }
+    if (q.type === "scale" && q.options.length !== 0 && q.options.length !== 2) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Give both end labels (low, then high) or none.",
+      });
+    }
     if (q.type === "number" && q.min !== null && q.max !== null && q.min > q.max) {
       ctx.addIssue({ code: "custom", path: ["max"], message: "Max must be at least min." });
     }
@@ -152,9 +172,10 @@ export const QuestionInputSchema = z
     type: q.type,
     label: q.label,
     description: q.description,
-    required: q.required,
-    options: isChoice(q.type) ? q.options : [],
-    allowOther: isChoice(q.type) ? q.allowOther : false,
+    // A section heading takes no answer, so it can never be required.
+    required: q.type === "section" ? false : q.required,
+    options: isChoice(q.type) || q.type === "scale" ? q.options : [],
+    allowOther: isChoice(q.type) && q.type !== "dropdown" ? q.allowOther : false,
     maxSelections: q.type === "multi_choice" ? q.maxSelections : null,
     min: q.type === "number" ? q.min : null,
     max: q.type === "number" ? q.max : null,
@@ -354,6 +375,9 @@ export const copyProfile = (fields: readonly FormProfileField[], own: FormProfil
   Object.fromEntries(fields.map((f) => [f, own[f] ?? ""]));
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const PHONE = /^\+[0-9][0-9 ()-]{5,18}[0-9]$/;
+const isHttps = (value: string) => /^https:\/\/[^\s/?#]+[^\s]*$/i.test(value);
 const isRealDate = (value: string) => {
   const date = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
@@ -392,7 +416,20 @@ function answerSchema(q: Question): z.ZodType<AnswerValue> {
     case "date":
       return z.string().regex(DATE, "Enter a date.").refine(isRealDate, "Enter a real date.");
     case "single_choice":
+    case "dropdown":
       return safeText(TEXT_LIMITS.other).refine(chosen(q), "Choose one of the options.");
+    case "rating":
+      return z.number({ error: "Choose a rating." }).int().min(1).max(RATING_MAX);
+    case "scale":
+      return z.number({ error: "Choose a value." }).int().min(1).max(SCALE_MAX);
+    case "time":
+      return z.string().regex(TIME, "Enter a time.");
+    case "phone":
+      return z.string().trim().regex(PHONE, "Enter a phone number with country code.");
+    case "link":
+      return z.string().trim().max(500).refine(isHttps, "Enter a link that starts with https://.");
+    case "section":
+      return z.never({ error: "A heading takes no answer." });
     case "multi_choice":
       return z
         .array(safeText(TEXT_LIMITS.other))
@@ -420,10 +457,12 @@ const isBlank = (value: unknown) =>
 
 export function answersSchema(questions: readonly Question[]) {
   const shape = Object.fromEntries(
-    questions.map((q) => {
-      const schema = answerSchema(q);
-      return [q.id, q.required ? schema : schema.optional()];
-    }),
+    questions
+      .filter((q) => q.type !== "section")
+      .map((q) => {
+        const schema = answerSchema(q);
+        return [q.id, q.required ? schema : schema.optional()];
+      }),
   );
   return z.preprocess(
     (raw) =>
@@ -474,7 +513,9 @@ export function answerText(value: AnswerValue | undefined): string {
 export function answerColumns(versions: readonly FormVersion[]): Map<string, string> {
   const columns = new Map<string, string>();
   for (const v of [...versions].sort((a, b) => b.number - a.number)) {
-    for (const q of v.questions) if (!columns.has(q.id)) columns.set(q.id, q.label);
+    for (const q of v.questions) {
+      if (q.type !== "section" && !columns.has(q.id)) columns.set(q.id, q.label);
+    }
   }
   return columns;
 }
@@ -503,4 +544,134 @@ export function responseTable(
       ...ids.map((id) => answerText(r.answers[id])),
     ]),
   };
+}
+
+export interface SummaryRow {
+  readonly label: string;
+  readonly count: number;
+  /** Share of the people who answered this question, rounded. */
+  readonly percent: number;
+}
+
+/** What the Results tab shows for one question (N2.1). Averages are per question: 1-5 and 1-10 never mix. */
+export type QuestionSummary =
+  | {
+      readonly kind: "choice";
+      readonly id: string;
+      readonly label: string;
+      readonly answered: number;
+      readonly rows: readonly SummaryRow[];
+    }
+  | {
+      readonly kind: "rating";
+      readonly id: string;
+      readonly label: string;
+      readonly answered: number;
+      readonly max: number;
+      readonly average: number | null;
+      readonly rows: readonly SummaryRow[];
+    }
+  | {
+      readonly kind: "number";
+      readonly id: string;
+      readonly label: string;
+      readonly answered: number;
+      readonly min: number | null;
+      readonly average: number | null;
+      readonly max: number | null;
+    }
+  | {
+      readonly kind: "text";
+      readonly id: string;
+      readonly label: string;
+      readonly answered: number;
+      readonly latest: readonly string[];
+    };
+
+export const LATEST_TEXT_ANSWERS = 5;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const share = (count: number, of: number) => (of === 0 ? 0 : Math.round((count / of) * 100));
+
+/** Responses are newest first. Questions are the current version's; answers of a different shape are ignored. */
+export function summarizeResponses(
+  questions: readonly Question[],
+  responses: readonly Pick<FormResponse, "answers">[],
+): QuestionSummary[] {
+  return questions.flatMap((q): QuestionSummary[] => {
+    const given = responses.flatMap((r) =>
+      r.answers[q.id] === undefined ? [] : [r.answers[q.id]!],
+    );
+    const base = { id: q.id, label: q.label };
+    switch (q.type) {
+      case "section":
+      case "file":
+        return [];
+      case "single_choice":
+      case "dropdown":
+      case "multi_choice": {
+        const picks = given.flatMap((a) =>
+          Array.isArray(a) ? (a as string[]) : typeof a === "string" ? [a] : [],
+        );
+        const counts = new Map(q.options.map((o) => [o, 0]));
+        let other = 0;
+        for (const p of picks) {
+          const known = counts.get(p);
+          if (known === undefined) other++;
+          else counts.set(p, known + 1);
+        }
+        const rows = [...counts, ...(other > 0 ? [["Other", other] as const] : [])].map(
+          ([label, count]) => ({ label, count, percent: share(count, given.length) }),
+        );
+        return [{ kind: "choice", ...base, answered: given.length, rows }];
+      }
+      case "consent":
+        return [
+          {
+            kind: "choice",
+            ...base,
+            answered: given.length,
+            rows: [{ label: "Agreed", count: given.length, percent: given.length === 0 ? 0 : 100 }],
+          },
+        ];
+      case "rating":
+      case "scale": {
+        const max = q.type === "rating" ? RATING_MAX : SCALE_MAX;
+        const values = given.filter((a): a is number => typeof a === "number");
+        const rows = Array.from({ length: max }, (_, n) => {
+          const count = values.filter((v) => v === n + 1).length;
+          return { label: String(n + 1), count, percent: share(count, values.length) };
+        });
+        const average =
+          values.length === 0 ? null : round1(values.reduce((a, b) => a + b, 0) / values.length);
+        return [{ kind: "rating", ...base, answered: values.length, max, average, rows }];
+      }
+      case "number": {
+        const values = given.filter((a): a is number => typeof a === "number");
+        return [
+          {
+            kind: "number",
+            ...base,
+            answered: values.length,
+            min: values.length === 0 ? null : Math.min(...values),
+            average:
+              values.length === 0
+                ? null
+                : round1(values.reduce((a, b) => a + b, 0) / values.length),
+            max: values.length === 0 ? null : Math.max(...values),
+          },
+        ];
+      }
+      default: {
+        const texts = given.map((a) => answerText(a)).filter((t) => t !== "");
+        return [
+          {
+            kind: "text",
+            ...base,
+            answered: texts.length,
+            latest: texts.slice(0, LATEST_TEXT_ANSWERS),
+          },
+        ];
+      }
+    }
+  });
 }

@@ -72,6 +72,10 @@ store(result.answers); // keyed by question id
   (optional min/max), date (`YYYY-MM-DD`, never shifted by a time zone), single choice,
   checkboxes (optional "most ticks"), file, consent (must be ticked when required). Choices have
   2–50 unique options and may allow one free-text "Other" answer. At most 100 questions.
+- **More types (N2.1):** section heading (no answer, never required, not a column of the export), star
+  rating (whole number 1–5), linear scale (1–10, optional end labels kept in `options` as low, high),
+  time (`HH:MM`), phone (with country code, `+…`), link (`https://` only), dropdown (a single choice shown
+  as a list; no "Other"). Changing a type still makes a new version once the form has answers.
 - **Question ids** (`q_` + 8 characters) are created by the server and never change, so the
   answers of every version share a column in the responses table.
 - **Freezing:** unchanged questions write nothing; an unanswered version is edited in place; an
@@ -93,6 +97,13 @@ store(result.answers); // keyed by question id
   written in ONE transaction with the version it answers (marked answered = frozen) and the
   form's `responseCount`; a visitor whose page shows an older version is asked to reload.
   reCAPTCHA v3 runs before anything is read; the per-IP limit of the request guard applies.
+- **Results (N2.1):** the same page opens with a Results block (`summarizeResponses`, from the newest
+  500 answers, the current version's questions): choices as bars with count and percent of the people who
+  answered, ratings and scales as a distribution with an average (kept per question, so 1–5 and 1–10 never
+  mix), numbers as min / average / max, text as the latest five answers. Bars are the CSS `Bars` component
+  (`apps/admin/src/components/bars.tsx`, shared with the recruitment recap); no chart library. It needs
+  `forms.responses` like the table; the summaries carry no names, so anonymous forms stay anonymous. The
+  answer window (`opensAt`/`closesAt`) guards the `account` and `officers` modes as well (tested).
 - **Responses:** `/forms/{id}/responses` shows the newest 500 (`forms.responses`). Export CSV
   needs `forms.export`, reads up to 10,000, and is logged as a `data.export` security event
   (answers are personal data). CSV cells that would run as spreadsheet formulas get a leading

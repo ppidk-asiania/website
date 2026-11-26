@@ -141,4 +141,4 @@ export function fromDraft(d: QuestionDraft) {
 }
 
 export const hasOptions = (type: QuestionType) =>
-  type === "single_choice" || type === "multi_choice";
+  type === "single_choice" || type === "multi_choice" || type === "dropdown";
