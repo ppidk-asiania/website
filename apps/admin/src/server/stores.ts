@@ -1,9 +1,10 @@
 import "server-only";
-import { createFirebaseAccountAdmin } from "@website/auth/firebase-admin";
+import { createAccountAdmin } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
 import {
   createDbFileStorage,
   createSqlAccountStore,
+  createSqlAuthAccountStore,
   createSqlApplicationStore,
   createSqlAppointmentStore,
   createSqlAuditStore,
@@ -135,12 +136,7 @@ export const adminStores = lazyEnv(() => {
       ...createSqlSubscriberReader(db),
       ...createSqlSubscriberStore(db),
     },
-    authAdmin: createFirebaseAccountAdmin({
-      appEnv: env.APP_ENV,
-      projectId: env.FIREBASE_PROJECT_ID,
-      clientEmail: env.FIREBASE_CLIENT_EMAIL,
-      privateKey: env.FIREBASE_PRIVATE_KEY,
-    }),
+    authAdmin: createAccountAdmin(createSqlAuthAccountStore(db)),
     logger: createLogger({ service: "admin", level: env.LOG_LEVEL }),
     objectives: createSqlObjectiveStore(db),
     meetings: createSqlMeetingStore(db),

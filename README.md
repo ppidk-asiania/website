@@ -9,7 +9,6 @@ administration, online shop and a public API — in one TypeScript monorepo.
 ![Node](https://img.shields.io/badge/node-24%20LTS-339933?logo=node.js&logoColor=white)
 ![pnpm](https://img.shields.io/badge/pnpm-12-F69220?logo=pnpm&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)
-![Firebase](https://img.shields.io/badge/Firebase-Auth-FFCA28?logo=firebase&logoColor=black)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)
 
 </div>
@@ -50,11 +49,11 @@ the public website.
        @website/* packages: domain · db · auth · permissions · audit
                             contracts · apikeys · email · ui · observability · config
                             │
-     Firebase Auth (one user pool) · MySQL on cPanel (all data) · files on cPanel disk · Resend
+     Sign in with Google · MySQL on cPanel (all data, accounts) · files on cPanel disk · Resend
 ```
 
-- **Data** — MySQL 8 on the cPanel host for everything; files on the cPanel disk; browsers never access either directly. Firebase is used only for sign-in.
-- **Identity** — one Firebase Authentication user pool for staff, members and customers.
+- **Data** — MySQL 8 on the cPanel host for everything; files on the cPanel disk; browsers never access either directly.
+- **Identity** — one user pool in MySQL for staff, members and customers: Google (Google Identity Services), e-mail + password or passkey, one signed session cookie for every app.
 - **Access** — role-based access control (RBAC) evaluated on the server for every request.
 - **Boundaries** — enforced by tooling (`pnpm lint`), not only by convention.
 
@@ -113,14 +112,14 @@ See [docs/development.md](docs/development.md).
 
 ## Branches and environments
 
-| Branch    | Environment            | Firebase project     |
-| --------- | ---------------------- | -------------------- |
-| `dev`     | Development (all work) | `ppidk-website-prod` |
-| `staging` | Staging (release test) | `ppidk-website-prod` |
-| `prod`    | Production (live)      | `ppidk-website-prod` |
+| Branch    | Environment            |
+| --------- | ---------------------- |
+| `dev`     | Development (all work) |
+| `staging` | Staging (release test) |
+| `prod`    | Production (live)      |
 
 Work is committed to `dev` and promoted by pull request `dev → staging → prod`.
-No other branches are created. There is **one** MySQL database and **one** Firebase Auth user pool
+No other branches are created. There is **one** MySQL database (with the one user pool)
 for every environment, so `dev` and `staging` deployments work on the live data.
 See [docs/deployment.md](docs/deployment.md) and [docs/environment.md](docs/environment.md).
 

@@ -1,8 +1,9 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
-import { hasTwoSignInMethods } from "@website/auth";
+import { createAccountCreator, hasTwoSignInMethods } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
 import {
+  createSqlAuthAccountStore,
   createSqlUserStore,
   createSqlRateLimitStore,
   createSqlWebhookEventStore,
@@ -65,7 +66,6 @@ import { WHATSAPP_LINK_PURPOSE } from "@website/domain/members";
 import { createPolls, createWahaWebhookRoute } from "./polls";
 import { cloudApiReply, createChatbot, createWhatsappWebhook } from "./chatbot";
 import { geminiCampusMatcher } from "./gemini";
-import { createFirebaseAccountCreator } from "@website/auth/firebase-admin";
 import {
   interviewScope,
   isRecruitmentOpen,
@@ -848,12 +848,7 @@ export const whatsappWebhook = lazyEnv(() => {
         .map((c) => ({ id: c.id, name: c.name, countryCode: c.countryCode })),
     universities: (countryCode) => adminStores().universities.listApproved(countryCode),
     matchCampus: env.GEMINI_API_KEY ? geminiCampusMatcher(env.GEMINI_API_KEY, fetch) : null,
-    ensureAccount: createFirebaseAccountCreator({
-      appEnv: env.APP_ENV,
-      projectId: env.FIREBASE_PROJECT_ID,
-      clientEmail: env.FIREBASE_CLIENT_EMAIL,
-      privateKey: env.FIREBASE_PRIVATE_KEY,
-    }),
+    ensureAccount: createAccountCreator(createSqlAuthAccountStore(adminDb())),
     recordUser: async (uid, email, name) => {
       await userDirectoryStore().recordSignIn(
         { uid, email, name, emailVerified: false },

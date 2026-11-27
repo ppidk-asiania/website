@@ -720,14 +720,13 @@ function PersonModal({
           setWhatsapp("Unavailable");
           return setMethods("Unavailable");
         }
-        const { providers, mfaFactors, passkeys, whatsappVerified } = result.data;
+        const { providers, passkeys, whatsappVerified } = result.data;
         setWhatsapp(whatsappVerified ? "Verified" : "Not verified");
         const list = [
           ...providers.map((p) =>
             p === "google.com" ? "Google" : p === "password" ? "E-mail and password" : p,
           ),
           ...(passkeys > 0 ? [`${passkeys} passkey${passkeys === 1 ? "" : "s"}`] : []),
-          ...(mfaFactors > 0 ? ["Two-step verification"] : []),
         ];
         setMethods(list.join(", ") || "—");
       },

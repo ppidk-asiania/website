@@ -170,7 +170,7 @@ export function createApplicationActions(deps: ApplicationDeps) {
           !(await deps.hasSecondFactor(application.userId))
         ) {
           throw new RuleViolationError(
-            "This account needs a second sign-in method first: two-step verification, or a passkey plus Google or a password (web → Your account).",
+            "This account needs a second sign-in method first: a passkey plus Google or a password (web → Your account).",
           );
         }
         const appointmentAudit: AppointmentAudit = (appointment, account) => [

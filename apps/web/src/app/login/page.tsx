@@ -11,7 +11,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default function LoginPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <AuthCard title="Welcome back" subtitle="Sign in to your account">
+    <AuthCard>
       <Suspense fallback={<LoginForm next={null} />}>
         <LoginWithReturn searchParams={searchParams} />
       </Suspense>

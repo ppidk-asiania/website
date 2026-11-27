@@ -1,9 +1,12 @@
 export const COLLECTIONS = [
+  "accountEmails",
   "applicationRevisions",
   "applications",
   "appointments",
   "auditChain",
   "auditLogs",
+  "authAccounts",
+  "authLogins",
   "campaignTracking",
   "campaigns",
   "certificateCounters",

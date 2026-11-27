@@ -82,7 +82,7 @@ accountChangeRefusal({ actor, targetUserId, role, superadminsAfter }); // Role M
   assignment never passes an unscoped check (the PPIDK §56/§73 leak cannot happen here). Lists
   of people are filtered in the repository query with `scopedChapterIds` (A2).
 - Evaluated **server-side only**. Never trust hidden buttons, client route guards, client
-  state, a Firebase login alone, URL params, or role fields in payloads (tested).
+  state, a sign-in alone, URL params, or role fields in payloads (tested).
 - Every admin mutation uses `createGuardedAction` (staff → validation → permission).
 - **No privilege escalation**: saving or deleting a role needs `roles.edit` and every permission
   the role has (and had) in a **global** assignment; assigning a role needs `users.edit` and every

@@ -7,7 +7,6 @@ import {
   calendarEnv,
   databaseEnv,
   filesEnv,
-  firebaseAdminEnv,
   messagingEnv,
   newsletterEnv,
   lazyEnv,
@@ -24,7 +23,6 @@ import {
 } from "@website/config/env";
 
 const adminEnvSchema = baseEnv
-  .extend(firebaseAdminEnv.shape)
   .extend(databaseEnv.shape)
   .extend(filesEnv.shape)
   .extend(sessionEnv.shape)

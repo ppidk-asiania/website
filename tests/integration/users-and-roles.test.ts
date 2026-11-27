@@ -29,8 +29,20 @@ const user = (roleIds: string[], extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+const passkey = (userId: string) => ({
+  id: `pk-${userId}`,
+  userId,
+  publicKey: "k",
+  counter: 0,
+  transports: [],
+  createdAt: new Date(0),
+  lastUsedAt: null,
+  name: "",
+  device: "",
+});
+
 let fake: ReturnType<typeof fakeDb>;
-let methods: Record<string, { providers: string[]; mfaFactors: number }>;
+let methods: Record<string, { providers: string[] }>;
 let revokeSessions: ReturnType<typeof vi.fn<(uid: string) => Promise<void>>>;
 let setDisabled: ReturnType<typeof vi.fn<(uid: string, disabled: boolean) => Promise<void>>>;
 let logLines: string[];
@@ -45,7 +57,7 @@ let deps: {
   sendInvite: (invite: { email: string }, roleName: string) => Promise<unknown>;
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   fake = fakeDb();
   const db = fake.db as unknown as Db;
   fake.docs.set("roles/editor", {
@@ -65,13 +77,13 @@ beforeEach(() => {
   fake.docs.set("users/manager", { uid: "manager", ...user(["user_manager"]) });
   fake.docs.set("users/ana", { uid: "ana", ...user(["visitor"]), email: "ana@example.org" });
   methods = {
-    ana: { providers: ["google.com"], mfaFactors: 1 },
-    boss: { providers: ["google.com"], mfaFactors: 1 },
+    ana: { providers: ["google.com"] },
+    boss: { providers: ["google.com"] },
   };
   revokeSessions = vi.fn((_uid: string) => Promise.resolve());
   setDisabled = vi.fn((_uid: string, _disabled: boolean) => Promise.resolve());
   const authAdmin: AccountAdmin = {
-    signInMethods: (uid) => Promise.resolve(methods[uid] ?? { providers: [], mfaFactors: 0 }),
+    signInMethods: (uid) => Promise.resolve(methods[uid] ?? { providers: [] }),
     setDisabled,
     revokeSessions,
   };
@@ -89,6 +101,7 @@ beforeEach(() => {
       return Promise.resolve("logged");
     },
   };
+  for (const uid of ["ana", "boss"]) await deps.passkeys.add(passkey(uid));
 });
 
 const principalOf = async (uid: string) =>
@@ -126,7 +139,7 @@ describe("Role Manager: give and remove roles", () => {
   });
 
   it("refuses a staff role while the account has only one sign-in method; a passkey fixes it", async () => {
-    methods["ana"] = { providers: ["google.com"], mfaFactors: 0 };
+    await deps.passkeys.remove("pk-ana", "ana");
     const actions = createAccountActions(deps);
     expect(await actions.assignRole(...as("boss"))(giveEditor)).toMatchObject({
       ok: false,
@@ -142,6 +155,8 @@ describe("Role Manager: give and remove roles", () => {
       transports: [],
       createdAt: new Date(),
       lastUsedAt: null,
+      name: "",
+      device: "",
     });
     expect(await actions.assignRole(...as("boss"))(giveEditor)).toMatchObject({ ok: true });
   });
@@ -184,7 +199,7 @@ describe("Role Manager: give and remove roles", () => {
     expect(fake.docs.get("users/boss")).toMatchObject({ status: "active" });
   });
 
-  it("deactivating an account disables it in Firebase Auth, ends its sessions and closes admin", async () => {
+  it("deactivating an account disables its sign-in account, ends its sessions and closes admin", async () => {
     fake.docs.set("users/ana", { uid: "ana", ...user(["editor"]) });
     const result = await createAccountActions(deps).setStatus(...as("boss"))({
       uid: "ana",
@@ -350,7 +365,7 @@ describe("Role Manager: give and remove roles", () => {
   });
 
   it("roles without admin pages need no second method; entries are titled by uid when there is no e-mail", async () => {
-    methods["ana"] = { providers: ["google.com"], mfaFactors: 0 };
+    await deps.passkeys.remove("pk-ana", "ana");
     fake.docs.set("users/ana", { uid: "ana", ...user(["visitor"]), email: null });
     expect(
       await createAccountActions(deps).assignRole(...as("boss"))({
@@ -749,7 +764,7 @@ describe("Role Manager → Add New People: give a role, or invite by e-mail", ()
     const details = createAccountActions(deps).personDetails;
     expect(await details(...as("boss"))({ uid: "ana" })).toEqual({
       ok: true,
-      data: { providers: ["google.com"], mfaFactors: 1, passkeys: 0, whatsappVerified: false },
+      data: { providers: ["google.com"], passkeys: 1, whatsappVerified: false },
     });
     fake.docs.set("memberProfiles/ana", {
       fullName: "Ana",

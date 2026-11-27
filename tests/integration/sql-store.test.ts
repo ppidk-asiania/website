@@ -57,7 +57,7 @@ describe.skipIf(!url)("MySQL document store", () => {
     expect((await ref.get()).exists).toBe(false);
   });
 
-  it("queries like Firestore: filters, order, cursor, limit, count", async () => {
+  it("queries: filters, order, cursor, limit, count", async () => {
     const events = db.collection("events");
     await Promise.all([
       events.doc("e1").set({ status: "published", n: 1, tags: ["a", "b"], startsAt: at }),

@@ -72,6 +72,29 @@ describe.each(apps)("%s request guard wiring", (app) => {
   });
 });
 
+describe("web sign-in rate limit", () => {
+  it("allows 10 sign-in, sign-up or reset posts a minute per client, then answers 429", async () => {
+    vi.stubEnv("APP_ENV", "test");
+    const { guardRequest } = await load("web");
+    const post = () =>
+      guardRequest(
+        new Request("https://site.example/api/session", {
+          method: "POST",
+          headers: { origin: "https://site.example" },
+        }),
+      );
+    for (let i = 0; i < 10; i++) expect((await post()).blocked).toBeNull();
+    expect((await post()).blocked?.status).toBe(429);
+    const signOut = await guardRequest(
+      new Request("https://site.example/api/session", {
+        method: "DELETE",
+        headers: { origin: "https://site.example" },
+      }),
+    );
+    expect(signOut.blocked).toBeNull();
+  });
+});
+
 describe("sign-in redirect before the page renders (proxy)", () => {
   const signedIn = { headers: { cookie: `theme=dark; ${SESSION_COOKIE}=token` } };
 
@@ -140,8 +163,8 @@ vi.mock("../../apps/admin/node_modules/next/navigation.js", () => ({
     throw new Error("forbidden");
   },
 }));
-vi.mock("@website/auth/firebase-admin", () => ({
-  createFirebaseIdentityProvider: () => ({
+vi.mock("../../apps/admin/src/server/session", () => ({
+  identity: () => ({
     verifySessionCookie: () => Promise.resolve({ uid: "u", email: "u@example.org" }),
   }),
 }));

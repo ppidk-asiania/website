@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSessionRoutes, SESSION_COOKIE, type IdentityProvider } from "@website/auth";
+import {
+  createSessionRoutes,
+  SESSION_COOKIE,
+  type IdentityProvider,
+  type SignIn,
+} from "@website/auth";
 
 function provider(over: Partial<IdentityProvider> = {}) {
   const mocks = {
-    createSessionCookie: vi.fn((_token: string, _maxAgeMs: number) =>
-      Promise.resolve("session-cookie-value"),
+    createSession: vi.fn((uid: string, _provider: string, _maxAgeMs: number) =>
+      Promise.resolve(`session-for-${uid}`),
     ),
-    verifySessionCookie: vi.fn((_cookie: string) =>
+    verifySessionCookie: vi.fn((cookie: string) =>
       Promise.resolve({
-        uid: "u1",
+        uid: cookie.replace("session-for-", ""),
         email: null,
         emailVerified: true,
         signInProvider: "google.com",
@@ -16,11 +21,27 @@ function provider(over: Partial<IdentityProvider> = {}) {
       }),
     ),
     revokeSessions: vi.fn((_uid: string) => Promise.resolve()),
-    createCustomToken: vi.fn((_uid: string) => Promise.resolve("custom-token")),
   };
   const identity: IdentityProvider = { ...mocks, ...over };
   return { identity, mocks };
 }
+
+function methods(over: Partial<SignIn> = {}): SignIn {
+  return {
+    google: vi.fn((credential: string) => Promise.resolve(credential === "good" ? "g1" : null)),
+    password: vi.fn((_e: string, password: string) =>
+      Promise.resolve(password === "right" ? "p1" : null),
+    ),
+    signUp: vi.fn((email: string) =>
+      Promise.resolve(email === "taken@example.org" ? null : "new1"),
+    ),
+    requestPasswordReset: vi.fn(() => Promise.resolve()),
+    resetPassword: vi.fn((token: string) => Promise.resolve(token === "ok" ? "r1" : null)),
+    verifyEmail: vi.fn(() => Promise.resolve(true)),
+    ...over,
+  };
+}
+
 const post = (body: unknown) =>
   new Request("https://web.example.org/api/session", {
     method: "POST",
@@ -28,16 +49,16 @@ const post = (body: unknown) =>
     headers: { "content-type": "application/json" },
   });
 
-describe("OAuth session endpoint (Google sign-in via Firebase → server session cookie)", () => {
-  it("exchanges a verified ID token for a hardened session cookie", async () => {
+describe("session endpoint (Google, e-mail + password → server session cookie)", () => {
+  it("exchanges a Google credential for a hardened session cookie", async () => {
     const { identity, mocks } = provider();
-    const res = await createSessionRoutes({ identity, maxAgeHours: 8 }).POST(
-      post({ idToken: "google-id-token" }),
+    const res = await createSessionRoutes({ identity, maxAgeHours: 8, signIn: methods() }).POST(
+      post({ method: "google", credential: "good" }),
     );
     expect(res.status).toBe(204);
-    expect(mocks.createSessionCookie).toHaveBeenCalledWith("google-id-token", 8 * 3600 * 1000);
+    expect(mocks.createSession).toHaveBeenCalledWith("g1", "google.com", 8 * 3600 * 1000);
     const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain(`${SESSION_COOKIE}=session-cookie-value`);
+    expect(cookie).toContain(`${SESSION_COOKIE}=session-for-g1`);
     for (const attr of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=28800"])
       expect(cookie).toContain(attr);
     expect(cookie).not.toMatch(/Domain=/i);
@@ -47,10 +68,40 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     expect(SESSION_COOKIE).toBe("__Secure-session");
   });
 
+  it("starts sessions for password sign-in, sign-up and password reset", async () => {
+    const { identity, mocks } = provider();
+    const routes = createSessionRoutes({ identity, maxAgeHours: 8, signIn: methods() });
+    const cases: Array<[unknown, string]> = [
+      [{ method: "password", email: "A@Example.org", password: "right" }, "p1"],
+      [{ method: "signup", email: "new@example.org", password: "long enough" }, "new1"],
+      [{ method: "reset", token: "ok", password: "long enough" }, "r1"],
+    ];
+    for (const [body, uid] of cases) {
+      const res = await routes.POST(post(body));
+      expect(res.status, JSON.stringify(body)).toBe(204);
+      expect(mocks.createSession).toHaveBeenLastCalledWith(uid, "password", 8 * 3600 * 1000);
+    }
+  });
+
+  it("answers a reset request the same way whether or not the address has an account", async () => {
+    const requestPasswordReset = vi.fn(() => Promise.resolve());
+    const signIn = methods({ requestPasswordReset });
+    const routes = createSessionRoutes({ identity: provider().identity, maxAgeHours: 8, signIn });
+    const res = await routes.POST(post({ method: "reset-request", email: " Ana@Example.org " }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(requestPasswordReset).toHaveBeenCalledWith("ana@example.org");
+  });
+
   it("sets and clears the shared cookie on the configured parent domain", async () => {
     const { identity } = provider();
-    const routes = createSessionRoutes({ identity, maxAgeHours: 8, cookieDomain: "ppiasiania.id" });
-    const signIn = await routes.POST(post({ idToken: "google-id-token" }));
+    const routes = createSessionRoutes({
+      identity,
+      maxAgeHours: 8,
+      cookieDomain: "ppiasiania.id",
+      signIn: methods(),
+    });
+    const signIn = await routes.POST(post({ method: "google", credential: "good" }));
     expect(signIn.headers.get("set-cookie")).toContain("Domain=ppiasiania.id");
     const signOut = await routes.DELETE(
       new Request("https://admin.ppiasiania.id/api/session", { method: "DELETE" }),
@@ -59,13 +110,22 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     expect(signOut.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
-  it("rejects malformed bodies and any attempt to choose a uid or role", async () => {
-    const routes = createSessionRoutes({ identity: provider().identity, maxAgeHours: 8 });
+  it("rejects malformed bodies, short passwords and any attempt to choose a uid or role", async () => {
+    const routes = createSessionRoutes({
+      identity: provider().identity,
+      maxAgeHours: 8,
+      signIn: methods(),
+    });
     for (const body of [
       {},
-      { idToken: "" },
-      { idToken: "t", uid: "victim" },
-      { idToken: "t", role: "superadmin" },
+      { idToken: "t" },
+      { method: "google", credential: "" },
+      { method: "google", credential: "good", uid: "victim" },
+      { method: "google", credential: "good", role: "superadmin" },
+      { method: "password", email: "not-an-email", password: "right" },
+      { method: "signup", email: "a@example.org", password: "short" },
+      { method: "reset", token: "ok", password: "short" },
+      { method: "magic" },
       "x",
     ]) {
       expect((await routes.POST(post(body))).status, JSON.stringify(body)).toBe(400);
@@ -77,44 +137,60 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     expect((await routes.POST(notJson)).status).toBe(400);
   });
 
-  it("returns a generic 401 when the token is invalid, without leaking the reason", async () => {
-    const { identity } = provider({
-      createSessionCookie: () => Promise.reject(new Error("Firebase ID token has expired at 123")),
+  it("refuses every sign-in where no sign-in methods are configured (admin, shop)", async () => {
+    const routes = createSessionRoutes({ identity: provider().identity, maxAgeHours: 8 });
+    expect((await routes.POST(post({ method: "google", credential: "good" }))).status).toBe(400);
+  });
+
+  it("returns a generic 401 for wrong credentials, without leaking the reason", async () => {
+    const routes = createSessionRoutes({
+      identity: provider().identity,
+      maxAgeHours: 8,
+      signIn: methods({ google: () => Promise.reject(new Error("Google keys: HTTP 503")) }),
     });
-    const res = await createSessionRoutes({ identity, maxAgeHours: 8 }).POST(
-      post({ idToken: "expired" }),
+    for (const body of [
+      { method: "google", credential: "bad" },
+      { method: "password", email: "a@example.org", password: "wrong" },
+      { method: "reset", token: "expired", password: "long enough" },
+    ]) {
+      const res = await routes.POST(post(body));
+      expect(res.status, JSON.stringify(body)).toBe(401);
+      expect(await res.text()).not.toMatch(/503|wrong|expired/);
+    }
+  });
+
+  it("answers 409 when the address already has an account", async () => {
+    const routes = createSessionRoutes({
+      identity: provider().identity,
+      maxAgeHours: 8,
+      signIn: methods(),
+    });
+    const res = await routes.POST(
+      post({ method: "signup", email: "taken@example.org", password: "long enough" }),
     );
-    expect(res.status).toBe(401);
-    expect(await res.text()).not.toContain("expired");
+    expect(res.status).toBe(409);
   });
 
   it("records the sign-in for the uid of the VERIFIED session, never for anything in the body", async () => {
     const { identity, mocks } = provider();
     const onSignIn = vi.fn(() => Promise.resolve());
-    const res = await createSessionRoutes({ identity, maxAgeHours: 8, onSignIn }).POST(
-      post({ idToken: "google-id-token" }),
-    );
-    expect(res.status).toBe(204);
-    expect(mocks.verifySessionCookie).toHaveBeenCalledWith("session-cookie-value");
-    expect(onSignIn).toHaveBeenCalledWith(expect.objectContaining({ uid: "u1" }));
+    const routes = createSessionRoutes({ identity, maxAgeHours: 8, onSignIn, signIn: methods() });
+    expect((await routes.POST(post({ method: "google", credential: "good" }))).status).toBe(204);
+    expect(mocks.verifySessionCookie).toHaveBeenCalledWith("session-for-g1");
+    expect(onSignIn).toHaveBeenCalledWith(expect.objectContaining({ uid: "g1" }));
+    expect((await routes.start("pk1", "passkey")).status).toBe(204);
+    expect(mocks.createSession).toHaveBeenLastCalledWith("pk1", "passkey", 8 * 3600 * 1000);
   });
 
-  it("records nothing when the token is refused or the new session does not verify", async () => {
+  it("records nothing and sets no cookie when the new session does not verify", async () => {
     const onSignIn = vi.fn(() => Promise.resolve());
-    const refused = provider({ createSessionCookie: () => Promise.reject(new Error("bad")) });
-    expect(
-      (
-        await createSessionRoutes({ identity: refused.identity, maxAgeHours: 8, onSignIn }).POST(
-          post({ idToken: "t" }),
-        )
-      ).status,
-    ).toBe(401);
     const unverified = provider({ verifySessionCookie: () => Promise.resolve(null) });
     const res = await createSessionRoutes({
       identity: unverified.identity,
       maxAgeHours: 8,
       onSignIn,
-    }).POST(post({ idToken: "t" }));
+      signIn: methods(),
+    }).POST(post({ method: "google", credential: "good" }));
     expect(res.status).toBe(401);
     expect(res.headers.get("set-cookie")).toBeNull();
     expect(onSignIn).not.toHaveBeenCalled();
@@ -124,7 +200,7 @@ describe("OAuth session endpoint (Google sign-in via Firebase → server session
     const { identity, mocks } = provider();
     const signOut = new Request("https://web.example.org/api/session", {
       method: "DELETE",
-      headers: { cookie: `${SESSION_COOKIE}=abc` },
+      headers: { cookie: `${SESSION_COOKIE}=session-for-u1` },
     });
     const res = await createSessionRoutes({ identity, maxAgeHours: 8 }).DELETE(signOut);
     expect(res.status).toBe(204);

@@ -4,7 +4,7 @@ import { htmlToText, sanitizeRichText } from "@website/security/html";
 describe("rich text sanitiser (news body, campaigns): allowlist on write AND render", () => {
   it("keeps headings, paragraphs, emphasis, lists, links and https images", () => {
     const html =
-      '<h2>Judul</h2><p><strong>Tebal</strong> <em>miring</em> <u>garis</u></p><ul><li>satu</li></ul><ol><li>dua</li></ol><blockquote>kutip</blockquote><p><a href="https://ppiasiania.id/x">tautan</a></p><img src="https://firebasestorage.googleapis.com/v0/b/x/o/a.webp" alt="foto">';
+      '<h2>Judul</h2><p><strong>Tebal</strong> <em>miring</em> <u>garis</u></p><ul><li>satu</li></ul><ol><li>dua</li></ol><blockquote>kutip</blockquote><p><a href="https://ppiasiania.id/x">tautan</a></p><img src="https://ppiasiania.id/files/a.webp" alt="foto">';
     const clean = sanitizeRichText(html);
     for (const part of [
       "<h2>Judul</h2>",

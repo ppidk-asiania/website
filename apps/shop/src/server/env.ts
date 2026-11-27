@@ -1,7 +1,7 @@
 import "server-only";
 import {
   baseEnv,
-  firebaseAdminEnv,
+  databaseEnv,
   lazyEnv,
   loadEnv,
   paymentEnv,
@@ -10,7 +10,7 @@ import {
 } from "@website/config/env";
 
 const shopEnvSchema = baseEnv
-  .extend(firebaseAdminEnv.shape)
+  .extend(databaseEnv.shape)
   .extend(sessionEnv.shape)
   .extend(paymentEnv.partial().shape)
   .extend(resendEnv.partial().shape);

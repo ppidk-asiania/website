@@ -22,6 +22,7 @@ import {
   toPrincipal,
   toUserSummary,
   type AccountChange,
+  type AccountCloser,
   type AuditChange,
   type AuditFactory,
   type CustomRole,
@@ -48,7 +49,7 @@ const toInvite = (data: Record<string, unknown>): Invite => ({
   version: data["version"] as number,
 });
 
-export function createSqlUserStore(db: Database): SignInRecorder & UserDirectory {
+export function createSqlUserStore(db: Database): SignInRecorder & UserDirectory & AccountCloser {
   const roles = createSqlRoleStore(db);
   const auditLog = createSqlAuditWriter(db);
   return {
@@ -146,6 +147,51 @@ export function createSqlUserStore(db: Database): SignInRecorder & UserDirectory
           hash: null,
         });
         return { roleIds: roleIdsOf(after) };
+      });
+    },
+
+    closeAccount(uid, now) {
+      const ref = db.collection("users").doc(safeId.parse(uid));
+      return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(ref);
+        if (!snapshot.exists) return "closed" as const;
+        const current = toUserSummary(uid, snapshot.data() as Record<string, unknown>);
+        // Staff and officer roles come from Role Manager or appointments: those are ended there first.
+        if (current.roleAssignments.some((a) => !a.revokedAt && a.roleId !== "visitor")) {
+          return "roles" as const;
+        }
+        if (snapshot.get("closedAt")) return "closed" as const;
+        const log = await auditLog.begin(tx);
+        tx.update(ref, {
+          status: "inactive",
+          email: null,
+          name: null,
+          roleAssignments: [],
+          roleIds: [],
+          closedAt: now,
+          version: current.version + 1,
+        });
+        log.append({
+          id: randomUUID(),
+          occurredAt: now,
+          actor: { type: "member", id: uid },
+          action: "DELETE",
+          module: "users",
+          title: uid,
+          resourceType: "user",
+          resourceId: uid,
+          operationId: randomUUID(),
+          before: accountSnapshot(current),
+          after: null,
+          versionBefore: current.version,
+          versionAfter: current.version + 1,
+          revertible: false,
+          revertOf: null,
+          request: { requestId: randomUUID() },
+          prevHash: null,
+          hash: null,
+        });
+        return "closed" as const;
       });
     },
 

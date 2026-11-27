@@ -34,7 +34,7 @@ const setup = () => {
   return { ...fake, db, writer: createSqlAuditWriter(db) };
 };
 
-describe("Firestore audit writer (append-only, hash chain, same transaction)", () => {
+describe("SQL audit writer (append-only, hash chain, same transaction)", () => {
   it("chains every entry to the previous one: hash = sha256(prevHash + canonical JSON)", async () => {
     const { db, docs, writer } = setup();
     await db.runTransaction(async (tx) => {

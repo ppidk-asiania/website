@@ -19,6 +19,12 @@ export const verification = lazyEnv(() =>
   }),
 );
 
+/** The pickup signs links to admin and hashes e-mails: without these it is switched off. */
+export const certificatePickupEnabled = (): boolean =>
+  Boolean(
+    getWebEnv().SUBSCRIBER_HASH_SECRET && getWebEnv().LINK_SIGNING_SECRET && getAppUrls().ADMIN_URL,
+  );
+
 export const certificatePickup = lazyEnv(() => {
   const env = getWebEnv();
   const admin = getAppUrls().ADMIN_URL;

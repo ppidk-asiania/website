@@ -85,7 +85,7 @@ describe("gateway security", () => {
         now: () => new Date("2026-10-07T10:00:00Z"),
       },
       events: {
-        listPublished: () => Promise.reject(new Error("firestore password=hunter2 at /srv")),
+        listPublished: () => Promise.reject(new Error("mysql password=hunter2 at /srv")),
         findById: () => Promise.resolve(null),
       },
     });

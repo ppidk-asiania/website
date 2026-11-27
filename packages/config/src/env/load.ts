@@ -1,9 +1,5 @@
 import { type z } from "zod";
-import {
-  assertEnvironmentIsolation,
-  FIREBASE_EMULATOR_VARIABLES,
-  type AppEnvironment,
-} from "../environments";
+import type { AppEnvironment } from "../environments";
 
 export class EnvValidationError extends Error {
   override readonly name = "EnvValidationError";
@@ -27,15 +23,6 @@ export function loadEnv<
     throw new EnvValidationError(
       result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`),
     );
-  }
-
-  const env = result.data as Record<string, unknown>;
-  const appEnv = env["APP_ENV"] as AppEnvironment;
-  const projectId = (env["FIREBASE_PROJECT_ID"] ?? env["NEXT_PUBLIC_FIREBASE_PROJECT_ID"]) as
-    string | undefined;
-  const emulatorVariableSet = FIREBASE_EMULATOR_VARIABLES.some((name) => name in cleaned);
-  if (projectId !== undefined || emulatorVariableSet) {
-    assertEnvironmentIsolation({ appEnv, firebaseProjectId: projectId, env: cleaned });
   }
 
   return result.data;

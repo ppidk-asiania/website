@@ -144,7 +144,7 @@ export function createAccountActions(deps: AccountDeps) {
       ]);
       if (!hasTwoSignInMethods({ ...methods, passkeys: passkeys.length })) {
         throw new RuleViolationError(
-          "This account needs a second sign-in method first: two-step verification, or a passkey plus Google or a password (web → Your account).",
+          "This account needs a second sign-in method first: a passkey plus Google or a password (web → Your account).",
         );
       }
     }

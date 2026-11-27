@@ -271,7 +271,7 @@ const tables: PpidkTables = {
 };
 
 const plan = mapPpidk(tables, {
-  uidOf: (id) => (id === "1" ? "firebase-ana" : `ppidk-${id}`),
+  uidOf: (id) => (id === "1" ? "account-ana" : `ppidk-${id}`),
   roleMap: SUGGESTED_APPOINTMENT_ROLES,
   now,
 });
@@ -341,14 +341,14 @@ describe("PPIDK people import (block J)", () => {
     expect(doc("universities/ppidk-university-12")).toMatchObject({
       status: "rejected",
       mergedInto: "057zh3y96_JP",
-      submittedBy: "firebase-ana",
+      submittedBy: "account-ana",
       reviewedBy: "ppidk-2",
       reviewedAt: new Date("2026-08-20T10:00:00Z"),
     });
   });
 
   it("maps profiles (incomplete until the member agrees again) and gives appointment roles", () => {
-    expect(doc("memberProfiles/firebase-ana")).toMatchObject({
+    expect(doc("memberProfiles/account-ana")).toMatchObject({
       email: "ana@example.org",
       gender: "female",
       ppiCountry: "JP",
@@ -359,14 +359,14 @@ describe("PPIDK people import (block J)", () => {
       addressIndonesia: { city: "Kota Bandung", province: "Jawa Barat" },
       chapterId: "ppidk-chapter-7",
     });
-    expect(doc("memberProfiles/firebase-ana")).not.toHaveProperty("verificationStatus");
-    expect(doc("memberProfiles/firebase-ana")?.["privacyPolicyVersion"]).not.toBe("2026-10-18");
+    expect(doc("memberProfiles/account-ana")).not.toHaveProperty("verificationStatus");
+    expect(doc("memberProfiles/account-ana")?.["privacyPolicyVersion"]).not.toBe("2026-10-18");
     expect(doc("appointments/ppidk-appointment-501")).toMatchObject({
       seat: "secretary",
       status: "ended",
       startsOn: "2026-10-01",
     });
-    const ana = doc("users/firebase-ana");
+    const ana = doc("users/account-ana");
     expect(ana).toMatchObject({
       status: "active",
       chapterId: "ppidk-chapter-7",
@@ -409,7 +409,7 @@ describe("PPIDK people import (block J)", () => {
 
   it("is deterministic: the same input gives the same documents (safe to run again)", () => {
     const again = mapPpidk(tables, {
-      uidOf: (id) => (id === "1" ? "firebase-ana" : `ppidk-${id}`),
+      uidOf: (id) => (id === "1" ? "account-ana" : `ppidk-${id}`),
       roleMap: SUGGESTED_APPOINTMENT_ROLES,
       now,
     });

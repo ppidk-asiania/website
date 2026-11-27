@@ -78,8 +78,8 @@ the names with their scope (Everywhere, Chapter x, Unit y); names are only sent 
   The person adds a passkey on web → Your account.
 - Every change needs a sign-in in the last 15 minutes ("Sign in again" link otherwise), is
   written with its audit entry in one transaction (`module` `users` / `roles`, not revertible),
-  then ends the account's sessions (`revokeRefreshTokens`) and logs `staff.role_changed`.
-  Deactivation also disables the Firebase Auth account.
+  then ends the account's sessions (`revokeSessions`) and logs `staff.role_changed`.
+  Deactivation also disables the sign-in account (`authAccounts/{uid}.disabled`).
 - Chapter isolation (A2): with `users.read` for some chapters only, the list shows only accounts
   whose `chapterId` is one of them and no invites; the person popup opens only for such an
   account. Giving or removing roles, invites and (de)activating need `users.edit` globally.

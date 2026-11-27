@@ -3,7 +3,6 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { forbidden, redirect } from "next/navigation";
 import { SESSION_COOKIE, signInUrl, type VerifiedIdentity } from "@website/auth";
-import { createFirebaseIdentityProvider } from "@website/auth/firebase-admin";
 import { isProfileComplete } from "@website/domain/members";
 import {
   canAccessAdmin,
@@ -12,7 +11,8 @@ import {
   type Principal,
 } from "@website/permissions";
 import { resolveRequestId } from "@website/observability";
-import { getAdminEnv, getAppUrls } from "./env";
+import { getAppUrls } from "./env";
+import { identity as identityProvider } from "./session";
 import { adminStores } from "./stores";
 import type { AuditContext } from "./guarded-action";
 import { userDirectory } from "./user-directory";
@@ -26,14 +26,7 @@ export interface AdminViewer {
 
 const getIdentity = cache(async (): Promise<VerifiedIdentity | null> => {
   const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!cookie) return null;
-  const env = getAdminEnv();
-  return createFirebaseIdentityProvider({
-    appEnv: env.APP_ENV,
-    projectId: env.FIREBASE_PROJECT_ID,
-    clientEmail: env.FIREBASE_CLIENT_EMAIL,
-    privateKey: env.FIREBASE_PRIVATE_KEY,
-  }).verifySessionCookie(cookie);
+  return cookie ? identityProvider().verifySessionCookie(cookie) : null;
 });
 
 export const getAdminViewer = cache(async (): Promise<AdminViewer | null> => {

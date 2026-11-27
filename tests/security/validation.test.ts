@@ -31,7 +31,7 @@ describe("input sanitization", () => {
     expect(safeText(50).parse("a\nb")).toBe("a b");
   });
 
-  it("safeId blocks Firestore path and reserved-id injection", () => {
+  it("safeId blocks path and reserved-id injection", () => {
     expect(safeId.parse("event_2026-01")).toBe("event_2026-01");
     for (const bad of [
       "../users",

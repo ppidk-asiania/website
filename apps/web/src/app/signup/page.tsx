@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Create account", robots: { index: fa
 
 export default function SignUpPage() {
   return (
-    <AuthCard title="Create account" subtitle="Get started with your account">
+    <AuthCard>
       <SignUpForm />
     </AuthCard>
   );

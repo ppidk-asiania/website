@@ -365,7 +365,7 @@ const files: Record<string, { size: number; sha256: string }> = {
   "kas/801.pdf": { size: 512, sha256: "d".repeat(64) },
 };
 const plan = mapPpidkPrograms(tables, {
-  uidOf: (id) => (id === "1" ? "firebase-ana" : `ppidk-${id}`),
+  uidOf: (id) => (id === "1" ? "account-ana" : `ppidk-${id}`),
   file: (path) => files[path] ?? null,
   now,
 });
@@ -412,7 +412,7 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
       status: "finished",
       orgUnitPath: ["ppidk-unit-40", "ppidk-unit-41"],
       keyResultIds: ["ppidk-keyresult-20"],
-      pics: ["firebase-ana", "ppidk-2"],
+      pics: ["account-ana", "ppidk-2"],
       budgets: [{ amountMinor: 50000, currency: "JPY" }],
       progressPercent: 75,
       goal: "Tujuan",
@@ -476,12 +476,12 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
       programId: "ppidk-program-30",
       status: "approved",
       dueOn: "2026-09-20",
-      pics: ["firebase-ana", "ppidk-2"],
+      pics: ["account-ana", "ppidk-2"],
       realized: [{ amountMinor: 45000, currency: "JPY" }],
       participantCount: 30,
       realization:
         "Terlaksana\n\nTestimonials:\nBagus\n\nDocumentation:\n- Foto: https://example.org/foto",
-      submittedBy: "firebase-ana",
+      submittedBy: "account-ana",
       secretariat: { uid: "ppidk-2", at: new Date("2026-09-11T00:00:00Z") },
       treasurer: { uid: "ppidk-3", at: new Date("2026-09-12T00:00:00Z") },
       approval: { uid: "ppidk-4", at: new Date("2026-09-13T00:00:00Z") },
@@ -548,7 +548,7 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
       account: "BNI - 123 - Ana",
       fundSource: "Kas",
       programId: "ppidk-program-30",
-      createdBy: "firebase-ana",
+      createdBy: "account-ana",
       documents: [
         {
           path: "finance/ppidk-period-3/ppidk-finance-700_doc_ppidk000.pdf",
@@ -623,7 +623,7 @@ describe("PPIDK programmes and finance import (step 6.7)", () => {
       kind: "in",
       category: "opening_balance",
       orgUnitId: null,
-      createdBy: "firebase-ana",
+      createdBy: "account-ana",
       proof: { path: "finance/ppidk-period-3/ppidk-cash-801_proof_ppidkpdf.pdf", size: 512 },
     });
     expect(entries.find((e) => e.id === "ppidk-cash-802")).toMatchObject({

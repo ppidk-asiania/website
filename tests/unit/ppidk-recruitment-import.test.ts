@@ -344,7 +344,7 @@ const sizes: Record<string, number> = {
   "pakta/ana.pdf": 1024,
 };
 const plan = mapPpidkRecruitment(tables, {
-  uidOf: (id) => (id === "1" ? "firebase-ana" : `ppidk-${id}`),
+  uidOf: (id) => (id === "1" ? "account-ana" : `ppidk-${id}`),
   fileSize: (path) => sizes[path] ?? null,
   now,
 });
@@ -445,15 +445,15 @@ describe("PPIDK recruitment import (step 5.8)", () => {
   });
 
   it("maps applications: latest per person, ordered choices, files, offer, rounds, booking", () => {
-    const ana = doc("applications/ppidk-recruitment-20_firebase-ana");
+    const ana = doc("applications/ppidk-recruitment-20_account-ana");
     expect(ana).toMatchObject({
-      userId: "firebase-ana",
+      userId: "account-ana",
       status: "pakta_review",
       choices: ["ppidk-unit-50", "ppidk-unit-51"],
       answers: {
         q_motivasi: "Ingin berkontribusi",
         q_cvterbaru: {
-          path: "forms/ppidk-form-10/firebase-ana_ppidk_301_1.pdf",
+          path: "forms/ppidk-form-10/account-ana_ppidk_301_1.pdf",
           name: "cv_terbaru.pdf",
           contentType: "application/pdf",
           size: 2048,
@@ -463,7 +463,7 @@ describe("PPIDK recruitment import (step 5.8)", () => {
         q_tautan: "https://ana.example",
       },
       portfolio: {
-        path: "recruitment/ppidk-recruitment-20/firebase-ana/portfolio_ppidk_401.pdf",
+        path: "recruitment/ppidk-recruitment-20/account-ana/portfolio_ppidk_401.pdf",
         size: 4096,
       },
       revisionRound: 2,
@@ -471,17 +471,17 @@ describe("PPIDK recruitment import (step 5.8)", () => {
       interviews: {},
       interviewChanged: [],
       pacts: [
-        { path: "recruitment/ppidk-recruitment-20/firebase-ana/pact_ppidk_301.pdf", size: 1024 },
+        { path: "recruitment/ppidk-recruitment-20/account-ana/pact_ppidk_301.pdf", size: 1024 },
       ],
       pactNote: "Tanda tangan kurang",
     });
-    expect(doc("applicationRevisions/ppidk-recruitment-20_firebase-ana_1")).toMatchObject({
+    expect(doc("applicationRevisions/ppidk-recruitment-20_account-ana_1")).toMatchObject({
       round: 1,
       request: "Perbaiki\n- motivasi: Lebih rinci",
       requestedBy: "ppidk-2",
       resubmittedAt: new Date("2026-08-06T00:00:00Z"),
     });
-    expect(doc("applicationRevisions/ppidk-recruitment-20_firebase-ana_2")).toMatchObject({
+    expect(doc("applicationRevisions/ppidk-recruitment-20_account-ana_2")).toMatchObject({
       request: "(no note)",
       requestedBy: "ppidk",
       resubmittedAt: null,
@@ -527,7 +527,7 @@ describe("PPIDK recruitment import (step 5.8)", () => {
     });
     expect(doc("interviewSlots/ppidk-slot-601")).toMatchObject({ booked: 0, deletedAt: now });
     expect(doc("interviewSlots/ppidk-slot-602")).toBeUndefined();
-    expect(doc("personalityResults/firebase-ana")).toEqual({
+    expect(doc("personalityResults/account-ana")).toEqual({
       code: "ENFJ",
       identity: "A",
       full: "ENFJ-A",

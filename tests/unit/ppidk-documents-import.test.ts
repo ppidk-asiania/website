@@ -292,7 +292,7 @@ const files: Record<string, { size: number; sha256: string }> = {
   "masuk/300.pdf": { size: 1024, sha256: "d".repeat(64) },
 };
 const plan = mapPpidkDocuments(tables, {
-  uidOf: (id) => (id === "1" ? "firebase-ana" : `ppidk-${id}`),
+  uidOf: (id) => (id === "1" ? "account-ana" : `ppidk-${id}`),
   file: (path) => files[path] ?? null,
   now,
 });
@@ -424,7 +424,7 @@ describe("PPIDK documents import (step 4.10)", () => {
         sha256: "b".repeat(64),
         size: 4096,
         numberChecked: true,
-        uploadedBy: "firebase-ana",
+        uploadedBy: "account-ana",
         uploadedAt: new Date("2026-08-05T00:00:00Z"),
       },
       placement: { qr: null, secretary: { page: 2, xMm: 120, yMm: 240 }, coordinator: null },
@@ -475,7 +475,7 @@ describe("PPIDK documents import (step 4.10)", () => {
       originNumber: "B-12/KBRI",
       summary: "",
       status: "disposed",
-      recordedBy: "firebase-ana",
+      recordedBy: "account-ana",
       scan: {
         path: "letters/incoming/ppidk-period-3/ppidk-incoming-300_ppidkpdf.pdf",
         name: "300.pdf",
@@ -486,7 +486,7 @@ describe("PPIDK documents import (step 4.10)", () => {
         {
           id: "ppidk-disposition-400",
           parentId: null,
-          fromUserId: "firebase-ana",
+          fromUserId: "account-ana",
           toOrgUnitId: "ppidk-unit-41",
           toUserId: null,
           dueDate: "2026-08-10",

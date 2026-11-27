@@ -9,8 +9,13 @@ Our Community (five PPIs, linking to `/map`); address and social icons (new tab)
 Terms of Use, Privacy Policy. All labels come from the dictionaries, so they follow the page
 language. The header has no language switch; on the right it streams a **Log in** chip for
 signed-out visitors, or the signed-in member's account menu (Profile, Account, Log out). The
-sign-in, sign-up and password-reset pages are the exception: one centred card (`AuthCard` in
-`src/components/auth-form.tsx`: title, form, "Or" separator, Google / passkey buttons) with no header or
+sign-in, sign-up and password-reset pages are the exception: one centred column, no box (`AuthCard` in
+`src/components/auth-form.tsx`: PPIDK logo linking home, an optional title (only the password reset
+uses one), the pill buttons — passkey, Google, and "Continue with email", which reveals the email
+form; the method this browser last signed in with gets a gold "Last used" badge, kept in
+`localStorage` by `src/lib/remembered-account.ts` — then Privacy and Terms links) on a dark theme (brand tokens redefined on `.auth-page`); the home page's country photos
+(`COUNTRIES` in `ppi-slider.tsx`) fade one into the next — on phones at the top with the logo and buttons
+at the bottom, on wider screens in the left half with the sign-in box on the right — with no header or
 footer — `globals.css` hides both when the page contains `.auth-page`. Visitors
 read the site in Indonesian unless the `lang` cookie says `en` (kept for a year). Home
 keeps the purpose statement, the newsletter sign-up and the Google data notice (Google's OAuth
@@ -107,7 +112,12 @@ Rules: `packages/domain/docs/documents.md` → Certificates (D5) → Pickup.
 
 **Settings** (`/settings/profile|account|signature`, `src/app/settings/settings-shell.tsx`): one page per tab,
 tabs on the left. The old `/account`, `/account/profile` and `/account/signature` redirect there
-(`next.config.ts`), so links in e-mails already sent keep working.
+(`next.config.ts`), so links in e-mails already sent keep working. Dark page, light cards and
+fields (`globals.css` "Settings"). Profile shows the saved profile read-only with **Edit Profile**
+(`?edit=1`); a new or incomplete profile (or a `?next=` return) opens the form directly. Account:
+Google, primary and backup e-mail, passkeys (add/rename/delete) and Danger Zone — see
+`packages/auth/docs/authentication.md` "Own account settings". Certificates show "not switched on"
+when `SUBSCRIBER_HASH_SECRET`/`LINK_SIGNING_SECRET`/`ADMIN_URL` are missing instead of failing.
 
 **My submissions and my certificates** (`/settings/account`, N3.2): one function `submissionsOf(uid)`
 (`apps/web/src/server/submissions.ts`) lists everything the signed-in account sent, newest first: event

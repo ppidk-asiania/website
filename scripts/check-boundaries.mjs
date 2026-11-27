@@ -55,7 +55,7 @@ const ALLOWED = {
   observability: [],
   ui: [],
   pdf: ["domain"],
-  auth: ["config", "security"],
+  auth: ["security"],
   db: ["apikeys", "audit", "auth", "config", "domain", "permissions", "security"],
 };
 

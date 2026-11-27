@@ -50,7 +50,7 @@ describe("first sign-in record (users/{uid})", () => {
   });
 });
 
-describe("principal from Firestore (admin user directory)", () => {
+describe("principal from the database (admin user directory)", () => {
   it("returns null for an account without a user record", async () => {
     const { users } = setup();
     expect(await users.findPrincipalByUid("unknown")).toBeNull();
@@ -163,7 +163,7 @@ describe("accounts by uid (one batched read)", () => {
 });
 
 describe("roles repository", () => {
-  it("lists built-in roles from code first, then stored custom roles; built-in ids are never read from Firestore", async () => {
+  it("lists built-in roles from code first, then stored custom roles; built-in ids are never read from the database", async () => {
     const { roles, docs } = setup();
     docs.set("roles/editor", {
       name: "Editor",

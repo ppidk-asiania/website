@@ -27,7 +27,7 @@ Business rules and data shapes, free of any framework.
 
 ## Rules
 
-- No React, Next.js, Hono, Firebase, browser or Node APIs (lint + TypeScript enforced). Only `zod` and `@website/security/validation` (sanitization).
+- No React, Next.js, Hono, MySQL, browser or Node APIs (lint + TypeScript enforced). Only `zod` and `@website/security/validation` (sanitization).
 - `shop` imports no other module (only the shared kernel, e.g. Money, DEC-8), so it can be extracted later.
 - Time is injected (`now: Date`), never read implicitly.
 

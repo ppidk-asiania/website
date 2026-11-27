@@ -44,9 +44,22 @@ const role = (permissions: string[]) => ({
   deletedAt: null,
 });
 
+const passkey = (userId: string) => ({
+  id: `pk-${userId}`,
+  userId,
+  publicKey: "k",
+  counter: 0,
+  transports: [],
+  createdAt: new Date(0),
+  lastUsedAt: null,
+  name: "",
+  device: "",
+});
+
 let fake: ReturnType<typeof fakeDb>;
 let revokeSessions: ReturnType<typeof vi.fn<(uid: string) => Promise<void>>>;
-let methods: Record<string, { providers: string[]; mfaFactors: number }>;
+let methods: Record<string, { providers: string[] }>;
+let passkeys: ReturnType<typeof createMemoryPasskeyStore>;
 let logLines: string[];
 let actions: ReturnType<typeof createAppointmentActions>;
 let appointments: ReturnType<typeof createSqlAppointmentStore>;
@@ -69,7 +82,7 @@ const appointInput = (email: string, orgUnitId: string, seat: string, title = "P
 const assignmentsOf = (uid: string) =>
   fake.docs.get(`users/${uid}`)?.["roleAssignments"] as Array<Record<string, unknown>>;
 
-beforeEach(() => {
+beforeEach(async () => {
   fake = fakeDb();
   const db = fake.db as unknown as Db;
   fake.docs.set("settings/activePeriod", { periodId: "p2026" });
@@ -101,13 +114,15 @@ beforeEach(() => {
     roleIds: ["secretary_general"],
   });
   methods = {
-    ana: { providers: ["google.com"], mfaFactors: 1 },
-    rio: { providers: ["google.com"], mfaFactors: 1 },
-    boss: { providers: ["google.com"], mfaFactors: 1 },
+    ana: { providers: ["google.com"] },
+    rio: { providers: ["google.com"] },
+    boss: { providers: ["google.com"] },
   };
+  passkeys = createMemoryPasskeyStore();
+  for (const uid of ["ana", "rio", "boss"]) await passkeys.add(passkey(uid));
   revokeSessions = vi.fn((_uid: string) => Promise.resolve());
   const authAdmin: AccountAdmin = {
-    signInMethods: (uid) => Promise.resolve(methods[uid] ?? { providers: [], mfaFactors: 0 }),
+    signInMethods: (uid) => Promise.resolve(methods[uid] ?? { providers: [] }),
     setDisabled: () => Promise.resolve(),
     revokeSessions,
   };
@@ -118,7 +133,7 @@ beforeEach(() => {
     accounts: createSqlAccountStore(db),
     units: createSqlOrgUnitStore(db),
     roles: createSqlRoleStore(db),
-    passkeys: createMemoryPasskeyStore(),
+    passkeys,
     authAdmin,
     logger: createLogger({ service: "admin", write: (line) => logLines.push(line) }),
     now: () => now,
@@ -294,10 +309,10 @@ describe("appointments → roles (B7)", () => {
       accounts: createSqlAccountStore(fake.db as unknown as Db),
       memberProfiles: createSqlMemberProfileStore(fake.db as unknown as Db),
       roles: createSqlRoleStore(fake.db as unknown as Db),
-      passkeys: createMemoryPasskeyStore(),
+      passkeys,
       sendInvite: () => Promise.resolve("logged"),
       authAdmin: {
-        signInMethods: () => Promise.resolve({ providers: ["google.com"], mfaFactors: 1 }),
+        signInMethods: () => Promise.resolve({ providers: ["google.com"] }),
         setDisabled: () => Promise.resolve(),
         revokeSessions: () => Promise.resolve(),
       },
@@ -357,7 +372,7 @@ describe("appointments → roles (B7)", () => {
       passkeys: createMemoryPasskeyStore(),
       sendInvite: () => Promise.resolve("logged"),
       authAdmin: {
-        signInMethods: () => Promise.resolve({ providers: [], mfaFactors: 0 }),
+        signInMethods: () => Promise.resolve({ providers: [] }),
         setDisabled: () => Promise.resolve(),
         revokeSessions: () => Promise.resolve(),
       },
@@ -379,7 +394,8 @@ describe("officers: seats inside a unit (step 10.2, DEC-20)", () => {
   beforeEach(async () => {
     await actions.saveRoleMap(...as("boss"))({ map: SUGGESTED_APPOINTMENT_ROLES, version: null });
     for (const uid of ["ana", "rio", "sec", "boss", "zed"]) {
-      methods[uid] = { providers: ["google.com"], mfaFactors: 1 };
+      methods[uid] = { providers: ["google.com"] };
+      if ((await passkeys.listByUser(uid)).length === 0) await passkeys.add(passkey(uid));
     }
     fake.docs.set("users/zed", {
       ...fake.docs.get("users/ana"),

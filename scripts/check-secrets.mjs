@@ -20,7 +20,6 @@ const FORBIDDEN_NAMES = [
   /\.p12$/,
   /\.key$/,
   /service-?account.*\.json$/i,
-  /firebase-adminsdk.*\.json$/i,
   /^credentials\.json$/,
 ];
 
@@ -79,7 +78,6 @@ const mustBeIgnored = [
   "apps/admin/.env.local",
   "apps/gateway/.env.production",
   "service-account.json",
-  "infrastructure/firebase/ppidk-firebase-adminsdk-abc12.json",
   "key.pem",
 ];
 for (const path of mustBeIgnored) {

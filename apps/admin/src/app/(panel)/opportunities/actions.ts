@@ -13,10 +13,10 @@ async function run(name: Name, input: unknown) {
   return result;
 }
 
-export const createOpportunityAction = (input: unknown) => run("create", input);
-export const updateOpportunityAction = (input: unknown) => run("update", input);
-export const setOpportunityStatusAction = (input: unknown) => run("setStatus", input);
-export const deleteOpportunityAction = (input: unknown) => run("remove", input);
+export const createOpportunityAction = async (input: unknown) => run("create", input);
+export const updateOpportunityAction = async (input: unknown) => run("update", input);
+export const setOpportunityStatusAction = async (input: unknown) => run("setStatus", input);
+export const deleteOpportunityAction = async (input: unknown) => run("remove", input);
 
 export async function setMentorshipFormAction(input: unknown) {
   const result = await opportunityActions().setMentorshipForm(getPrincipal, getAuditContext)(input);

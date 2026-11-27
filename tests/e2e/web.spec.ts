@@ -59,7 +59,12 @@ test("sign-in, sign-up and password-reset pages are available", async ({ request
     expect(response.status(), path).toBe(200);
     const html = await response.text();
     expect(html).toContain(text);
-    if (path === "/login") expect(html).toContain("Sign in with a passkey");
+    expect(html).toContain('href="/privacy"');
+    expect(html).toContain('href="/terms"');
+    expect(html).not.toContain("Back to home");
+    if (path !== "/forgot-password")
+      for (const option of ["Continue with passkey", "Continue with Google", "Continue with email"])
+        expect(html, path).toContain(option);
   }
 });
 

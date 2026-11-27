@@ -80,6 +80,15 @@ export {
   type SqlFinanceStore,
 } from "./finance";
 export { createSqlPasskeyStore } from "./passkeys";
+export { createSqlAuthAccountStore } from "./auth-accounts";
+export {
+  createSqlAccountEmailStore,
+  EMAIL_CODE_ATTEMPTS,
+  type AccountEmails,
+  type EmailCodeCheck,
+  type EmailCodeKind,
+  type SqlAccountEmailStore,
+} from "./account-emails";
 export {
   checkFilePath,
   createDbFileStorage,

@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
     "@website/permissions",
     "@website/ui",
   ],
-  serverExternalPackages: ["firebase-admin", "mysql2"],
+  serverExternalPackages: ["mysql2"],
   ...standalone,
   async redirects() {
     return [

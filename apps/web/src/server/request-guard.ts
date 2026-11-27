@@ -29,6 +29,12 @@ const getGuard = lazyEnv(() => {
     privatePrefixes: ["/api/", "/settings"],
     extraLimits: [
       {
+        // password sign-in, sign-up and reset links: slow down guessing and mail bombing
+        name: "sign-in",
+        policy: { perMinute: 10, perDay: 200, throttleDelayMs: 1000 },
+        applies: (request, path) => request.method === "POST" && path === "/api/session",
+      },
+      {
         name: "verify",
         policy: { perMinute: 20, perDay: 10_000, throttleDelayMs: 500 },
         applies: (request, path) =>

@@ -15,7 +15,7 @@ Online shop: products, categories, cart, checkout and orders.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `src/app/`                     | Pages (App Router).                                                                                          |
 | `src/proxy.ts`                 | Runs before every request: origin check, per-IP rate limit, private caching (`src/server/request-guard.ts`). |
-| `src/app/api/session/route.ts` | Sign-in/out: Google OAuth ID token → HttpOnly session cookie (`src/server/session.ts`).                      |
+| `src/app/api/session/route.ts` | Sign-out (sign-in happens on web) — clears the shared session cookie (`src/server/session.ts`).              |
 | `src/server/`                  | Server-only code: env, database, payment provider.                                                           |
 | `.env.example`                 | Variables this app needs.                                                                                    |
 

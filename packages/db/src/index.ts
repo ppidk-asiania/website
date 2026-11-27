@@ -15,6 +15,7 @@ export type {
   RoleReader,
   SignInIdentity,
   SignInRecorder,
+  AccountCloser,
   StoredRole,
   UserDirectory,
   UserStatus,

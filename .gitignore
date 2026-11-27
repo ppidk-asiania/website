@@ -27,16 +27,11 @@ blob-report/
 *.p12
 service-account*.json
 *-service-account*.json
-*firebase-adminsdk*.json
 gcp-credentials*.json
 credentials.json
 
 # deployment
 tmp/
-.firebase/
-firebase-debug.log*
-firestore-debug.log*
-ui-debug.log*
 
 # logs
 *.log

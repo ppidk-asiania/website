@@ -176,8 +176,8 @@ inside the free 24-hour window; anything proactive stays on WAHA).
 - Keywords: `menu` (also halo/hai), `bantuan`, `batal`, `daftar` (sign-up), `oprec`.
 - Sign-up: name → e-mail → chapter (numbered list) → campus (approved universities of the
   chapter's country, matched on the normalised name; the optional Gemini matcher
-  (`GEMINI_API_KEY`, X4) only when nothing matched) → pick → confirm `ya` → the Firebase account
-  is found or created (unverified, no password; `createFirebaseAccountCreator`) and its
+  (`GEMINI_API_KEY`, X4) only when nothing matched) → pick → confirm `ya` → the sign-in account
+  is found or created (unverified, no password; `createAccountCreator`) and its
   `users/{uid}` record made as on a first sign-in; the reply links `/login` (Google or "forgot
   password") to complete the profile on the website.
 - Oprec: numbered open recruitments → the website's apply link (signed-in apply; the

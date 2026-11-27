@@ -427,11 +427,11 @@ describe("Users page rules (accountChangeRefusal)", () => {
 });
 
 describe("staff second sign-in method (hasTwoSignInMethods)", () => {
-  it("needs an MFA factor, or a passkey plus another sign-in method", () => {
-    const none = { providers: ["google.com"], mfaFactors: 0, passkeys: 0 };
+  it("needs a passkey plus Google or a password", () => {
+    const none = { providers: ["google.com"], passkeys: 0 };
     expect(hasTwoSignInMethods(none)).toBe(false);
-    expect(hasTwoSignInMethods({ ...none, mfaFactors: 1 })).toBe(true);
+    expect(hasTwoSignInMethods({ providers: ["google.com", "password"], passkeys: 0 })).toBe(false);
     expect(hasTwoSignInMethods({ ...none, passkeys: 1 })).toBe(true);
-    expect(hasTwoSignInMethods({ providers: [], mfaFactors: 0, passkeys: 2 })).toBe(false);
+    expect(hasTwoSignInMethods({ providers: [], passkeys: 2 })).toBe(false);
   });
 });

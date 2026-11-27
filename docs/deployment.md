@@ -3,8 +3,8 @@
 ## Boundaries
 
 All four apps run on **DomaiNesia cPanel** (Setup Node.js App = CloudLinux + Passenger), one
-Node.js app per deployable, each with its own (sub)domain, environment variables, Firebase service
-account and restart. There are no preview deployments.
+Node.js app per deployable, each with its own (sub)domain, environment variables, MySQL user and
+restart. There are no preview deployments.
 
 | App     | Domain             | Built where                                | Runs             |
 | ------- | ------------------ | ------------------------------------------ | ---------------- |
@@ -30,11 +30,11 @@ What Passenger means for the code:
 
 There are exactly three branches. **Do not create other branches** (no feature/fix branches).
 
-| Branch    | Purpose                               | Deploys to                                | Firebase project     |
-| --------- | ------------------------------------- | ----------------------------------------- | -------------------- |
-| `dev`     | All day-to-day work is committed here | nothing (check locally: `pnpm dev`, e2e)  | `ppidk-website-prod` |
-| `staging` | Release candidate, tested by the team | optional `staging.*` apps (same workflow) | `ppidk-website-prod` |
-| `prod`    | What is live (default branch)         | cPanel production apps                    | `ppidk-website-prod` |
+| Branch    | Purpose                               | Deploys to                                |
+| --------- | ------------------------------------- | ----------------------------------------- |
+| `dev`     | All day-to-day work is committed here | nothing (check locally: `pnpm dev`, e2e)  |
+| `staging` | Release candidate, tested by the team | optional `staging.*` apps (same workflow) |
+| `prod`    | What is live (default branch)         | cPanel production apps                    |
 
 ```text
 commit + push to dev ─PR─▶ staging ─PR─▶ prod ─▶ GitHub Actions (web, admin, shop) + cPanel Git (gateway)
@@ -48,7 +48,7 @@ CI runs on every push and PR: format, lint+boundaries, typecheck, test, build, s
 - GitHub protection: `staging` and `prod` require a PR + the **CI** check (plus ≥ 1 approval on
   `prod`); all three block force pushes and deletion.
 - Dependency updates are done by hand (no Dependabot version-update branches).
-- Every environment uses the live Firebase project: test with drafts and your own account, and keep
+- Every environment uses the live database and its accounts: test with drafts and your own account, and keep
   `MESSAGING_MODE=log` outside production.
 
 ## One-time setup
@@ -72,8 +72,7 @@ GitHub's servers. Check the Node path with `ls /opt/alt` in cPanel Terminal and 
 | `CPANEL_SSH_PORT`    | Variable | only if the host does not use port 22                |
 | `CPANEL_KNOWN_HOSTS` | Variable | output of `ssh-keyscan -p <port> <server host name>` |
 
-Also add these five as **Variables** (public values, not secret): `NEXT_PUBLIC_FIREBASE_API_KEY`,
-`NEXT_PUBLIC_FIREBASE_APP_ID`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID` and
+Also add these two as **Variables** (public values, not secret): `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`. The browser bundles are built with them.
 
 5. Deploy once (see "Every release") so the app folders exist.
@@ -89,7 +88,7 @@ Also add these five as **Variables** (public values, not secret): `NEXT_PUBLIC_F
 
 7. Add each app's variables from its `.env.example` in the app's screen (see
    [environment.md](environment.md)): `APP_ENV=production`, real `https://` URLs, the same
-   `SESSION_COOKIE_DOMAIN` for web, admin and shop. Never put them in the repository.
+   `SESSION_COOKIE_DOMAIN` and `SESSION_SECRET` for web, admin and shop. Never put them in the repository.
 
 8. **SSL/TLS Status** → run AutoSSL for the main domain and the `admin.`, `shop.` and `api.`
    subdomains (webhooks and cron calls need a valid certificate on `admin.`).
@@ -103,10 +102,11 @@ Also add these five as **Variables** (public values, not secret): `NEXT_PUBLIC_F
     is no longer read by web, admin or the ops scripts.
 11. **Cron Jobs**: add the `expire` job (once a day) next to the others (`apps/admin/docs/cron.md`),
     and the nightly backup lines from [disaster-recovery.md](disaster-recovery.md).
-12. **Moving existing data off Firestore** (once, only if Firestore still holds data): in cPanel
-    Terminal in `~/repositories/2026`, run `infrastructure/scripts/copy-firestore-to-mysql.mjs`
-    (header of the script: dry run, read `copy-report.json`, then `--files --apply`) while nobody
-    edits, then restart web and admin. Spot-check news, a member profile and an uploaded image.
+12. **Sign in with Google**: Google Cloud Console → APIs & Services → OAuth consent screen
+    (External, app name, support e-mail, the main domain as authorized domain), then Credentials →
+    Create OAuth client ID → Web application → Authorized JavaScript origins: the `WEB_URL` of
+    every environment. The client id goes into `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web app screen and
+    GitHub Variable).
 
 ## Every release
 
@@ -206,9 +206,9 @@ percentage rollouts are needed.
 - Runtime values live in each app's **Setup Node.js App** screen; `NEXT_PUBLIC_*` values (public,
   baked into browser bundles) are GitHub Actions **Variables**. Everything secret is also kept in
   the password manager.
-- Each app uses its own MySQL user (`DATABASE_URL`) and its own Firebase service account
-  (`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, Authentication only) with the narrowest IAM role
-  it needs. Rotate passwords and keys on schedule and when anyone leaves.
+- Each app uses its own MySQL user (`DATABASE_URL`). `SESSION_SECRET` is shared by web, admin and
+  shop. Rotate passwords and keys on schedule and when anyone leaves (rotating `SESSION_SECRET`
+  signs everybody out).
 - Every new variable: schema fragment (`packages/config/src/env/schemas.ts`) + `.env.example`
   placeholder + a row in [environment.md](environment.md).
 
@@ -221,15 +221,12 @@ file (they live in the cPanel app screens and the password manager).
 - [ ] On the host: `ldd --version`, `ls /opt/alt`; after the first deploy that ships image uploads,
       `node -e "require('sharp')"` in the admin app root (if it fails, install the WebAssembly build of sharp:
       `packages/db/docs/files.md` → Configuration).
-- [ ] Firebase Authentication: **multi-factor authentication** enabled (Identity Platform upgrade) —
-      staff roles require a second sign-in method.
+- [ ] Google OAuth client for Sign in with Google (One-time setup step 12).
+- [ ] `SESSION_SECRET` generated (≥ 32 characters), the same value in web, admin and shop.
 - [ ] MySQL database + one user per app, `FILE_STORAGE_DIR` folder, cron `expire` (One-time setup
       steps 9–11).
 - [ ] Nightly `mysqldump` + files backup and a weekly off-server copy
       ([disaster-recovery.md](disaster-recovery.md)).
-- [ ] Existing Firestore data and Storage files copied once (One-time setup step 12).
-- [ ] One Firebase service account per app (web, admin, shop) for Authentication only; keys only in
-      that app's Setup Node.js App screen and the password manager.
 - [ ] Generate `CRON_SECRET`, `FIELD_ENCRYPTION_KEY` and `SIGNED_LINK_SECRET` and store them in the
       password manager; they are added to the app screens when the step that uses them is built.
 - [ ] Decide the main domain name and whether to run a `staging.*` set of apps (DEC-17); then

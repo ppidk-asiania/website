@@ -116,11 +116,11 @@ fixed, note, by, at }`. Only `updateProof` / `proofsOf` (`packages/db/src/sql/me
 
 - Mapping: `packages/db/src/ppidk/people.ts` (pure, tested in `tests/unit/ppidk-import.test.ts`);
   script: `infrastructure/scripts/import-ppidk-people.mjs` (standard library only for the TSV;
-  Firebase Admin; dry run unless `--apply`; writes `import-report.json` with counts and every
+  dry run unless `--apply`; writes `import-report.json` with counts and every
   skipped row). Ids come from PPIDK (`ppidk-<table>-<id>`; ROR campuses keep `{rorKey}_{country}`),
   so running it again writes the same documents.
-- Accounts: matched by e-mail to an existing Firebase account (its roles are kept and the
-  imported ones added), otherwise created as `ppidk-<id>` without a password — people sign in
+- Accounts: matched by e-mail to an existing sign-in account (`authAccounts`; its roles are kept
+  and the imported ones added), otherwise created as `ppidk-<id>` without a password — people sign in
   with Google or reset the password, and register passkeys again.
 - Profiles are imported as answers but count as incomplete (the consent is not the current
   policy, and PPIDK did not ask e.g. the emergency contact): each member completes and agrees on

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { parseTsv } from "../../packages/db/src/ppidk/people.ts";
 import { mapPpidkPrograms, PPIDK_PROGRAM_TABLES } from "../../packages/db/src/ppidk/programs.ts";
+import { createSqlAuthAccountStore } from "../../packages/db/src/sql/auth-accounts.ts";
 import { getDatabase } from "../../packages/db/src/sql/store.ts";
 import { createDbFileStorage } from "../../packages/db/src/sql/storage.ts";
 
@@ -22,32 +22,15 @@ if (!values.dir) {
   );
   process.exit(2);
 }
-const required = [
-  "DATABASE_URL",
-  "FIREBASE_PROJECT_ID",
-  "FIREBASE_CLIENT_EMAIL",
-  "FIREBASE_PRIVATE_KEY",
-];
+const required = ["DATABASE_URL"];
 const missing = required.filter((name) => !process.env[name]);
 if (missing.length > 0) {
   console.error(`Missing environment variables: ${missing.join(", ")}`);
   process.exit(2);
 }
 
-const require = createRequire(new URL("../../packages/auth/package.json", import.meta.url));
-const { cert, initializeApp } = require("firebase-admin/app");
-const { getAuth } = require("firebase-admin/auth");
-
-const app = initializeApp({
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  credential: cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  }),
-});
-const auth = getAuth(app);
 const db = getDatabase({ url: process.env.DATABASE_URL });
+const accounts = createSqlAuthAccountStore(db);
 
 const read = (name) => parseTsv(readFileSync(join(values.dir, `${name}.tsv`), "utf8"));
 const tables = Object.fromEntries(PPIDK_PROGRAM_TABLES.map((name) => [name, read(name)]));
@@ -61,9 +44,9 @@ if (!periods.docs.some((doc) => doc.id.startsWith("ppidk-"))) {
 
 const existing = new Map();
 const emails = users.map((u) => u.email?.trim().toLowerCase()).filter(Boolean);
-for (let i = 0; i < emails.length; i += 100) {
-  const found = await auth.getUsers(emails.slice(i, i + 100).map((email) => ({ email })));
-  for (const user of found.users) existing.set(user.email.toLowerCase(), user.uid);
+for (const email of new Set(emails)) {
+  const account = await accounts.findByEmail(email);
+  if (account) existing.set(email, account.uid);
 }
 const emailOf = new Map(users.map((u) => [u.id, u.email?.trim().toLowerCase()]));
 const uidOf = (ppidkId) => existing.get(emailOf.get(ppidkId)) ?? `ppidk-${ppidkId}`;

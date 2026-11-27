@@ -1,18 +1,22 @@
 import "server-only";
-import { createSessionRoutes } from "@website/auth";
-import { createFirebaseIdentityProvider } from "@website/auth/firebase-admin";
+import { createIdentityProvider, createSessionRoutes } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
+import { createSqlAuthAccountStore } from "@website/db/sql";
 import { getAdminEnv } from "./env";
+import { adminDb } from "./stores";
 
+export const identity = lazyEnv(() =>
+  createIdentityProvider({
+    secret: getAdminEnv().SESSION_SECRET,
+    accounts: createSqlAuthAccountStore(adminDb()),
+  }),
+);
+
+/** Sign-out only: people sign in on the web app (`signInUrl`). */
 export const sessionRoutes = lazyEnv(() => {
   const env = getAdminEnv();
   return createSessionRoutes({
-    identity: createFirebaseIdentityProvider({
-      appEnv: env.APP_ENV,
-      projectId: env.FIREBASE_PROJECT_ID,
-      clientEmail: env.FIREBASE_CLIENT_EMAIL,
-      privateKey: env.FIREBASE_PRIVATE_KEY,
-    }),
+    identity: identity(),
     maxAgeHours: env.SESSION_MAX_AGE_HOURS,
     cookieDomain: env.SESSION_COOKIE_DOMAIN,
   });

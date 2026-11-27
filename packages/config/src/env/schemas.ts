@@ -9,12 +9,6 @@ export const baseEnv = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 });
 
-export const firebaseAdminEnv = z.object({
-  FIREBASE_PROJECT_ID: nonEmpty,
-  FIREBASE_CLIENT_EMAIL: z.email().optional(),
-  FIREBASE_PRIVATE_KEY: nonEmpty.optional(),
-});
-
 export const databaseEnv = z.object({
   DATABASE_URL: nonEmpty.regex(/^mysql:\/\//, "mysql://user:password@localhost:3306/database"),
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(20).default(5),
@@ -28,14 +22,17 @@ export const filesEnv = z.object({
     .optional(),
 });
 
-export const firebaseClientEnv = z.object({
-  NEXT_PUBLIC_FIREBASE_API_KEY: nonEmpty,
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: nonEmpty,
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: nonEmpty,
-  NEXT_PUBLIC_FIREBASE_APP_ID: nonEmpty,
+/** Google Identity Services: the OAuth client id is public (the browser needs it too). */
+export const googleSignInEnv = z.object({
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: nonEmpty.regex(
+    /\.apps\.googleusercontent\.com$/,
+    "an OAuth client id ending in .apps.googleusercontent.com",
+  ),
 });
 
 export const sessionEnv = z.object({
+  /** Signs session cookies and sign-in links; the same value on web, admin and shop. */
+  SESSION_SECRET: nonEmpty.min(32),
   SESSION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(12).default(8),
   SESSION_COOKIE_DOMAIN: z
     .string()

@@ -33,6 +33,11 @@ export interface SignInRecorder {
   ): Promise<{ roleIds: string[] }>;
 }
 
+/** Closing one's own account: refused while the account holds any role other than visitor. */
+export interface AccountCloser {
+  closeAccount(uid: string, now: Date): Promise<"closed" | "roles">;
+}
+
 export interface Invite {
   readonly email: string;
   readonly roleIds: readonly string[];

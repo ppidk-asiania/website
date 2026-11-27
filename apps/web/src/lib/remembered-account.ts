@@ -37,3 +37,25 @@ export function rememberAccount(account: RememberedAccount | null): void {
     // Private mode or blocked storage: the header just waits for the server.
   }
 }
+
+// How this browser last signed in, so the sign-in page can mark that button "Last used".
+const METHOD_KEY = "sign-in-method";
+const METHODS = ["passkey", "google", "email"] as const;
+export type SignInMethod = (typeof METHODS)[number];
+
+export function readSignInMethod(): SignInMethod | null {
+  try {
+    const value = localStorage.getItem(METHOD_KEY);
+    return METHODS.find((method) => method === value) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberSignInMethod(method: SignInMethod): void {
+  try {
+    localStorage.setItem(METHOD_KEY, method);
+  } catch {
+    // Private mode or blocked storage: no badge next time.
+  }
+}

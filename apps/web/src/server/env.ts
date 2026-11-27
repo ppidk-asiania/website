@@ -5,7 +5,7 @@ import {
   fieldEncryptionEnv,
   databaseEnv,
   filesEnv,
-  firebaseAdminEnv,
+  googleSignInEnv,
   lazyEnv,
   loadEnv,
   messagingEnv,
@@ -17,7 +17,7 @@ import {
 } from "@website/config/env";
 
 const webEnvSchema = baseEnv
-  .extend(firebaseAdminEnv.shape)
+  .extend(googleSignInEnv.shape)
   .extend(databaseEnv.shape)
   .extend(filesEnv.shape)
   .extend(sessionEnv.shape)
