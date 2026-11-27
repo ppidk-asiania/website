@@ -1,15 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   deleteUnitDocumentAction,
   updateUnitDocumentAction,
 } from "@/app/(panel)/documents/actions";
 import { actionMessage } from "@/components/action-message";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  MenuItem,
+  RowMenu,
+  SearchBox,
+  SortMenu,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
@@ -29,6 +38,13 @@ export interface UnitDocumentRow {
 }
 
 type Folder = { id: string | null; name: string };
+
+type SortKey = "title" | "folder" | "added";
+const folderText = (r: UnitDocumentRow) => (r.folder ? `${r.unit} / ${r.folder}` : r.unit);
+const sortValue = (r: UnitDocumentRow, key: SortKey): string =>
+  key === "title" ? r.title.toLowerCase() : key === "folder" ? folderText(r) : r.uploadedAt;
+const filterText = (r: UnitDocumentRow, key: SortKey): string =>
+  key === "title" ? r.title : key === "folder" ? folderText(r) : r.uploadedBy;
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
@@ -53,6 +69,19 @@ export function UnitDocumentsPage({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [searchKey, setSearchKey] = useState(0);
+  const [deleting, setDeleting] = useState<UnitDocumentRow | null>(null);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(
+      (r) =>
+        (unit === "" || (r.orgUnitId ?? "period") === unit) &&
+        (!q || r.title.toLowerCase().includes(q) || r.fileName.toLowerCase().includes(q)),
+    );
+  }, [rows, unit, query]);
+  const table = useListTable(shown, sortValue, undefined, filterText);
 
   const open = (next: "add" | UnitDocumentRow) => {
     setMessage(null);
@@ -101,14 +130,67 @@ export function UnitDocumentsPage({
     toast.show("Saved");
   };
 
-  const remove = async (row: UnitDocumentRow) => {
-    const result = await deleteUnitDocumentAction({ id: row.id, version: row.version });
+  const remove = async () => {
+    if (!deleting) return;
+    const result = await deleteUnitDocumentAction({ id: deleting.id, version: deleting.version });
+    setDeleting(null);
     if (!result.ok) return toast.show(actionMessage(result));
     router.refresh();
     toast.show("Deleted; the file is kept for 30 days");
   };
 
-  const shown = rows.filter((r) => unit === "" || (r.orgUnitId ?? "period") === unit);
+  const columns: Column<UnitDocumentRow>[] = [
+    {
+      key: "title",
+      header: table.header("title", "Document"),
+      render: (row) => (
+        <>
+          <a className="admin-table__title" href={`/api/unit-documents/${row.id}`}>
+            {row.title}
+          </a>
+          <span className="admin-table__sub">
+            {row.fileName} · {megabytes(row.size)}
+          </span>
+        </>
+      ),
+    },
+    { key: "folder", header: table.header("folder", "Folder"), render: folderText },
+    {
+      key: "added",
+      header: table.header("added", "Added"),
+      render: (row) => `${row.uploadedBy} · ${row.uploadedAt}`,
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      render: (row) =>
+        row.canWrite ? (
+          <div className="admin-table__actions">
+            <Button
+              variant="ghost"
+              size="icon"
+              icon="edit"
+              aria-label="Rename"
+              title="Rename"
+              onClick={() => open(row)}
+            />
+            <RowMenu>
+              <MenuItem icon="trash" danger onClick={() => setDeleting(row)}>
+                Delete<span className="admin-long"> File</span>
+              </MenuItem>
+            </RowMenu>
+          </div>
+        ) : null,
+    },
+  ];
+
+  const clearFilters = () => {
+    setQuery("");
+    setSearchKey((k) => k + 1);
+    table.clearFilters();
+    table.setPage(1);
+  };
   const units = [...new Map(rows.map((r) => [r.orgUnitId ?? "period", r.unit])).entries()];
 
   return (
@@ -150,72 +232,54 @@ export function UnitDocumentsPage({
             ))}
           </Select>
           {folders.length > 0 ? (
-            <Button variant="primary" icon="upload" onClick={() => open("add")}>
-              Add file
-            </Button>
+            <div className="admin-fab">
+              <Button variant="primary" size="sm" icon="upload" onClick={() => open("add")}>
+                Add File
+              </Button>
+            </div>
           ) : null}
+          <SortMenu columns={columns} />
+          <SearchBox
+            key={searchKey}
+            placeholder="Search by title..."
+            label="Search documents"
+            onSearch={(value) => {
+              setQuery(value);
+              table.setPage(1);
+            }}
+          />
         </div>
       </div>
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable
-            rowKey={(row) => row.id}
-            rows={shown}
-            emptyText="No documents yet"
-            columns={[
-              {
-                key: "title",
-                header: "Document",
-                render: (row) => (
-                  <>
-                    <a className="admin-table__title" href={`/api/unit-documents/${row.id}`}>
-                      {row.title}
-                    </a>
-                    <span className="admin-table__sub">
-                      {row.fileName} · {megabytes(row.size)}
-                    </span>
-                  </>
-                ),
-              },
-              {
-                key: "unit",
-                header: "Folder",
-                render: (row) => (row.folder ? `${row.unit} / ${row.folder}` : row.unit),
-              },
-              {
-                key: "by",
-                header: "Added",
-                render: (row) => `${row.uploadedBy} · ${row.uploadedAt}`,
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                render: (row) =>
-                  row.canWrite ? (
-                    <div className="admin-table__actions">
-                      <Button size="sm" variant="outline" icon="edit" onClick={() => open(row)}>
-                        Rename
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        icon="trash"
-                        onClick={() => void remove(row)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  ) : null,
-              },
-            ]}
+      <ListCard
+        table={table}
+        noun="document"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="document"
+            query={query}
+            filters={table.filterCount}
+            emptyHint="Add the first file."
+            onClear={clearFilters}
+            addLabel="Add File"
+            onAdd={folders.length > 0 ? () => open("add") : null}
           />
-        </CardBody>
-      </Card>
+        }
+      />
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete File?"
+        confirmLabel="Delete File"
+        icon="trash"
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleting(null)}
+      >
+        {deleting?.title} is removed from the folder. The file itself is kept for 30 days.
+      </ConfirmDialog>
       <Modal
         asForm
         open={modal !== null}
-        title={modal === "add" ? "Add file" : "Rename file"}
+        title={modal === "add" ? "Add File" : "Rename File"}
         onClose={() => setModal(null)}
         footer={
           <div className="admin-modal__footer-row">

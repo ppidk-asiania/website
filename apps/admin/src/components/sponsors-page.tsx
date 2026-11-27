@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FeaturedImage } from "@website/domain/content";
 import { SPONSOR_TIERS, type SponsorTier } from "@website/domain/organizations";
 import { deleteSponsorAction, saveSponsorAction } from "@/app/(panel)/sponsors/actions";
@@ -9,8 +9,17 @@ import { actionMessage } from "@/components/action-message";
 import { publicImage, useImageUpload } from "@/components/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  MenuItem,
+  RowMenu,
+  SearchBox,
+  SortMenu,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { PhotoDrop } from "@/components/ui/photo-drop";
 import { Select } from "@/components/ui/select";
@@ -46,6 +55,22 @@ const emptyForm = (): Form => ({
   published: true,
 });
 
+type SortKey = "name" | "tier" | "status";
+const sortValue = (r: SponsorRow, key: SortKey): string | number =>
+  key === "name"
+    ? r.name.toLowerCase()
+    : key === "tier"
+      ? SPONSOR_TIERS.indexOf(r.tier)
+      : String(r.published);
+const filterText = (r: SponsorRow, key: SortKey): string =>
+  key === "name"
+    ? r.name
+    : key === "tier"
+      ? TIER_LABELS[r.tier]
+      : r.published
+        ? "Public"
+        : "Private";
+
 /** The sponsors of the active board period: the home page strip and /sponsorship read this list (N5.3). */
 export function SponsorsPage({ rows, canEdit }: { rows: SponsorRow[]; canEdit: boolean }) {
   const router = useRouter();
@@ -55,6 +80,15 @@ export function SponsorsPage({ rows, canEdit }: { rows: SponsorRow[]; canEdit: b
   const [form, setForm] = useState<Form>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [searchKey, setSearchKey] = useState(0);
+  const [deleting, setDeleting] = useState<SponsorRow | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [rows, query]);
+  const table = useListTable(filtered, sortValue, undefined, filterText);
 
   const open = (row: SponsorRow | "new") => {
     setForm(row === "new" ? emptyForm() : { ...row, order: String(row.order) });
@@ -82,11 +116,66 @@ export function SponsorsPage({ rows, canEdit }: { rows: SponsorRow[]; canEdit: b
     toast.show("Sponsor saved");
   };
 
-  const remove = async (row: SponsorRow) => {
-    const result = await deleteSponsorAction({ id: row.id, version: row.version });
+  const remove = async () => {
+    if (!deleting) return;
+    const result = await deleteSponsorAction({ id: deleting.id, version: deleting.version });
+    setDeleting(null);
     if (!result.ok) return toast.show(actionMessage(result));
     router.refresh();
     toast.show("Sponsor deleted");
+  };
+
+  const columns: Column<SponsorRow>[] = [
+    {
+      key: "name",
+      header: table.header("name", "Sponsor"),
+      render: (row) => (
+        <>
+          <span className="admin-table__title">{row.name}</span>
+          <span className="admin-table__sub">position {row.order}</span>
+        </>
+      ),
+    },
+    { key: "tier", header: table.header("tier", "Tier"), render: (row) => TIER_LABELS[row.tier] },
+    {
+      key: "status",
+      header: table.header("status", "Status"),
+      render: (row) => (
+        <Badge tone={row.published ? "success" : "neutral"}>
+          {row.published ? "Public" : "Private"}
+        </Badge>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      render: (row) =>
+        canEdit ? (
+          <div className="admin-table__actions">
+            <Button
+              variant="ghost"
+              size="icon"
+              icon="edit"
+              aria-label="Edit"
+              title="Edit"
+              onClick={() => open(row)}
+            />
+            <RowMenu>
+              <MenuItem icon="trash" danger onClick={() => setDeleting(row)}>
+                Delete<span className="admin-long"> Sponsor</span>
+              </MenuItem>
+            </RowMenu>
+          </div>
+        ) : null,
+    },
+  ];
+
+  const clearFilters = () => {
+    setQuery("");
+    setSearchKey((k) => k + 1);
+    table.clearFilters();
+    table.setPage(1);
   };
 
   return (
@@ -99,69 +188,57 @@ export function SponsorsPage({ rows, canEdit }: { rows: SponsorRow[]; canEdit: b
             the published ones, by tier.
           </p>
         </div>
-      </div>
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable
-            rowKey={(row) => row.id}
-            rows={rows}
-            emptyText="No sponsors in this period yet"
-            columns={[
-              {
-                key: "name",
-                header: "Sponsor",
-                render: (row) => (
-                  <>
-                    <span className="admin-table__title">{row.name}</span>
-                    <span className="admin-table__sub">
-                      {TIER_LABELS[row.tier]} · position {row.order}
-                    </span>
-                  </>
-                ),
-              },
-              {
-                key: "published",
-                header: "Status",
-                render: (row) => (
-                  <Badge tone={row.published ? "success" : "neutral"}>
-                    {row.published ? "Public" : "Private"}
-                  </Badge>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                render: (row) =>
-                  canEdit ? (
-                    <div className="admin-table__actions">
-                      <Button size="sm" variant="outline" icon="edit" onClick={() => open(row)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        icon="trash"
-                        onClick={() => void remove(row)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  ) : null,
-              },
-            ]}
+        <div className="admin-page-header__actions">
+          {canEdit ? (
+            <div className="admin-fab">
+              <Button variant="primary" size="sm" icon="plus" onClick={() => open("new")}>
+                Add Sponsor
+              </Button>
+            </div>
+          ) : null}
+          <SortMenu columns={columns} />
+          <SearchBox
+            key={searchKey}
+            placeholder="Search by name..."
+            label="Search sponsors"
+            onSearch={(value) => {
+              setQuery(value);
+              table.setPage(1);
+            }}
           />
-        </CardBody>
-      </Card>
-      {canEdit ? (
-        <Button variant="primary" icon="plus" onClick={() => open("new")}>
-          Add sponsor
-        </Button>
-      ) : null}
+        </div>
+      </div>
+
+      <ListCard
+        table={table}
+        noun="sponsor"
+        columns={columns}
+        empty={
+          <ListEmpty
+            noun="sponsor"
+            query={query}
+            filters={table.filterCount}
+            emptyHint="Add the first sponsor."
+            onClear={clearFilters}
+            addLabel="Add Sponsor"
+            onAdd={canEdit ? () => open("new") : null}
+          />
+        }
+      />
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete Sponsor?"
+        confirmLabel="Delete Sponsor"
+        icon="trash"
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleting(null)}
+      >
+        {deleting?.name} leaves the sponsorship page and the home page strip.
+      </ConfirmDialog>
       <Modal
         asForm
         open={editing !== null}
-        title={editing === "new" ? "Add sponsor" : "Edit sponsor"}
+        title={editing === "new" ? "Add Sponsor" : "Edit Sponsor"}
         onClose={() => setEditing(null)}
         footer={
           <div className="admin-modal__footer-row">

@@ -551,8 +551,11 @@ function OrganizationsList({
   if (view === "documents" && documents) {
     return (
       <div>
-        {header("Organizations > Documents", null)}
-        <OrgDocumentsPanel rows={documents.rows} canEdit={documents.canEdit} />
+        <OrgDocumentsPanel
+          rows={documents.rows}
+          canEdit={documents.canEdit}
+          header={(actions) => header("Organizations > Documents", actions)}
+        />
         <ToastBanner message={toast.message} />
       </div>
     );

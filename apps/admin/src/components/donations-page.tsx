@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FeaturedImage } from "@website/domain/content";
 import { FINANCE_CURRENCIES } from "@website/domain/finance";
 import type { DonationState } from "@website/domain/organizations";
@@ -15,8 +15,17 @@ import { actionMessage } from "@/components/action-message";
 import { publicImage, useImageUpload } from "@/components/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  MenuItem,
+  RowMenu,
+  SearchBox,
+  SortMenu,
+  Tabs,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { PhotoDrop } from "@/components/ui/photo-drop";
 import { Select } from "@/components/ui/select";
@@ -48,6 +57,22 @@ export interface DonationItem {
   own: boolean;
 }
 
+type View = "donations" | "channels";
+type DonationKey = "donor" | "amount" | "status";
+type ChannelKey = "label" | "status";
+const donationSort = (r: DonationItem, key: DonationKey): string | number =>
+  key === "donor" ? r.donor.toLowerCase() : key === "amount" ? r.amountMinor : r.status;
+const donationText = (r: DonationItem, key: DonationKey): string =>
+  key === "donor"
+    ? r.donor
+    : key === "amount"
+      ? formatMoney({ amountMinor: r.amountMinor, currency: r.currency })
+      : r.status;
+const channelSort = (r: ChannelRow, key: ChannelKey): string =>
+  key === "label" ? r.label.toLowerCase() : String(r.published);
+const channelText = (r: ChannelRow, key: ChannelKey): string =>
+  key === "label" ? r.label : r.published ? "Public" : "Hidden";
+
 const TONES = { pending: "warn", verified: "success", rejected: "danger" } as const;
 const emptyChannel = (): Omit<ChannelRow, "id" | "version"> => ({
   label: "",
@@ -72,6 +97,29 @@ export function DonationsPage(props: {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [view, setView] = useState<View>("donations");
+  const [query, setQuery] = useState("");
+  const [searchKey, setSearchKey] = useState(0);
+
+  const q = query.trim().toLowerCase();
+  const shownDonations = useMemo(
+    () =>
+      props.donations.filter(
+        (r) =>
+          view !== "donations" ||
+          !q ||
+          [r.donor, r.channel].some((v) => v.toLowerCase().includes(q)),
+      ),
+    [props.donations, view, q],
+  );
+  const shownChannels = useMemo(
+    () =>
+      props.channels.filter((r) => view !== "channels" || !q || r.label.toLowerCase().includes(q)),
+    [props.channels, view, q],
+  );
+  const donationTable = useListTable(shownDonations, donationSort, undefined, donationText);
+  const channelTable = useListTable(shownChannels, channelSort, undefined, channelText);
+  const table = view === "donations" ? donationTable : channelTable;
 
   const openChannel = (row: ChannelRow | "new") => {
     setForm(row === "new" ? emptyChannel() : row);
@@ -111,6 +159,128 @@ export function DonationsPage(props: {
     toast.show(verify ? "Donation verified and added to the cash book" : "Donation rejected");
   };
 
+  const switchView = (next: View) => {
+    setView(next);
+    setQuery("");
+    setSearchKey((k) => k + 1);
+    donationTable.setPage(1);
+    channelTable.setPage(1);
+  };
+  const clearFilters = () => {
+    setQuery("");
+    setSearchKey((k) => k + 1);
+    table.clearFilters();
+    table.setPage(1);
+  };
+
+  const donationColumns: Column<DonationItem>[] = [
+    {
+      key: "donor",
+      header: donationTable.header("donor", "Donation"),
+      render: (row) => (
+        <>
+          <span className="admin-table__title">{row.donor}</span>
+          <span className="admin-table__sub">
+            {row.channel} · {row.date} · shown as {row.shownAs ?? "Anonymous"}
+            {row.message ? ` · "${row.message}"` : ""}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "amount",
+      header: donationTable.header("amount", "Amount"),
+      render: (row) => formatMoney({ amountMinor: row.amountMinor, currency: row.currency }),
+    },
+    {
+      key: "status",
+      header: donationTable.header("status", "Status"),
+      render: (row) => (
+        <>
+          <Badge tone={TONES[row.status]}>{row.status}</Badge>
+          {row.note ? <span className="admin-table__sub">{row.note}</span> : null}
+        </>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      render: (row) => (
+        <div className="admin-table__actions">
+          {row.status === "pending" ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              icon="check"
+              aria-label="Verify"
+              title={row.own ? "Someone else must check your donation" : "Verify"}
+              disabled={busy || row.own}
+              onClick={() => void decide(row, true)}
+            />
+          ) : null}
+          <RowMenu>
+            <MenuItem
+              icon="eye"
+              onClick={() => window.open(`/api/donation-proofs/${row.id}`, "_blank")}
+            >
+              View<span className="admin-long"> Proof</span>
+            </MenuItem>
+            {row.status === "pending" ? (
+              <MenuItem
+                icon="x"
+                danger
+                disabled={busy || row.own}
+                onClick={() => setRejecting(row)}
+              >
+                Reject
+              </MenuItem>
+            ) : null}
+          </RowMenu>
+        </div>
+      ),
+    },
+  ];
+
+  const channelColumns: Column<ChannelRow>[] = [
+    {
+      key: "label",
+      header: channelTable.header("label", "Channel"),
+      render: (row) => (
+        <>
+          <span className="admin-table__title">{row.label}</span>
+          <span className="admin-table__sub">{row.currency}</span>
+        </>
+      ),
+    },
+    {
+      key: "status",
+      header: channelTable.header("status", "Status"),
+      render: (row) => (
+        <Badge tone={row.published ? "success" : "neutral"}>
+          {row.published ? "Public" : "Hidden"}
+        </Badge>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      render: (row) => (
+        <div className="admin-table__actions">
+          <Button
+            variant="ghost"
+            size="icon"
+            icon="edit"
+            aria-label="Edit"
+            title="Edit"
+            onClick={() => openChannel(row)}
+          />
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="admin-page-header">
@@ -123,138 +293,81 @@ export function DonationsPage(props: {
         </div>
         <div className="admin-page-header__actions">
           <div className="admin-fab">
-            {props.canExport ? (
+            {view === "donations" && props.canExport ? (
               <Button variant="outline" size="sm" icon="download" href="/api/donations/export">
                 Export CSV
               </Button>
             ) : null}
-            <Button variant="primary" size="sm" icon="plus" onClick={() => openChannel("new")}>
-              Add channel
-            </Button>
+            {view === "channels" ? (
+              <Button variant="primary" size="sm" icon="plus" onClick={() => openChannel("new")}>
+                Add Channel
+              </Button>
+            ) : null}
           </div>
+          {view === "donations" ? (
+            <SortMenu columns={donationColumns} />
+          ) : (
+            <SortMenu columns={channelColumns} />
+          )}
+          <SearchBox
+            key={`${view}${searchKey}`}
+            placeholder={view === "donations" ? "Search by donor..." : "Search by channel..."}
+            label="Search"
+            onSearch={(value) => {
+              setQuery(value);
+              table.setPage(1);
+            }}
+          />
         </div>
       </div>
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable
-            rowKey={(row) => row.id}
-            rows={props.donations}
-            emptyText="No donations yet"
-            columns={[
-              {
-                key: "donor",
-                header: "Donation",
-                render: (row) => (
-                  <>
-                    <span className="admin-table__title">
-                      {formatMoney({ amountMinor: row.amountMinor, currency: row.currency })} ·{" "}
-                      {row.donor}
-                    </span>
-                    <span className="admin-table__sub">
-                      {row.channel} · {row.date} · shown as {row.shownAs ?? "Anonymous"}
-                      {row.message ? ` · "${row.message}"` : ""}
-                    </span>
-                  </>
-                ),
-              },
-              {
-                key: "status",
-                header: "Status",
-                render: (row) => (
-                  <>
-                    <Badge tone={TONES[row.status]}>{row.status}</Badge>
-                    {row.note ? <span className="admin-table__sub">{row.note}</span> : null}
-                  </>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                render: (row) => (
-                  <div className="admin-table__actions">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      href={`/api/donation-proofs/${row.id}`}
-                      target="_blank"
-                    >
-                      Proof
-                    </Button>
-                    {row.status === "pending" ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          icon="check"
-                          disabled={busy || row.own}
-                          title={row.own ? "Someone else must check your donation" : undefined}
-                          onClick={() => void decide(row, true)}
-                        >
-                          Verify
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          disabled={busy || row.own}
-                          onClick={() => setRejecting(row)}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                ),
-              },
-            ]}
-          />
-        </CardBody>
-      </Card>
-      <h2 className="admin-section-title">Channels</h2>
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable
-            rowKey={(row) => row.id}
-            rows={props.channels}
-            emptyText="No channels yet"
-            columns={[
-              {
-                key: "label",
-                header: "Channel",
-                render: (row) => (
-                  <>
-                    <span className="admin-table__title">{row.label}</span>
-                    <span className="admin-table__sub">{row.currency}</span>
-                  </>
-                ),
-              },
-              {
-                key: "published",
-                header: "Status",
-                render: (row) => (
-                  <Badge tone={row.published ? "success" : "neutral"}>
-                    {row.published ? "Public" : "Hidden"}
-                  </Badge>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                render: (row) => (
-                  <Button size="sm" variant="outline" icon="edit" onClick={() => openChannel(row)}>
-                    Edit
-                  </Button>
-                ),
-              },
-            ]}
-          />
-        </CardBody>
-      </Card>
+
+      <Tabs
+        label="Donation lists"
+        tabs={[
+          { key: "donations", label: "Donations", count: props.donations.length },
+          { key: "channels", label: "Channels", count: props.channels.length },
+        ]}
+        active={view}
+        onSelect={switchView}
+      />
+
+      {view === "donations" ? (
+        <ListCard
+          table={donationTable}
+          noun="donation"
+          columns={donationColumns}
+          empty={
+            <ListEmpty
+              noun="donation"
+              query={query}
+              filters={donationTable.filterCount}
+              emptyHint="Donations appear here when members send a proof."
+              onClear={clearFilters}
+            />
+          }
+        />
+      ) : (
+        <ListCard
+          table={channelTable}
+          noun="channel"
+          columns={channelColumns}
+          empty={
+            <ListEmpty
+              noun="channel"
+              query={query}
+              filters={channelTable.filterCount}
+              emptyHint="Add the first channel."
+              onClear={clearFilters}
+              addLabel="Add Channel"
+              onAdd={() => openChannel("new")}
+            />
+          }
+        />
+      )}
       <Modal
         asForm
         open={editing !== null}
-        title={editing === "new" ? "Add channel" : "Edit channel"}
+        title={editing === "new" ? "Add Channel" : "Edit Channel"}
         onClose={() => setEditing(null)}
         footer={
           <div className="admin-modal__footer-row">

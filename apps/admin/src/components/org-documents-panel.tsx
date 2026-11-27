@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ORG_DOCUMENT_TYPES, type OrgDocumentType } from "@website/domain/organizations";
 import {
   deleteOrgDocumentAction,
@@ -11,7 +11,9 @@ import { actionMessage } from "@/components/action-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
+import { MenuItem, RowMenu, useListTable } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
@@ -52,7 +54,22 @@ const emptyForm = (): Form => ({
   published: true,
 });
 
-export function OrgDocumentsPanel({ rows, canEdit }: { rows: OrgDocumentRow[]; canEdit: boolean }) {
+type SortKey = "title" | "status";
+const sortValue = (r: OrgDocumentRow, key: SortKey): string =>
+  key === "title" ? r.title.toLowerCase() : String(r.published);
+const filterText = (r: OrgDocumentRow, key: SortKey): string =>
+  key === "title" ? r.title : r.published ? "Public" : "Private";
+
+/** The Documents tab of Organizations; `header` draws the page header with the tab bar around these actions. */
+export function OrgDocumentsPanel({
+  rows,
+  canEdit,
+  header,
+}: {
+  rows: OrgDocumentRow[];
+  canEdit: boolean;
+  header: (actions: ReactNode) => ReactNode;
+}) {
   const router = useRouter();
   const toast = useToastMessage();
   const [editing, setEditing] = useState<OrgDocumentRow | "new" | null>(null);
@@ -60,6 +77,8 @@ export function OrgDocumentsPanel({ rows, canEdit }: { rows: OrgDocumentRow[]; c
   const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<OrgDocumentRow | null>(null);
+  const table = useListTable(rows, sortValue, undefined, filterText);
 
   const open = (row: OrgDocumentRow | "new") => {
     setForm(row === "new" ? emptyForm() : { ...row, link: row.link ?? "" });
@@ -102,78 +121,105 @@ export function OrgDocumentsPanel({ rows, canEdit }: { rows: OrgDocumentRow[]; c
     toast.show("Document saved");
   };
 
-  const remove = async (row: OrgDocumentRow) => {
-    const result = await deleteOrgDocumentAction({ id: row.id, version: row.version });
+  const remove = async () => {
+    if (!deleting) return;
+    const result = await deleteOrgDocumentAction({ id: deleting.id, version: deleting.version });
+    setDeleting(null);
     if (!result.ok) return toast.show(actionMessage(result));
     router.refresh();
     toast.show("Document deleted");
   };
 
+  const columns: Column<OrgDocumentRow>[] = [
+    {
+      key: "title",
+      header: table.header("title", "Document"),
+      render: (row) => (
+        <>
+          <span className="admin-table__title">{row.title}</span>
+          <span className="admin-table__sub">
+            {ORG_DOCUMENT_TYPE_LABELS[row.type]}
+            {row.versionLabel ? ` · ${row.versionLabel}` : ""} · {row.date}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "status",
+      header: table.header("status", "Status"),
+      render: (row) => (
+        <Badge tone={row.published ? "success" : "neutral"}>
+          {row.published ? "Public" : "Private"}
+        </Badge>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      render: (row) =>
+        canEdit ? (
+          <div className="admin-table__actions">
+            <Button
+              variant="ghost"
+              size="icon"
+              icon="edit"
+              aria-label="Edit"
+              title="Edit"
+              onClick={() => open(row)}
+            />
+            <RowMenu>
+              <MenuItem icon="trash" danger onClick={() => setDeleting(row)}>
+                Delete<span className="admin-long"> Document</span>
+              </MenuItem>
+            </RowMenu>
+          </div>
+        ) : null,
+    },
+  ];
+
   return (
     <>
-      <Card className="admin-list-card">
+      {header(
+        canEdit ? (
+          <div className="admin-fab">
+            <Button variant="primary" size="sm" icon="plus" onClick={() => open("new")}>
+              Add Document
+            </Button>
+          </div>
+        ) : null,
+      )}
+      <Card className="admin-events-card admin-list-card admin-org-card">
         <CardBody flush>
           <DataTable
+            columns={columns}
+            rows={table.pageRows}
             rowKey={(row) => row.id}
-            rows={rows}
             emptyText="No organisation documents yet"
-            columns={[
-              {
-                key: "title",
-                header: "Document",
-                render: (row) => (
-                  <>
-                    <span className="admin-table__title">{row.title}</span>
-                    <span className="admin-table__sub">
-                      {ORG_DOCUMENT_TYPE_LABELS[row.type]}
-                      {row.versionLabel ? ` · ${row.versionLabel}` : ""} · {row.date}
-                    </span>
-                  </>
-                ),
-              },
-              {
-                key: "published",
-                header: "Status",
-                render: (row) => (
-                  <Badge tone={row.published ? "success" : "neutral"}>
-                    {row.published ? "Public" : "Private"}
-                  </Badge>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                align: "right",
-                render: (row) =>
-                  canEdit ? (
-                    <div className="admin-table__actions">
-                      <Button size="sm" variant="outline" icon="edit" onClick={() => open(row)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        icon="trash"
-                        onClick={() => void remove(row)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  ) : null,
-              },
-            ]}
+          />
+          <Pagination
+            page={table.page}
+            pageSize={table.pageSize}
+            totalItems={table.sorted.length}
+            onPageChange={table.setPage}
+            onPageSizeChange={table.setPageSize}
           />
         </CardBody>
       </Card>
-      {canEdit ? (
-        <Button variant="primary" icon="plus" onClick={() => open("new")}>
-          Add document
-        </Button>
-      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete Document?"
+        confirmLabel="Delete Document"
+        icon="trash"
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleting(null)}
+      >
+        {deleting?.title} leaves the public Documents page.
+      </ConfirmDialog>
       <Modal
         asForm
         open={editing !== null}
-        title={editing === "new" ? "Add document" : "Edit document"}
+        title={editing === "new" ? "Add Document" : "Edit Document"}
         subtitle="A new version of the same title is added as a new row; older versions stay downloadable."
         onClose={() => setEditing(null)}
         footer={

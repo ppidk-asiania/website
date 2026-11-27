@@ -9,7 +9,6 @@ import {
 import { can, canInSomeScope } from "@website/permissions";
 import { AccessMessage } from "@/components/access-message";
 import { InventoryPage, type ItemRow } from "@/components/inventory-page";
-import { InventoryFlowsPanel } from "@/components/inventory-flows-panel";
 import { requireAdminViewer } from "@/server/context";
 import { adminReads } from "@/server/wiring";
 
@@ -134,72 +133,72 @@ export default async function InventoryRoute() {
             by: l.by ? (people.get(l.by)?.name ?? people.get(l.by)?.email ?? l.by) : "",
             at: l.at.toISOString().slice(0, 16).replace("T", " "),
           }))}
-      />
-      <InventoryFlowsPanel
-        items={mine.map((i) => ({
-          id: i.id,
-          name: i.name,
-          canEdit: can(principal, "inventory.edit", scopeOfItem(i.owner)),
-          canApprove: approves(i.owner),
-        }))}
-        owners={owners}
-        events={events.filter((e) => !e.deletedAt).map((e) => ({ id: e.id, title: e.title }))}
-        reservations={reservations
-          .filter((r) => ownerOfItem.has(r.itemId))
-          .map((r) => ({
-            id: r.id,
-            item: names.get(r.itemId) ?? "",
-            event: eventTitle.get(r.eventId) ?? "(removed event)",
-            quantity: r.quantity,
-            period: `${r.from} → ${r.to}`,
-            active: r.status === "active",
-            canEdit: can(principal, "inventory.edit", scopeOfItem(ownerOfItem.get(r.itemId)!)),
-          }))}
-        canApprove={canInSomeScope(principal, "inventory.approve")}
-        contributions={contributions.map((c) => ({
-          id: c.id,
-          name: c.name,
-          by: c.contributorName,
-          quantity: c.quantity,
-          mode: c.mode,
-          returnOn: c.returnOn,
-          description: c.description,
-          status: c.status,
-          note: c.note,
-        }))}
-        procurement={procurement
-          .filter((p) => can(principal, "inventory.read", scopeOfItem(p.owner)))
-          .map((p) => ({
-            id: p.id,
-            name: p.name,
-            owner: ownerLabel(p.owner),
-            why: p.why,
-            estimate: amountText(p.estimatedMinor, p.currency),
-            urgency: p.urgency,
-            status: p.status,
-            note: p.note,
-            canDecide: approves(p.owner),
-            financeQuery: new URLSearchParams({
-              title: financePrefill(p).title,
-              description: financePrefill(p).description,
-              amount: String(financePrefill(p).amountMinor),
-              currency: p.currency,
-            }).toString(),
-          }))}
-        outside={outside
-          .filter((o) => ownerOfItem.has(o.itemId))
-          .map((o) => ({
-            id: o.id,
-            item: names.get(o.itemId) ?? "",
-            borrower: o.borrower,
-            contact: o.contact,
-            purpose: o.purpose,
-            quantity: o.quantity,
-            period: `${o.lentOn} → ${o.expectedBack}`,
-            status: o.status,
-            overdue: isOutsideOverdue(o, today),
-            canDecide: approves(ownerOfItem.get(o.itemId)!),
-          }))}
+        flows={{
+          items: mine.map((i) => ({
+            id: i.id,
+            name: i.name,
+            canEdit: can(principal, "inventory.edit", scopeOfItem(i.owner)),
+            canApprove: approves(i.owner),
+          })),
+          owners,
+          events: events.filter((e) => !e.deletedAt).map((e) => ({ id: e.id, title: e.title })),
+          reservations: reservations
+            .filter((r) => ownerOfItem.has(r.itemId))
+            .map((r) => ({
+              id: r.id,
+              item: names.get(r.itemId) ?? "",
+              event: eventTitle.get(r.eventId) ?? "(removed event)",
+              quantity: r.quantity,
+              period: `${r.from} → ${r.to}`,
+              active: r.status === "active",
+              canEdit: can(principal, "inventory.edit", scopeOfItem(ownerOfItem.get(r.itemId)!)),
+            })),
+          canApprove: canInSomeScope(principal, "inventory.approve"),
+          contributions: contributions.map((c) => ({
+            id: c.id,
+            name: c.name,
+            by: c.contributorName,
+            quantity: c.quantity,
+            mode: c.mode,
+            returnOn: c.returnOn,
+            description: c.description,
+            status: c.status,
+            note: c.note,
+          })),
+          procurement: procurement
+            .filter((p) => can(principal, "inventory.read", scopeOfItem(p.owner)))
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              owner: ownerLabel(p.owner),
+              why: p.why,
+              estimate: amountText(p.estimatedMinor, p.currency),
+              urgency: p.urgency,
+              status: p.status,
+              note: p.note,
+              canDecide: approves(p.owner),
+              financeQuery: new URLSearchParams({
+                title: financePrefill(p).title,
+                description: financePrefill(p).description,
+                amount: String(financePrefill(p).amountMinor),
+                currency: p.currency,
+              }).toString(),
+            })),
+          outside: outside
+            .filter((o) => ownerOfItem.has(o.itemId))
+            .map((o) => ({
+              id: o.id,
+              item: names.get(o.itemId) ?? "",
+              borrower: o.borrower,
+              contact: o.contact,
+              purpose: o.purpose,
+              quantity: o.quantity,
+              period: `${o.lentOn} → ${o.expectedBack}`,
+              status: o.status,
+              overdue: isOutsideOverdue(o, today),
+              canDecide: approves(ownerOfItem.get(o.itemId)!),
+            })),
+        }}
       />
     </>
   );

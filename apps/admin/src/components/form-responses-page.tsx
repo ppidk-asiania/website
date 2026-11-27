@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { QuestionSummary } from "@website/domain/forms";
 import { exportFormResponsesAction } from "@/app/(panel)/forms/actions";
@@ -10,7 +10,15 @@ import { downloadCsv } from "@/components/csv";
 import { esc } from "@/components/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import {
+  ListCard,
+  ListEmpty,
+  SearchBox,
+  SortMenu,
+  Tabs,
+  useListTable,
+} from "@/components/ui/list-controls";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
 
 interface ResponseRow {
@@ -31,12 +39,31 @@ export function FormResponsesPage(props: {
   const router = useRouter();
   const toast = useToastMessage();
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<"responses" | "results">("responses");
+  const [query, setQuery] = useState("");
+  const [searchKey, setSearchKey] = useState(0);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return props.rows.filter((r) => !q || r.cells.some((c) => c.toLowerCase().includes(q)));
+  }, [props.rows, query]);
+  // A column key is the position of the question in the row.
+  const table = useListTable(shown, (row, key: string) =>
+    (row.cells[Number(key)] ?? "").toLowerCase(),
+  );
+  const showResults = props.summaries.length > 0 && props.rows.length > 0;
 
   const columns: Column<ResponseRow>[] = props.header.map((text, i) => ({
     key: String(i),
-    header: text,
+    header: table.header(String(i), text),
     render: (row) => <span className="admin-table__title">{row.cells[i]}</span>,
   }));
+  const clearFilters = () => {
+    setQuery("");
+    setSearchKey((k) => k + 1);
+    table.clearFilters();
+    table.setPage(1);
+  };
 
   const exportCsv = async () => {
     setBusy(true);
@@ -90,12 +117,34 @@ export function FormResponsesPage(props: {
               </Button>
             ) : null}
           </div>
+          {view === "responses" ? (
+            <>
+              <SortMenu columns={columns} />
+              <SearchBox
+                key={searchKey}
+                placeholder="Search answers..."
+                label="Search responses"
+                onSearch={(value) => {
+                  setQuery(value);
+                  table.setPage(1);
+                }}
+              />
+            </>
+          ) : null}
         </div>
       </div>
-      {props.summaries.length > 0 && props.rows.length > 0 ? (
+      <Tabs
+        label="Response views"
+        tabs={[
+          { key: "responses", label: "Responses", count: props.total },
+          ...(showResults ? [{ key: "results" as const, label: "Results" }] : []),
+        ]}
+        active={view}
+        onSelect={setView}
+      />
+      {view === "results" && showResults ? (
         <Card className="admin-list-card">
           <CardBody>
-            <h2 className="admin-section-title">Results</h2>
             {props.summaries.map((s) => (
               <section key={s.id} aria-label={s.label}>
                 <h3 className="admin-table__title">{s.label}</h3>
@@ -130,16 +179,22 @@ export function FormResponsesPage(props: {
           </CardBody>
         </Card>
       ) : null}
-      <Card className="admin-list-card">
-        <CardBody flush>
-          <DataTable
-            columns={columns}
-            rows={props.rows}
-            rowKey={(row) => row.id}
-            emptyText="No responses yet"
-          />
-        </CardBody>
-      </Card>
+      {view === "responses" ? (
+        <ListCard
+          table={table}
+          noun="response"
+          columns={columns}
+          empty={
+            <ListEmpty
+              noun="response"
+              query={query}
+              filters={table.filterCount}
+              emptyHint="Answers appear here when people submit the form."
+              onClear={clearFilters}
+            />
+          }
+        />
+      ) : null}
       <ToastBanner message={toast.message} />
     </div>
   );
