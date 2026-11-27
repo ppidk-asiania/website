@@ -6,7 +6,7 @@ import {
   createSqlFormWebStore,
   createSqlRegistrationStore,
 } from "@website/db/sql";
-import type { EventEntity } from "@website/domain/events";
+import type { EventEntity, EventFee } from "@website/domain/events";
 import { normalizePermissions, type Principal } from "@website/permissions";
 import { createFormActions } from "../../apps/admin/src/server/forms";
 import {
@@ -148,6 +148,18 @@ const register = (
     },
     "en",
   );
+
+const fee: EventFee = {
+  paid: true,
+  currency: "CNY",
+  categories: [
+    { id: "std", label: "Student", amountMinor: 5000, earlyAmountMinor: null, quota: 2 },
+    { id: "pro", label: "Professional", amountMinor: 9000, earlyAmountMinor: null, quota: null },
+  ],
+  earlyUntil: null,
+  instructions: "",
+  payImage: null,
+};
 
 const docs = (prefix: string) => [...fake.docs.keys()].filter((path) => path.startsWith(prefix));
 
@@ -295,5 +307,118 @@ describe("registering with the event's questions (N1.2)", () => {
     expect(await register("u1", { token: "bot" })).toEqual({ ok: false, error: "captcha" });
     expect(await register("u1", { slug: "missing" })).toEqual({ ok: false, error: "closed" });
     expect(await register("u1", { extra: 1 })).toEqual({ ok: false, error: "invalid" });
+  });
+});
+
+describe("a paid event through its form (N1.3)", () => {
+  beforeEach(async () => {
+    await events.write(null, null, () => event({ slug: "paid", fee }), auditStub, now);
+  });
+
+  it("needs one of its ticket categories, holds the seat as pending, and a full category is refused", async () => {
+    expect(await register("u1", { slug: "paid" })).toEqual({ ok: false, error: "category" });
+    expect(await register("u1", { slug: "paid", feeCategory: "vip" })).toEqual({
+      ok: false,
+      error: "category",
+    });
+    expect(await register("u1", { slug: "paid", feeCategory: "std" })).toEqual({
+      ok: true,
+      status: "pending",
+      practice: false,
+    });
+    await register("u2", { slug: "paid", feeCategory: "std" });
+    expect(await register("u3", { slug: "paid", feeCategory: "std" })).toEqual({
+      ok: false,
+      error: "category",
+    });
+    expect(docs("formResponses/")).toHaveLength(2);
+    expect(sent).toHaveLength(2);
+  });
+
+  it("a free event refuses a category", async () => {
+    expect(await register("u1", { feeCategory: "std" })).toEqual({ ok: false, error: "category" });
+  });
+});
+
+describe("the registration transaction on its own", () => {
+  const user = { uid: "u1", email: "u1@example.org" };
+  const answers = { version: 1, attendanceMode: "online" as const, feeCategory: null, answers: {} };
+  const run = (
+    forms: Partial<Parameters<typeof createFormRegistrationTransaction>[0]["forms"]>,
+    stored: Partial<Parameters<typeof createFormRegistrationTransaction>[0]["registrations"]> = {},
+    practice = false,
+  ) =>
+    createFormRegistrationTransaction({
+      forms: { tokenOf: () => Promise.resolve("token"), ...forms } as never,
+      registrations: { setupOf: (id: string) => registrations.setupOf(id), ...stored } as never,
+    })({ id: eventId, fee: null }, user, answers, now, practice);
+
+  it("refuses a form that has no public token", async () => {
+    expect(await run({ tokenOf: () => Promise.resolve(null) })).toEqual({
+      ok: false,
+      error: "closed",
+    });
+  });
+
+  it("practice mode needs an open form on the same version", async () => {
+    const found = (state: string, number: number) => () =>
+      Promise.resolve({ state, version: { number, questions: [] } }) as never;
+    expect(await run({ findPublic: () => Promise.resolve(null) }, {}, true)).toEqual({
+      ok: false,
+      error: "closed",
+    });
+    expect(await run({ findPublic: found("closed", 1) }, {}, true)).toEqual({
+      ok: false,
+      error: "closed",
+    });
+    expect(await run({ findPublic: found("open", 2) }, {}, true)).toEqual({
+      ok: false,
+      error: "changed",
+    });
+  });
+
+  it("maps a refused submit to the sign-in or closed message", async () => {
+    const refused = (error: "signin" | "guest") => ({
+      submit: () => Promise.resolve({ ok: false as const, error }),
+    });
+    expect(await run(refused("signin"))).toEqual({ ok: false, error: "signin" });
+    expect(await run(refused("guest"))).toEqual({ ok: false, error: "closed" });
+  });
+
+  it("treats a submit that never reached the registration as closed", async () => {
+    expect(await run({ submit: () => Promise.resolve({ ok: true }) })).toEqual({
+      ok: false,
+      error: "closed",
+    });
+  });
+
+  it("does not hide an unexpected failure of the registration", async () => {
+    const submit = async (...args: unknown[]) => {
+      const alongside = args[5] as (tx: never, saved: unknown) => Promise<void>;
+      await alongside(undefined as never, { responseId: null, version: 1 });
+      return { ok: true as const };
+    };
+    await expect(
+      run({ submit }, { registerIn: () => Promise.reject(new Error("db down")) }),
+    ).rejects.toThrow("db down");
+  });
+});
+
+describe("the member's profile", () => {
+  it("must be complete before registering", async () => {
+    expect(
+      await createEventFormRegistration({
+        findEvent: () => Promise.resolve(null),
+        registerWithForm: createFormRegistrationTransaction({ forms, registrations }),
+        captcha: () => Promise.resolve(true),
+        send: () => Promise.resolve(),
+        profileComplete: () => Promise.resolve(false),
+        now: () => now,
+      })(
+        { uid: "u1", email: null },
+        { slug: "simposium", version: 1, attendanceMode: null, answers: {}, token: "t" },
+        "en",
+      ),
+    ).toEqual({ ok: false, error: "profile" });
   });
 });

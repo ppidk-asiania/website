@@ -259,7 +259,7 @@ export type SqlEventReader = ReturnType<typeof createSqlEventReader>;
 
 const paymentSnapshot = (doc: { get(field: string): unknown }): Snapshot => ({
   status: doc.get("status") as string,
-  payment: (doc.get("payment") as string | undefined) ?? null,
+  payment: doc.get("payment") as string,
   paymentNote: (doc.get("paymentNote") as string | undefined) ?? null,
   amountMinor: (doc.get("amountMinor") as number | undefined) ?? null,
   feeCategory: (doc.get("feeCategory") as string | undefined) ?? null,

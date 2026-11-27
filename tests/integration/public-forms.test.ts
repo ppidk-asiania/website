@@ -291,6 +291,43 @@ describe("missing or malformed data", () => {
       issues: ["Add at least one question."],
     });
   });
+
+  it("only a published form has a public token to register an event on", async () => {
+    const { id, publicToken } = await published();
+    const draft = await actions().save(...as(owner))({ ...formInput(), version: null });
+    if (!draft.ok) throw new Error(JSON.stringify(draft));
+    expect(await web.tokenOf(id)).toBe(publicToken);
+    expect(await web.tokenOf(draft.data.id)).toBeNull();
+    expect(await web.tokenOf("missing")).toBeNull();
+    expect(await web.tokenOf("a/b")).toBeNull();
+  });
+
+  it("a guest answer can run another write in the same transaction", async () => {
+    const { id, publicToken } = await published();
+    const ids = await questionIds(id);
+    const saved: unknown[] = [];
+    const outcome = await web.submit(
+      publicToken,
+      1,
+      { [ids[0]!]: "Ari", [ids[1]!]: "Good" },
+      clock,
+      { user: null, guest: guestOf },
+      (_tx, result) => Promise.resolve(void saved.push(result)),
+    );
+    expect(outcome).toEqual({ ok: true });
+    expect(saved).toEqual([{ formId: id, version: 1, responseId: null }]);
+  });
+
+  it("does not hide an unexpected failure behind a form error", async () => {
+    const failing = createFormSubmission({
+      submit: () => Promise.reject(new Error("database down")),
+      captcha,
+      now: () => clock,
+    });
+    await expect(
+      failing(null, { token: "token", version: 1, answers: {}, captcha: "human" }),
+    ).rejects.toThrow("database down");
+  });
 });
 
 describe("responses and export (forms.responses, forms.export)", () => {

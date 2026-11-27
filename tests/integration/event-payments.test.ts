@@ -379,6 +379,40 @@ describe("verifying a payment writes ONE cash entry (DEC-26)", () => {
     expect((await actions().openProof(regId("u1"), null)).status).toBe(401);
     expect((await actions().openProof(regId("nobody"), checker())).status).toBe(404);
   });
+
+  it("refuses a registration that is gone, a payment already booked and an event that is no longer paid", async () => {
+    expect(await verify(checker(), "nobody")).toMatchObject({ error: "refused" });
+    await submitted("u1");
+    fake.docs.set(`cashEntries/${regId("u1")}`, {});
+    expect(await verify()).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("cash book")],
+    });
+    fake.docs.delete(`cashEntries/${regId("u1")}`);
+    await events.write(eventId, 1, (c) => ({ ...c!, fee: null }), auditStub, now);
+    expect(await verify()).toMatchObject({
+      error: "refused",
+      issues: [expect.stringContaining("paid event")],
+    });
+    fake.docs.delete(`events/${eventId}`);
+    expect(await verify()).toMatchObject({ error: "refused" });
+  });
+
+  it("reject needs a proof to check, and does not need a category", async () => {
+    const reject = (uid: string) =>
+      actions().reject(...as(checker()))({ registrationId: regId(uid), note: "Wrong receipt" });
+    expect(await reject("nobody")).toMatchObject({ error: "refused" });
+    fake.docs.set(`eventRegistrations/${regId("u9")}`, {
+      eventId,
+      userId: "u9",
+      status: "pending",
+      payment: "submitted",
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(await reject("u9")).toMatchObject({ ok: true });
+    expect(doc(`eventRegistrations/${regId("u9")}`)).toMatchObject({ payment: "rejected" });
+  });
 });
 
 describe("setting the fee (admin)", () => {
@@ -430,5 +464,111 @@ describe("setting the fee (admin)", () => {
     expect(await actions().save(...as(checker()))({ ...(await ref()), setup: null })).toMatchObject(
       { error: "refused", issues: [expect.stringContaining("fee off")] },
     );
+  });
+});
+
+describe("the event and registration stores on their own (N1.3, N1.4)", () => {
+  const reader = () => createSqlEventReader(db());
+  const checkedIn = {
+    eventId: "",
+    userId: "u1",
+    status: "confirmed",
+    createdAt: now,
+    checkedIn: true,
+    checkedInAt: now,
+  };
+
+  it("the ticket page reads a live event with its fee and what the ticket prints", async () => {
+    expect(await reader().findTicketEvent("missing", now)).toBeNull();
+    expect(await reader().findTicketEvent("simposium", now)).toMatchObject({
+      event: { id: eventId },
+      fee: { paid: true },
+      showOnTicket: "",
+    });
+    await events.write(
+      eventId,
+      1,
+      (c) => ({
+        ...c!,
+        fee: null,
+        registration: { ...base.registration!, showOnTicket: "Bring your ID" },
+      }),
+      auditStub,
+      now,
+    );
+    expect(await reader().findTicketEvent("simposium", now)).toMatchObject({
+      fee: null,
+      showOnTicket: "Bring your ID",
+    });
+    await events.write(eventId, 2, (c) => ({ ...c!, registration: null }), auditStub, now);
+    expect(await reader().findTicketEvent("simposium", now)).toMatchObject({ showOnTicket: "" });
+    await events.write(eventId, 3, (c) => ({ ...c!, published: false }), auditStub, now);
+    expect(await reader().findTicketEvent("simposium", now)).toBeNull();
+  });
+
+  it("keeps the payment image of a fee when the event is saved", async () => {
+    const payImage = {
+      url: "https://storage.example/pay.webp",
+      thumbUrl: "https://storage.example/pay_thumb.webp",
+      path: "events/pay.webp",
+      thumbPath: "events/pay_thumb.webp",
+      width: 800,
+      height: 800,
+    };
+    await events.write(eventId, 1, (c) => ({ ...c!, fee: { ...fee, payImage } }), auditStub, now);
+    expect((await events.get(eventId))?.fee?.payImage).toEqual(payImage);
+  });
+
+  it("knows the questions of an event only by a valid id, and refuses a form on an event without one", async () => {
+    expect(await registrations.setupOf("a/b")).toBeNull();
+    expect(await registrations.setupOf("nope")).toBeNull();
+    expect(await registrations.setupOf(eventId)).toMatchObject({ formId: "form-1" });
+    await events.write(
+      eventId,
+      1,
+      (c) => ({ ...c!, registration: null, fee: null }),
+      auditStub,
+      now,
+    );
+    await expect(register("u1", null)).rejects.toThrow(/no registration form/);
+  });
+
+  it("shows a person their own registration and lists the proofs waiting for a check", async () => {
+    expect(await registrations.ownRegistration(eventId, "u1")).toBeNull();
+    await register("u1");
+    expect(await registrations.ownRegistration(eventId, "u1")).toMatchObject({
+      status: "pending",
+      payment: "unpaid",
+      feeCategory: "std",
+    });
+    expect(await registrations.listSubmitted()).toEqual([]);
+    await sendProof("u1");
+    expect(await registrations.listSubmitted()).toEqual([{ id: regId("u1"), eventId, at: now }]);
+  });
+
+  it("a ticket hash is set once; a scan of an unknown or foreign registration enters nobody", async () => {
+    fake.docs.set(`eventRegistrations/${regId("u1")}`, { ...checkedIn, eventId, ticketHash: "h" });
+    await registrations.setTicketHash(eventId, "u1", "h");
+    expect(doc(`eventRegistrations/${regId("u1")}`)).toMatchObject({ ticketHash: "h" });
+    fake.docs.set("eventRegistrations/elsewhere", { ...checkedIn, eventId: "other" });
+    for (const id of ["nobody", "elsewhere"]) {
+      expect(await registrations.checkIn(id, eventId, "door", "scan", now, auditStub)).toEqual({
+        outcome: "unknown",
+        userId: null,
+        category: null,
+        at: null,
+      });
+    }
+  });
+
+  it("undo needs someone checked in; an entry with no recorded checker can be undone by an editor", async () => {
+    const actor = { userId: "lead", canEditRegistrants: true };
+    await expect(
+      registrations.undoCheckIn(regId("nobody"), eventId, actor, now, auditStub),
+    ).rejects.toThrow(/not checked in/);
+    fake.docs.set(`eventRegistrations/${regId("u1")}`, { ...checkedIn, eventId });
+    expect(await registrations.undoCheckIn(regId("u1"), eventId, actor, now, auditStub)).toEqual({
+      userId: "u1",
+    });
   });
 });

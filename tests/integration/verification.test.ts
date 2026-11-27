@@ -339,6 +339,14 @@ describe("certificate pickup (D5-P)", () => {
     expect(result).toMatchObject({ ok: true, sheets: [{ activity: "Activity b5", number: "" }] });
   });
 
+  it("my certificates: an unnumbered batch prints no number", async () => {
+    batch("b5", { sheetNumberTemplate: null });
+    sheet("b5", 1, "h:rina@example.org");
+    expect(await pickup().own({ email: "rina@example.org", emailVerified: true })).toMatchObject([
+      { activity: "Activity b5", number: "" },
+    ]);
+  });
+
   it("no partial matches, no lists: a near address finds nothing", async () => {
     expect(await pickup().lookup({ email: "arif@example.or", captcha: "ok" })).toEqual({
       ok: true,

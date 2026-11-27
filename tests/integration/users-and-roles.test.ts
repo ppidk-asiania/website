@@ -7,6 +7,7 @@ import {
   createSqlUserStore,
 } from "@website/db/sql";
 import { createMemoryPasskeyStore } from "@website/db/memory";
+import { ConcurrencyConflictError } from "@website/domain/shared";
 import { createLogger } from "@website/observability";
 import {
   canAccessAdmin,
@@ -1044,6 +1045,26 @@ describe("Role Manager → Add New People from a pasted list (N3.3)", () => {
     expect(lines[0]?.message).toContain("second sign-in method");
     expect(fake.docs.get("users/bob")).toMatchObject({ roleIds: ["visitor"] });
     expect(invitesSent).toEqual([{ email: "new2@example.org", roleName: "Alumni" }]);
+  });
+
+  it("without a default role, a line that names none is marked unknown_role", async () => {
+    const result = await preview("boss", "plain@example.org", null);
+    expect((result as { data: { lines: unknown[] } }).data.lines).toEqual([
+      { line: 1, email: "plain@example.org", roleName: null, outcome: "unknown_role" },
+    ]);
+  });
+
+  it("an unexpected failure on a line is logged and reported generically; a stale account says so", async () => {
+    const failures = [() => new Error("mail down"), () => new ConcurrencyConflictError("stale")];
+    deps.sendInvite = () => Promise.reject(failures.shift()!());
+    const result = await apply("boss", list("new1@example.org", "new2@example.org"));
+    const lines = (result as { data: { lines: { done: string | null; message?: string }[] } }).data
+      .lines;
+    expect(lines.map((l) => [l.done, l.message])).toEqual([
+      ["failed", "This line could not be applied."],
+      ["failed", "The account changed meanwhile. Add this line again."],
+    ]);
+    expect(logLines.filter((l) => l.includes("people list line failed"))).toHaveLength(2);
   });
 
   it("takes at most 100 lines, needs users.edit, and a recent sign-in to apply", async () => {

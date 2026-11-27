@@ -399,7 +399,13 @@ export const FileAnswerSchema = z
 const chosen = (q: Question) => (value: string) =>
   q.options.includes(value) ? true : q.allowOther && value.length > 0;
 
-function answerSchema(q: Question): z.ZodType<AnswerValue> {
+/** A heading takes no answer: it has no schema, and an answer to it is an unknown key. */
+const takesAnswer = (q: Question): q is Question & { type: Exclude<QuestionType, "section"> } =>
+  q.type !== "section";
+
+function answerSchema(
+  q: Question & { type: Exclude<QuestionType, "section"> },
+): z.ZodType<AnswerValue> {
   switch (q.type) {
     case "short_text":
       return safeText(TEXT_LIMITS.short_text);
@@ -428,8 +434,6 @@ function answerSchema(q: Question): z.ZodType<AnswerValue> {
       return z.string().trim().regex(PHONE, "Enter a phone number with country code.");
     case "link":
       return z.string().trim().max(500).refine(isHttps, "Enter a link that starts with https://.");
-    case "section":
-      return z.never({ error: "A heading takes no answer." });
     case "multi_choice":
       return z
         .array(safeText(TEXT_LIMITS.other))
@@ -457,12 +461,10 @@ const isBlank = (value: unknown) =>
 
 export function answersSchema(questions: readonly Question[]) {
   const shape = Object.fromEntries(
-    questions
-      .filter((q) => q.type !== "section")
-      .map((q) => {
-        const schema = answerSchema(q);
-        return [q.id, q.required ? schema : schema.optional()];
-      }),
+    questions.filter(takesAnswer).map((q) => {
+      const schema = answerSchema(q);
+      return [q.id, q.required ? schema : schema.optional()];
+    }),
   );
   return z.preprocess(
     (raw) =>

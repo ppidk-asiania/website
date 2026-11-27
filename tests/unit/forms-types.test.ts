@@ -170,6 +170,31 @@ describe("results summary (N2.1)", () => {
     });
   });
 
+  it("counts single choices and dropdowns, skips an answer of another shape, and counts consent", () => {
+    const questions = [
+      q("q_d", "dropdown", { options: ["A", "B"] }),
+      q("q_s", "single_choice", { options: ["X"] }),
+      q("q_k", "consent"),
+    ];
+    const [d, s, k] = summarizeResponses(questions, [
+      r({ q_d: "A", q_s: "X", q_k: true }),
+      r({ q_d: 7, q_k: true }),
+    ]);
+    expect(d).toMatchObject({
+      answered: 2,
+      rows: [
+        { label: "A", count: 1, percent: 50 },
+        { label: "B", count: 0, percent: 0 },
+      ],
+    });
+    expect(s).toMatchObject({ answered: 1, rows: [{ label: "X", count: 1, percent: 100 }] });
+    expect(k).toMatchObject({ answered: 2, rows: [{ label: "Agreed", count: 2, percent: 100 }] });
+    expect(summarizeResponses([q("q_k", "consent")], [])[0]).toMatchObject({
+      answered: 0,
+      rows: [{ count: 0, percent: 0 }],
+    });
+  });
+
   it("an empty form gives empty summaries and headings or files are left out", () => {
     const [num, rating] = summarizeResponses(
       [q("q_n", "number"), q("q_r", "rating"), q("q_s", "section"), q("q_f", "file")],
