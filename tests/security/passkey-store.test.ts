@@ -88,7 +88,7 @@ describe("sql passkey store with rows saved before names existed", () => {
   it("reads a missing name and device as empty", async () => {
     const fake = fakeDb();
     const store = createSqlPasskeyStore(fake.db as unknown as Db);
-    const old: Partial<PasskeyCredential> = credential();
+    const old: { -readonly [K in keyof PasskeyCredential]?: PasskeyCredential[K] } = credential();
     delete old.name;
     delete old.device;
     await store.add(old as PasskeyCredential);

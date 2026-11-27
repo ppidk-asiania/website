@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { LinkedProvider, OwnAccountAdmin, PasskeyCredential } from "@website/auth";
 import {
   createSqlAccountEmailStore,
@@ -69,8 +69,9 @@ const profileInput = {
 
 let fake: ReturnType<typeof fakeDb>;
 let providers: LinkedProvider[];
-let admin: Pick<OwnAccountAdmin, "details"> &
-  Record<"changeEmail" | "unlinkProvider" | "deleteUser", ReturnType<typeof vi.fn>>;
+let admin: Pick<OwnAccountAdmin, "details"> & {
+  [K in "changeEmail" | "unlinkProvider" | "deleteUser"]: Mock<OwnAccountAdmin[K]>;
+};
 let passkeys: ReturnType<typeof createMemoryPasskeyStore>;
 let send: ReturnType<typeof vi.fn<(message: unknown, key: string) => Promise<unknown>>>;
 let removed: string[];
@@ -101,9 +102,9 @@ beforeEach(() => {
   providers = [google];
   admin = {
     details: () => Promise.resolve({ providers, createdAt: new Date("2026-02-04T00:00:00Z") }),
-    changeEmail: vi.fn(() => Promise.resolve()),
-    unlinkProvider: vi.fn(() => Promise.resolve()),
-    deleteUser: vi.fn(() => Promise.resolve()),
+    changeEmail: vi.fn<OwnAccountAdmin["changeEmail"]>(() => Promise.resolve()),
+    unlinkProvider: vi.fn<OwnAccountAdmin["unlinkProvider"]>(() => Promise.resolve()),
+    deleteUser: vi.fn<OwnAccountAdmin["deleteUser"]>(() => Promise.resolve()),
   };
   passkeys = createMemoryPasskeyStore();
   send = vi.fn(() => Promise.resolve("logged"));
