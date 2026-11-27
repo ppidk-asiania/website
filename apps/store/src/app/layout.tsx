@@ -10,7 +10,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Shop", template: "%s · Shop" },
+  title: { default: "Store", template: "%s · Store" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

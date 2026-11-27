@@ -4,7 +4,7 @@ export type {
   WebRepositories,
   AdminRepositories,
   GatewayRepositories,
-  ShopRepositories,
+  StoreRepositories,
 } from "./roles";
 export type {
   AccountChange,

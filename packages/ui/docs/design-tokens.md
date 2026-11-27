@@ -3,7 +3,7 @@
 ## What it does
 
 One global stylesheet holds every colour, font setting, size, spacing, radius, shadow and motion
-value. web, admin and shop import it, so changing a token changes all three apps.
+value. web, admin and store import it, so changing a token changes all three apps.
 
 ## Where it lives
 

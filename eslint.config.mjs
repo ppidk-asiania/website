@@ -18,27 +18,27 @@ const FRAMEWORKS = [
 ];
 const SDK_ANY = "^mysql2(/.*)?$";
 const SDK_MESSAGE = "MySQL is only accessed via @website/db/sql.";
-const APPS = "^(web|admin|shop|gateway)(/.*)?$|(^|/)apps/";
+const APPS = "^(web|admin|store|gateway)(/.*)?$|(^|/)apps/";
 
 const CROSS_APP = {
-  regex: "^(\\.\\./){2,}(apps|web|admin|shop|gateway)(/|$)",
+  regex: "^(\\.\\./){2,}(apps|web|admin|store|gateway)(/|$)",
   message: "Apps must not import other apps.",
 };
 
 const APP_RULES = {
   web: [
     {
-      group: ["@website/audit", "@website/apikeys", "@website/domain/shop"],
-      message: "The public site has no admin tooling and does not depend on the shop domain.",
+      group: ["@website/audit", "@website/apikeys", "@website/domain/store"],
+      message: "The public site has no admin tooling and does not depend on the store domain.",
     },
   ],
   admin: [
     {
-      group: ["@website/domain/shop", "@website/apikeys"],
+      group: ["@website/domain/store", "@website/apikeys"],
       message: "Not part of the admin's approved dependencies yet.",
     },
   ],
-  shop: [
+  store: [
     {
       group: [
         "@website/domain/content",
@@ -47,11 +47,11 @@ const APP_RULES = {
         "@website/domain/newsletter",
         "@website/domain/members",
       ],
-      message: "Shop depends only on @website/domain/shop (extraction boundary).",
+      message: "Store depends only on @website/domain/store (extraction boundary).",
     },
     {
       group: ["@website/audit", "@website/apikeys"],
-      message: "Not part of the shop's approved dependencies.",
+      message: "Not part of the store's approved dependencies.",
     },
   ],
 };
@@ -204,11 +204,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/domain/src/shop/**/*.ts"],
+    files: ["packages/domain/src/store/**/*.ts"],
     rules: restrict([
       {
         group: ["../content*", "../events*", "../organizations*", "../newsletter*", "../members*"],
-        message: "domain/shop must stay self-contained (extraction boundary).",
+        message: "domain/store must stay self-contained (extraction boundary).",
       },
       {
         regex: "^@website/(?!security/validation$)",
@@ -222,7 +222,7 @@ export default tseslint.config(
   {
     files: ["packages/domain/src/{content,events,organizations,newsletter,members,shared}/**/*.ts"],
     rules: restrict([
-      { group: ["../shop*"], message: "Only the shop app may depend on domain/shop." },
+      { group: ["../store*"], message: "Only the store app may depend on domain/store." },
       {
         regex: "^@website/(?!security/validation$)",
         message: "Domain imports no other workspace package (except @website/security/validation).",
@@ -234,7 +234,7 @@ export default tseslint.config(
   },
 
   {
-    files: ["apps/{web,admin,shop}/**/*.{ts,tsx}"],
+    files: ["apps/{web,admin,store}/**/*.{ts,tsx}"],
     plugins: { "@next/next": nextPlugin, "react-hooks": reactHooks },
     settings: { next: { rootDir: "apps/*/" } },
     languageOptions: { globals: { ...globals.browser } },
@@ -264,8 +264,8 @@ export default tseslint.config(
           "The gateway must not import staff auth/session, admin authorization, admin audit or UI.",
       },
       {
-        group: ["@website/domain/members", "@website/domain/shop"],
-        message: "Personal data and shop internals never leave through the third-party API.",
+        group: ["@website/domain/members", "@website/domain/store"],
+        message: "Personal data and store internals never leave through the third-party API.",
       },
       {
         group: ["react", "react-dom", "next", "next/*"],

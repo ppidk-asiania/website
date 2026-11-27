@@ -15,8 +15,8 @@
       "expectBody": "{\"status\":\"ok\"}"
     },
     {
-      "name": "shop",
-      "url": "https://shop.example.org/",
+      "name": "store",
+      "url": "https://store.example.org/",
       "expectStatus": 200,
       "intervalSeconds": 60
     },

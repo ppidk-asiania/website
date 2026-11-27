@@ -9,7 +9,7 @@
     "./events": "./src/events/index.ts",
     "./organizations": "./src/organizations/index.ts",
     "./newsletter": "./src/newsletter/index.ts",
-    "./shop": "./src/shop/index.ts",
+    "./store": "./src/store/index.ts",
     "./members": "./src/members/index.ts",
     "./shared": "./src/shared/index.ts",
     "./messaging": "./src/messaging/index.ts",

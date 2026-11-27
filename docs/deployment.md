@@ -10,11 +10,11 @@ restart. There are no preview deployments.
 | ------- | ------------------ | ------------------------------------------ | ---------------- |
 | web     | main domain        | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
 | admin   | `admin.` subdomain | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
-| shop    | `shop.` subdomain  | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
+| store   | `store.` subdomain | GitHub Actions (`NEXT_OUTPUT=standalone`)  | `server.js`      |
 | gateway | `api.` subdomain   | on the server (cPanel Git Version Control) | `dist/server.js` |
 
 Shared hosts often have a glibc older than the Next.js compiler needs (the build fails with
-`GLIBC_2.29 not found`), so web, admin and shop are built in GitHub Actions and uploaded; only the
+`GLIBC_2.29 not found`), so web, admin and store are built in GitHub Actions and uploaded; only the
 gateway (plain Node, tsup) is built on the server.
 
 What Passenger means for the code:
@@ -37,7 +37,7 @@ There are exactly three branches. **Do not create other branches** (no feature/f
 | `prod`    | What is live (default branch)         | cPanel production apps                    |
 
 ```text
-commit + push to dev ─PR─▶ staging ─PR─▶ prod ─▶ GitHub Actions (web, admin, shop) + cPanel Git (gateway)
+commit + push to dev ─PR─▶ staging ─PR─▶ prod ─▶ GitHub Actions (web, admin, store) + cPanel Git (gateway)
 CI runs on every push and PR: format, lint+boundaries, typecheck, test, build, secrets, e2e
 ```
 
@@ -83,18 +83,18 @@ Also add these two as **Variables** (public values, not secret): `NEXT_PUBLIC_GO
 | ------- | -------------------------------- | ---------------- | ------------------ |
 | web     | `apps/web/apps/web`              | `server.js`      | main domain        |
 | admin   | `apps/admin/apps/admin`          | `server.js`      | `admin.` subdomain |
-| shop    | `apps/shop/apps/shop`            | `server.js`      | `shop.` subdomain  |
+| store   | `apps/store/apps/store`          | `server.js`      | `store.` subdomain |
 | gateway | `repositories/2026/apps/gateway` | `dist/server.js` | `api.` subdomain   |
 
 7. Add each app's variables from its `.env.example` in the app's screen (see
    [environment.md](environment.md)): `APP_ENV=production`, real `https://` URLs, the same
-   `SESSION_COOKIE_DOMAIN` and `SESSION_SECRET` for web, admin and shop. Never put them in the repository.
+   `SESSION_COOKIE_DOMAIN` and `SESSION_SECRET` for web, admin and store. Never put them in the repository.
 
-8. **SSL/TLS Status** → run AutoSSL for the main domain and the `admin.`, `shop.` and `api.`
+8. **SSL/TLS Status** → run AutoSSL for the main domain and the `admin.`, `store.` and `api.`
    subdomains (webhooks and cron calls need a valid certificate on `admin.`).
 
 9. **MySQL Databases** (once): create one database (e.g. `<cpanel>_ppidk`) and one user per app
-   (`<cpanel>_web`, `<cpanel>_admin`, `<cpanel>_shop`), each added to the database with ALL
+   (`<cpanel>_web`, `<cpanel>_admin`, `<cpanel>_store`), each added to the database with ALL
    PRIVILEGES (tables are created on first use). Their URLs go into `DATABASE_URL` of each app
    (`mysql://<user>:<password>@localhost:3306/<database>`). Keep the passwords in the password manager.
 10. **Files** (nothing to set up): uploads and copied files live in the MySQL `files` collection
@@ -112,7 +112,7 @@ Also add these two as **Variables** (public values, not secret): `NEXT_PUBLIC_GO
 
 Merge to `prod` (PR from `staging`, as above).
 
-- web, admin, shop deploy by themselves: watch **Actions → Deploy cPanel**. To redeploy without a
+- web, admin, store deploy by themselves: watch **Actions → Deploy cPanel**. To redeploy without a
   new commit, use **Run workflow** on `prod`.
 - gateway: **Git Version Control** → Manage → Pull or Deploy → **Update from Remote** →
   **Deploy HEAD Commit**. Never edit files in the server copy: cPanel refuses to deploy a
@@ -125,8 +125,8 @@ origin check in `packages/security/src/request-guard.ts` compares the `Origin` h
 ## Rollback
 
 - **Code**: revert the change on `dev`, promote it to `prod` through the usual PRs; the workflow
-  redeploys web, admin and shop, then deploy the gateway again (Git Version Control → Deploy HEAD
-  Commit). For an emergency, **Run workflow** on an older `prod` commit redeploys web, admin and shop.
+  redeploys web, admin and store, then deploy the gateway again (Git Version Control → Deploy HEAD
+  Commit). For an emergency, **Run workflow** on an older `prod` commit redeploys web, admin and store.
 - **Data**: changes are expand/contract — add new fields/collections first, ship code that handles
   both shapes, remove the old shape in a later release. Never ship a destructive data change in
   the same deploy as the code that needs it. Take a backup/PITR note before every migration.
@@ -175,8 +175,8 @@ big PDFs or send in batches must stay inside them.
 | Number of processes                   | 200                                                                  |
 | Maximum request time                  | _tbd_                                                                |
 | Shortest cron interval                | _tbd_                                                                |
-| Node.js versions offered (`/opt/alt`) | _tbd_                                                                |
-| glibc version (`ldd --version`)       | _tbd_                                                                |
+| Node.js versions offered (`/opt/alt`) | `alt-nodejs22` and `alt-nodejs24` (2026-11-28)                       |
+| glibc version (`ldd --version`)       | 2.28 (too old to build Next.js here; builds run in GitHub Actions)   |
 | Passenger processes per app           | _tbd_                                                                |
 | MySQL                                 | 8.0.46; databases 7.94 GB of the 12 GB disk; I/O 150 MB/s, 6000 IOPS |
 
@@ -207,31 +207,29 @@ percentage rollouts are needed.
   baked into browser bundles) are GitHub Actions **Variables**. Everything secret is also kept in
   the password manager.
 - Each app uses its own MySQL user (`DATABASE_URL`). `SESSION_SECRET` is shared by web, admin and
-  shop. Rotate passwords and keys on schedule and when anyone leaves (rotating `SESSION_SECRET`
+  store. Rotate passwords and keys on schedule and when anyone leaves (rotating `SESSION_SECRET`
   signs everybody out).
 - Every new variable: schema fragment (`packages/config/src/env/schemas.ts`) + `.env.example`
   placeholder + a row in [environment.md](environment.md).
 
 ## Environment set-up (owner checklist)
 
-One-time console work. Tick each item here when it is done; never write secret values in this
+One-time console work. Delete each item here when it is done; never write secret values in this
 file (they live in the cPanel app screens and the password manager).
 
-- [ ] DomaiNesia: fill in [Limits](#limits) from the hosting plan.
-- [ ] On the host: `ldd --version`, `ls /opt/alt`; after the first deploy that ships image uploads,
-      `node -e "require('sharp')"` in the admin app root (if it fails, install the WebAssembly build of sharp:
-      `packages/db/docs/files.md` → Configuration).
-- [ ] Google OAuth client for Sign in with Google (One-time setup step 12).
-- [ ] `SESSION_SECRET` generated (≥ 32 characters), the same value in web, admin and shop.
-- [ ] MySQL database + one user per app, `FILE_STORAGE_DIR` folder, cron `expire` (One-time setup
-      steps 9–11).
+- [ ] DomaiNesia: fill in the remaining [Limits](#limits) rows (maximum request time, shortest cron
+      interval, Passenger processes per app).
+- [ ] After the first deploy that ships image uploads, `node -e "require('sharp')"` in the admin app
+      root (if it fails, install the WebAssembly build of sharp: `packages/db/docs/files.md` → Configuration).
+- [ ] Cron: create `~/.config/ppidk/cron-secret`, add the `expire` line next to the others
+      (One-time setup step 11) and call `noop` once to check it.
 - [ ] Nightly `mysqldump` + files backup and a weekly off-server copy
       ([disaster-recovery.md](disaster-recovery.md)).
-- [ ] Generate `CRON_SECRET`, `FIELD_ENCRYPTION_KEY` and `SIGNED_LINK_SECRET` and store them in the
-      password manager; they are added to the app screens when the step that uses them is built.
-- [ ] Decide the main domain name and whether to run a `staging.*` set of apps (DEC-17); then
-      DNS + AutoSSL for the main domain, `admin.`, `shop.` and `api.` (later `verif.ppiasiania.id`).
-- [ ] First superadmin granted (`infrastructure/scripts/grant-superadmin.mjs`, see
+- [ ] E-mail: verify the sending domain at Resend, set `RESEND_API_KEY` and
+      `EMAIL_FROM_TRANSACTIONAL` on web AND admin (sign-up verification and password-reset e-mails
+      need them).
+- [ ] Decide whether to run a `staging.*` set of apps (DEC-17).
+- [ ] First superadmin granted on the live database (`infrastructure/scripts/grant-superadmin.mjs`, see
       `packages/auth/docs/authentication.md` → Account lifecycle).
 - [ ] People and the organisation imported from PPIDK once (block J): freeze the PPIDK people
       screens, export the tables as TSV, set "Roles from appointments" (Role Manager → Edit Role), then
@@ -258,8 +256,8 @@ file (they live in the cPanel app screens and the password manager).
       report card and the cash balance with PPIDK before switching it off.
 - [ ] Before the first letter is issued: add `verif.ppiasiania.id` as an extra domain of the web
       app (cPanel → Domains + AutoSSL, DNS record), set `VERIFICATION_HOST` to it on web AND admin.
-- [ ] Personal signatures: generate `FIELD_ENCRYPTION_KEY` once (`docs/environment.md`), set the
-      SAME value on web AND admin, keep a copy offline (losing it loses every stored signature).
+- [ ] Personal signatures: set `FIELD_ENCRYPTION_KEY` (generated, see `docs/environment.md`) to the SAME
+      value on web AND admin in cPanel; keep a copy offline (losing it loses every stored signature).
 - [ ] Universities imported once the PPI chapters are active
       (`infrastructure/scripts/import-ror-universities.mjs`, dry run first; see
       `packages/domain/docs/members.md` → Universities). Run again when chapters are added.

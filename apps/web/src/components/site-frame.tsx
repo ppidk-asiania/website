@@ -81,7 +81,7 @@ export function SiteFooter({ t }: { t: Dictionary }) {
     ["/news", t.nav.news],
     ["/map", t.nav.map],
   ] as const;
-  const shopUrl = getAppUrls().SHOP_URL;
+  const storeUrl = getAppUrls().STORE_URL;
   return (
     <footer className="site-footer">
       <div className="site-frame__inner site-footer__main">
@@ -101,7 +101,7 @@ export function SiteFooter({ t }: { t: Dictionary }) {
           <h2 className="site-footer__heading">{t.footer.services}</h2>
           <ul className="site-footer__list">
             <li>
-              <a href={shopUrl ?? "#"}>{t.footer.shop}</a>
+              <a href={storeUrl ?? "#"}>{t.footer.store}</a>
             </li>
           </ul>
         </nav>

@@ -32,7 +32,7 @@ const ALLOWED = {
     "security",
     "ui",
   ],
-  shop: [
+  store: [
     "auth",
     "config",
     "db",
@@ -61,7 +61,7 @@ const ALLOWED = {
 
 /** @type {Record<string, Record<string, string[]>>} */
 const SUBPATHS = {
-  shop: { domain: ["shop", "shared"] },
+  store: { domain: ["store", "shared"] },
   web: {
     domain: [
       "content",
@@ -112,7 +112,7 @@ for (const group of ["apps", "packages"]) {
 
 const shortName = (/** @type {string} */ pkgName) => pkgName.replace(/^@website\//, "");
 const isInternal = (/** @type {string} */ name) =>
-  name.startsWith("@website/") || ["web", "admin", "shop", "gateway"].includes(name);
+  name.startsWith("@website/") || ["web", "admin", "store", "gateway"].includes(name);
 
 /** @type {Map<string, string[]>} */
 const graph = new Map();
@@ -128,7 +128,7 @@ for (const ws of workspaces) {
   graph.set(key, deps.map(shortName));
   for (const dep of deps) {
     const target = shortName(dep);
-    if (["web", "admin", "shop", "gateway"].includes(target)) {
+    if (["web", "admin", "store", "gateway"].includes(target)) {
       errors.push(`${ws.group}/${key} → ${target}: apps must never depend on apps.`);
     } else if (!(ALLOWED[key] ?? []).includes(target)) {
       const reason = FORBIDDEN_REASON[key]?.[target] ?? "edge not in ALLOWED matrix";

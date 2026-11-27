@@ -9,10 +9,10 @@ import {
   sessionEnv,
 } from "@website/config/env";
 
-const shopEnvSchema = baseEnv
+const storeEnvSchema = baseEnv
   .extend(databaseEnv.shape)
   .extend(sessionEnv.shape)
   .extend(paymentEnv.partial().shape)
   .extend(resendEnv.partial().shape);
 
-export const getShopEnv = lazyEnv(() => loadEnv(shopEnvSchema, process.env));
+export const getStoreEnv = lazyEnv(() => loadEnv(storeEnvSchema, process.env));

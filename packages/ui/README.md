@@ -4,7 +4,7 @@ Shared presentational React components.
 
 ## Responsibilities
 
-- Layout and small UI building blocks used by web, admin and shop
+- Layout and small UI building blocks used by web, admin and store
 
 ## Structure
 

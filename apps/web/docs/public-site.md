@@ -4,7 +4,7 @@
 
 Every public page has the same dark header and footer (Figma design). Header: logo (links home),
 About Us, Events, Gallery, News, Map; the current section is bold (`aria-current="page"`). Footer:
-logo and tagline; Explore (Home … Map) and Services (E-Commerce = `SHOP_URL`, hidden when unset);
+logo and tagline; Explore (Home … Map) and Services (E-Commerce = `STORE_URL`, hidden when unset);
 Our Community (five PPIs, linking to `/map`); address and social icons (new tab); copyright year,
 Terms of Use, Privacy Policy. All labels come from the dictionaries, so they follow the page
 language. The header has no language switch; on the right it streams a **Log in** chip for

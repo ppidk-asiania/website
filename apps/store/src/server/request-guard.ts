@@ -12,7 +12,7 @@ const getEnv = lazyEnv(() =>
 
 const getGuard = lazyEnv(() => {
   const env = getEnv();
-  const logger = createLogger({ service: "shop", level: env.LOG_LEVEL });
+  const logger = createLogger({ service: "store", level: env.LOG_LEVEL });
   return createRequestGuard({
     appEnv: env.APP_ENV,
     secret: env.RATE_LIMIT_SECRET,
@@ -22,7 +22,7 @@ const getGuard = lazyEnv(() => {
       const db = loadEnv(baseEnv.extend(databaseEnv.shape), process.env);
       return createSqlRateLimitStore(
         getDatabaseForRole({
-          role: "shop_rw",
+          role: "store_rw",
           url: db.DATABASE_URL,
           connectionLimit: db.DATABASE_CONNECTION_LIMIT,
         }),

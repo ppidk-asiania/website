@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import adminConfig from "../../apps/admin/next.config";
-import shopConfig from "../../apps/shop/next.config";
+import storeConfig from "../../apps/store/next.config";
 import webConfig from "../../apps/web/next.config";
 
 describe("architecture", () => {
@@ -16,8 +16,8 @@ describe("architecture", () => {
 });
 
 describe("rendering", () => {
-  it("web, admin and shop enable Partial Prerendering (cacheComponents)", () => {
-    const configs = { web: webConfig, admin: adminConfig, shop: shopConfig };
+  it("web, admin and store enable Partial Prerendering (cacheComponents)", () => {
+    const configs = { web: webConfig, admin: adminConfig, store: storeConfig };
     for (const [app, config] of Object.entries(configs)) {
       expect(config.cacheComponents, app).toBe(true);
     }
@@ -29,7 +29,7 @@ describe("standalone build (cPanel)", () => {
   const loaders = {
     web: () => import("../../apps/web/next.config"),
     admin: () => import("../../apps/admin/next.config"),
-    shop: () => import("../../apps/shop/next.config"),
+    store: () => import("../../apps/store/next.config"),
   };
 
   it("turbo passes NEXT_OUTPUT to the build task", () => {

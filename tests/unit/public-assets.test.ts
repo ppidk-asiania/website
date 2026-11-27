@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "../..");
-const APPS = ["web", "admin", "shop"];
+const APPS = ["web", "admin", "store"];
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

@@ -6,7 +6,7 @@ To be provisioned in the observability phase. Planned checks:
 | ------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Uptime              | `https://web.example.org/health`                   | 2 consecutive failures                                                           |
 | Uptime              | `https://admin.example.org/health`                 | 2 consecutive failures                                                           |
-| Uptime              | `https://shop.example.org/`                        | 2 consecutive failures                                                           |
+| Uptime              | `https://store.example.org/`                       | 2 consecutive failures                                                           |
 | Uptime              | `https://api.example.org/health`                   | 2 consecutive failures                                                           |
 | Error rate          | `stderr.log` per app (cPanel), Sentry later        | new error type / spike                                                           |
 | Security events     | log stream `security_event`                        | any `staff.role_changed`, `apikey.created`, `audit.revert`, login-failure spikes |
@@ -15,5 +15,5 @@ To be provisioned in the observability phase. Planned checks:
 | Cost                | GCP budget alerts                                  | 50% / 90% (never auto-disable billing)                                           |
 
 `checks.example.json` is a vendor-neutral list for whichever uptime tool is chosen. web, admin and
-the gateway answer `GET /health` with `{"status":"ok"}` and never touch the database; shop has no
+the gateway answer `GET /health` with `{"status":"ok"}` and never touch the database; store has no
 health route yet, so its home page is checked.

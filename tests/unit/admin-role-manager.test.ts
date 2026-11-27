@@ -148,9 +148,9 @@ describe("Role Manager roles", () => {
         { value: "audit.revert", label: "Audit Revert" },
       ],
     });
-    expect(groups.find((g) => g.page === "shop_orders")?.permissions.at(-1)).toEqual({
-      value: "shop_orders.refund",
-      label: "Shop Orders Refund",
+    expect(groups.find((g) => g.page === "store_orders")?.permissions.at(-1)).toEqual({
+      value: "store_orders.refund",
+      label: "Store Orders Refund",
     });
     expect(groups.flatMap((g) => g.permissions.map((p) => p.value))).toEqual(
       expect.arrayContaining([...PAGE_PERMISSIONS]),
@@ -184,7 +184,7 @@ describe("Role Manager roles", () => {
     expect(filterPermissionGroups(groups, "  ")).toEqual(groups);
     expect(pages("AUDIT LOG")).toEqual([["audit", 3]]);
     expect(pages("revert")).toEqual([["audit", 1]]);
-    expect(pages("shop_orders.refund")).toEqual([["shop_orders", 1]]);
+    expect(pages("store_orders.refund")).toEqual([["store_orders", 1]]);
     expect(pages("nothing like this")).toEqual([]);
   });
 });

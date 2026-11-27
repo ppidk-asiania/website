@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isPubliclyVisible } from "@website/domain/content";
 import { isRegistrationOpen } from "@website/domain/events";
-import { money, orderTotal } from "@website/domain/shop";
+import { money, orderTotal } from "@website/domain/store";
 
 const now = new Date("2026-10-07T00:00:00Z");
 const past = new Date("2026-10-01T00:00:00Z");

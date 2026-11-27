@@ -1,4 +1,4 @@
-# shop — feature docs
+# store — feature docs
 
 No feature docs yet.
 

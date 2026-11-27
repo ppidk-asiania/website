@@ -13,7 +13,7 @@ This block is written and re-added by `turbo` before repository-scoped commands 
 
 Read `docs/architecture.md` before changing structure. Non-negotiable:
 
-- Four deployables (`apps/web`, `apps/admin`, `apps/shop`, `apps/gateway`) in one monorepo. No new apps, services, queues or job workers without an architecture decision.
+- Four deployables (`apps/web`, `apps/admin`, `apps/store`, `apps/gateway`) in one monorepo. No new apps, services, queues or job workers without an architecture decision.
 - Respect the dependency matrix. `pnpm lint` runs `scripts/check-boundaries.mjs`; never weaken it to make a change pass.
 - `packages/domain` is framework-free: no React/Next/Hono/browser/Node APIs. Declare a port instead.
 - Sign-in is our own (`packages/auth/docs/authentication.md`, DEC-24): accounts in MySQL (`authAccounts`), sessions signed with `SESSION_SECRET`, Google through Google Identity Services (ID token verified on the server), e-mail + password (scrypt) and passkeys. No Firebase. `mysql2` only in `packages/db/src/sql/store.ts`.

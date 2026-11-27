@@ -18,7 +18,7 @@ env:
 
 jobs:
   deploy:
-    name: Build and upload web, admin, shop
+    name: Build and upload web, admin, store
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -31,7 +31,7 @@ export const googleSignInEnv = z.object({
 });
 
 export const sessionEnv = z.object({
-  /** Signs session cookies and sign-in links; the same value on web, admin and shop. */
+  /** Signs session cookies and sign-in links; the same value on web, admin and store. */
   SESSION_SECRET: nonEmpty.min(32),
   SESSION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(12).default(8),
   SESSION_COOKIE_DOMAIN: z
@@ -172,6 +172,6 @@ export const gatewayEnv = z.object({
 export const publicUrlsEnv = z.object({
   WEB_URL: optionalUrl,
   ADMIN_URL: optionalUrl,
-  SHOP_URL: optionalUrl,
+  STORE_URL: optionalUrl,
   API_URL: optionalUrl,
 });

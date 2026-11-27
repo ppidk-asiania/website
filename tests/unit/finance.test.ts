@@ -17,7 +17,7 @@ import {
   type FinanceRequest,
 } from "@website/domain/finance";
 import { decimalToMinor, formatMoney, minorDigits, money, toMinor } from "@website/domain/shared";
-import { money as shopMoney } from "@website/domain/shop";
+import { money as storeMoney } from "@website/domain/store";
 
 const now = new Date("2026-11-04T03:00:00Z");
 const file = (name = "rab.pdf"): FinanceFile => ({
@@ -62,9 +62,9 @@ const submitted = submitRequest(base, now);
 const reviewed = reviewRequest(submitted, "bendahara", "Angka sesuai", now);
 const authorized = authorizeRequest(reviewed, "koor", "", now);
 
-describe("money (DEC-8: shared kernel, shop API unchanged)", () => {
-  it("is the same helper in shop and shared", () => {
-    expect(shopMoney).toBe(money);
+describe("money (DEC-8: shared kernel, store API unchanged)", () => {
+  it("is the same helper in store and shared", () => {
+    expect(storeMoney).toBe(money);
     expect(() => money(1, "usd")).toThrow("ISO 4217");
   });
 

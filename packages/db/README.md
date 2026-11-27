@@ -5,7 +5,7 @@ Database access (MySQL 8 on cPanel) and file storage (cPanel disk), exposed per 
 ## Responsibilities
 
 - Implements the repository ports declared in `@website/domain`
-- Gives each app only the repositories its role allows (`web_ro`, `admin_rw`, `shop_rw`, `gateway_rw`)
+- Gives each app only the repositories its role allows (`web_ro`, `admin_rw`, `store_rw`, `gateway_rw`)
 - In-memory repositories for development and tests
 
 ## Structure

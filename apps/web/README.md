@@ -5,7 +5,7 @@ Public website of PPIDK Asia-Oseania and the member self-service area.
 ## Responsibilities
 
 - Landing pages, news, articles, events, gallery, organization and chapters
-- Member sign-up/sign-in (Google, email/password, passkeys), password reset, own-profile management (same user pool as admin and shop)
+- Member sign-up/sign-in (Google, email/password, passkeys), password reset, own-profile management (same user pool as admin and store)
 - Public forms (newsletter, event registration) protected by reCAPTCHA
 
 ## Structure
@@ -29,7 +29,7 @@ Public website of PPIDK Asia-Oseania and the member self-service area.
 
 - Domain `web.example.org`, local port **3000**.
 - May read public content and the signed-in user's **own** profile only (`profile.*_own`).
-- No admin tooling: may not import `@website/audit`, `@website/apikeys` or `@website/domain/shop`.
+- No admin tooling: may not import `@website/audit`, `@website/apikeys` or `@website/domain/store`.
 
 ## Commands
 

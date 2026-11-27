@@ -19,7 +19,7 @@ describe("users are locked to their own uid", () => {
     expect(can(alice, "profile.read_own", { ownerId: "alice-uid" })).toBe(true);
     expect(can(alice, "profile.read_own", { ownerId: "bob-uid" })).toBe(false);
     expect(can(alice, "registrations.read_own", { ownerId: "bob-uid" })).toBe(false);
-    expect(can(alice, "shop.orders.read_own", {})).toBe(false);
+    expect(can(alice, "store.orders.read_own", {})).toBe(false);
   });
 
   it("a regular user cannot use any staff permission", () => {

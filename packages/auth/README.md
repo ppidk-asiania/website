@@ -4,7 +4,7 @@ Identity: who the user is. Never what they may do.
 
 ## Responsibilities
 
-- Session cookie policy (`__Secure-session`, one session shared by web, admin and shop)
+- Session cookie policy (`__Secure-session`, one session shared by web, admin and store)
 - `safeReturnUrl()`: validates `/login?next=…` targets (no open redirect)
 - Sign-in accounts: `AuthAccountStore` port (MySQL adapter in `@website/db/sql`), signed session
   cookies (`createIdentityProvider`), Google ID token check, scrypt passwords, e-mail links

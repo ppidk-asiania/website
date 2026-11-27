@@ -2,7 +2,7 @@
 
 ## What it does
 
-web, admin and shop show one shared, generic page for every common error: 401 (sign-in required),
+web, admin and store show one shared, generic page for every common error: 401 (sign-in required),
 403 (access denied), 404 (page not found) and 500 (something went wrong). The page never shows the
 error message or stack trace. Next.js prints the full error in the **server terminal** together
 with a short `digest`; the 500 page shows only that digest as "Reference" so a report from a user
@@ -12,7 +12,7 @@ can be matched to the server log line.
 
 - Component and copy: `packages/ui/src/error-page.tsx` (`ErrorPage`), styles `.ui-error-*` in
   `packages/ui/src/styles.css`
-- Next.js files in each app (`apps/{web,admin,shop}/src/app/`):
+- Next.js files in each app (`apps/{web,admin,store}/src/app/`):
 
   | File               | When it is shown                                       | Status |
   | ------------------ | ------------------------------------------------------ | ------ |

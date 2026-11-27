@@ -27,8 +27,8 @@ ISO 4217), `money`, `addMoney` (refuses mixing currencies), `minorDigits`, `form
 "1,500,000.50" and "1.500.000,50": with both marks the last is the decimal mark, a repeated mark
 groups thousands, a single mark before exactly three digits groups thousands ("150.000"), any
 other single mark is the decimal mark ("12,50"); anything ambiguous is refused, never guessed.
-`@website/domain/shop` re-exports `money`/`addMoney`/`Money`, so the shop API and tests did not
-change and shop still imports nothing but the shared kernel. Minor digits are a fixed table
+`@website/domain/store` re-exports `money`/`addMoney`/`Money`, so the store API and tests did not
+change and store still imports nothing but the shared kernel. Minor digits are a fixed table
 (JPY, KRW, VND = 0, others 2), not Intl: CLDR gives IDR 0 cash digits, ISO and PPIDK store 2, and
 a stored amount must mean the same on every runtime. Amounts of different currencies are never
 added or converted (PPIDK DECISIONS §27).

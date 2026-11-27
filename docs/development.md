@@ -31,13 +31,13 @@ pnpm dev
 | ------- | -------------------------------------------------------------------- |
 | web     | http://localhost:3000                                                |
 | admin   | http://localhost:3001                                                |
-| shop    | http://localhost:3002                                                |
+| store   | http://localhost:3002                                                |
 | gateway | http://localhost:3003/health · http://localhost:3003/v1/openapi.json |
 
 No `.env.local` is needed for the smoke pages. When you need real services, copy
 `apps/<app>/.env.example` to `apps/<app>/.env.local` and fill in real values (one database for every environment; `NEXT_PUBLIC_GOOGLE_CLIENT_ID` needs `http://localhost:3000` among the OAuth client's JavaScript origins).
 
-Run one app: `pnpm --filter web dev` (or `admin`, `shop`, `gateway`).
+Run one app: `pnpm --filter web dev` (or `admin`, `store`, `gateway`).
 
 ### Database from your computer (SSH tunnel)
 
@@ -77,5 +77,5 @@ tests/e2e          Playwright request-level smoke against built apps (no browser
 - Strict TypeScript; `any` is a lint error. Justify any `eslint-disable` inline.
 - Server-only code in apps lives in `src/server/**` and starts with `import "server-only"`.
 - Admin mutations are defined only with `createGuardedAction`.
-- Money is integer minor units (`domain/shop`).
+- Money is integer minor units (`domain/store`).
 - Telemetry: `npx turbo telemetry disable` and `npx next telemetry disable` if you prefer.

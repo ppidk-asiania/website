@@ -39,7 +39,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const d = DICTIONARIES[language];
   const t = d.profile;
   const urls = getAppUrls();
-  const allowed = [urls.WEB_URL, urls.ADMIN_URL, urls.SHOP_URL].filter(
+  const allowed = [urls.WEB_URL, urls.ADMIN_URL, urls.STORE_URL].filter(
     (url): url is string => url !== undefined,
   );
   const next = typeof params["next"] === "string" ? safeReturnUrl(params["next"], allowed) : null;

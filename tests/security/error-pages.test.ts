@@ -2,18 +2,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import adminConfig from "../../apps/admin/next.config";
-import shopConfig from "../../apps/shop/next.config";
+import storeConfig from "../../apps/store/next.config";
 import webConfig from "../../apps/web/next.config";
 
 const ROOT = join(import.meta.dirname, "../..");
-const CONFIGS = { web: webConfig, admin: adminConfig, shop: shopConfig };
+const CONFIGS = { web: webConfig, admin: adminConfig, store: storeConfig };
 const ERROR_FILES = ["not-found", "forbidden", "unauthorized", "error", "global-error"];
 const pages = Object.keys(CONFIGS).flatMap((app) =>
   ERROR_FILES.map((file) => `apps/${app}/src/app/${file}.tsx`),
 );
 
 describe("error pages (no information exposure)", () => {
-  it("web, admin and shop render 401/403 pages (authInterrupts)", () => {
+  it("web, admin and store render 401/403 pages (authInterrupts)", () => {
     for (const [app, config] of Object.entries(CONFIGS)) {
       expect(config.experimental?.authInterrupts, app).toBe(true);
     }

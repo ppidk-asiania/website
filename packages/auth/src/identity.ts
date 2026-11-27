@@ -12,7 +12,7 @@ export const GOOGLE_PROVIDER = "google.com";
 export const PASSWORD_PROVIDER = "password";
 
 /**
- * Sessions are signed cookies (`signLink`, `SESSION_SECRET`, the same on web, admin and shop).
+ * Sessions are signed cookies (`signLink`, `SESSION_SECRET`, the same on web, admin and store).
  * Every check reads the account, so disabling it or signing out everywhere ends them at once.
  */
 export function createIdentityProvider(options: {

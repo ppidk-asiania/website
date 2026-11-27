@@ -2,13 +2,13 @@ import "server-only";
 import { createIdentityProvider, createSessionRoutes } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
 import { createSqlAuthAccountStore, getDatabaseForRole } from "@website/db/sql";
-import { getShopEnv } from "./env";
+import { getStoreEnv } from "./env";
 
 /** Sign-out only: people sign in on the web app. */
 export const sessionRoutes = lazyEnv(() => {
-  const env = getShopEnv();
+  const env = getStoreEnv();
   const db = getDatabaseForRole({
-    role: "shop_rw",
+    role: "store_rw",
     url: env.DATABASE_URL,
     connectionLimit: env.DATABASE_CONNECTION_LIMIT,
   });

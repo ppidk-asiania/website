@@ -5,14 +5,14 @@
 - **Admin pages** (`packages/permissions/src/permissions.ts → ADMIN_PAGES`): every page has
   `<page>.read` and `<page>.edit` (edit includes read). Pages that need more have named extras:
 
-  | Page          | Extras                                     |
-  | ------------- | ------------------------------------------ |
-  | `registrants` | `export`                                   |
-  | `articles`    | `publish`                                  |
-  | `newsletter`  | `send`, `export`                           |
-  | `members`     | `pii` (personal data), `export`, `approve` |
-  | `audit`       | `revert`                                   |
-  | `shop_orders` | `refund`                                   |
+  | Page           | Extras                                     |
+  | -------------- | ------------------------------------------ |
+  | `registrants`  | `export`                                   |
+  | `articles`     | `publish`                                  |
+  | `newsletter`   | `send`, `export`                           |
+  | `members`      | `pii` (personal data), `export`, `approve` |
+  | `audit`        | `revert`                                   |
+  | `store_orders` | `refund`                                   |
 
   Adding a page or an extra is a reviewed code change (the page is code anyway).
 
@@ -60,7 +60,7 @@
   sign-in method on the person's account for staff roles, and a recent sign-in. Both the
   appointment and the account change are audited (not revertible).
 - **Self-service** permissions (`profile.read_own`, `profile.write_own`, `events.register`,
-  `registrations.read_own`, `shop.orders.read_own`) belong to every active account, for its own
+  `registrations.read_own`, `store.orders.read_own`) belong to every active account, for its own
   resources only (`ownerId === userId`). They cannot be put on a role.
 
 ```ts

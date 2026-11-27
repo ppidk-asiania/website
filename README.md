@@ -3,7 +3,7 @@
 # PPIDK Asia-Oseania Website
 
 The official web platform of PPIDK Asia-Oseania: public website, member accounts,
-administration, online shop and a public API — in one TypeScript monorepo.
+administration, online store and a public API — in one TypeScript monorepo.
 
 [![CI](https://github.com/ppidk-asiania/website/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ppidk-asiania/website/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-24%20LTS-339933?logo=node.js&logoColor=white)
@@ -32,16 +32,16 @@ administration, online shop and a public API — in one TypeScript monorepo.
 | ----------- | ---------------------------------------------- | ------------------- | ---------- |
 | **Web**     | Public visitors and signed-in members          | `web.example.org`   | 3000       |
 | **Admin**   | Staff: content, events, members, users, audit  | `admin.example.org` | 3001       |
-| **Shop**    | Customers: products, cart, checkout, orders    | `shop.example.org`  | 3002       |
+| **Store**   | Customers: products, cart, checkout, orders    | `store.example.org` | 3002       |
 | **Gateway** | Third-party systems (versioned REST API `/v1`) | `api.example.org`   | 3003       |
 
-Each application is deployed and fails independently: an admin or shop outage never takes down
+Each application is deployed and fails independently: an admin or store outage never takes down
 the public website.
 
 ## Architecture
 
 ```text
-   web            admin           shop           gateway
+   web            admin           store           gateway
  (Next.js)      (Next.js)       (Next.js)        (Hono)
      │              │               │               │
      └──────────────┴───────┬───────┴───────────────┘
@@ -65,7 +65,7 @@ Details: [docs/architecture.md](docs/architecture.md).
 | ------------------------------------------------------------ | ------------------------------------------------------- |
 | [`apps/web`](apps/web/README.md)                             | Public website and member self-service                  |
 | [`apps/admin`](apps/admin/README.md)                         | Staff administration                                    |
-| [`apps/shop`](apps/shop/README.md)                           | Online shop                                             |
+| [`apps/store`](apps/store/README.md)                         | Online store                                            |
 | [`apps/gateway`](apps/gateway/README.md)                     | Third-party API                                         |
 | [`packages/domain`](packages/domain/README.md)               | Business rules (framework-free)                         |
 | [`packages/db`](packages/db/README.md)                       | MySQL and file access, per application role             |

@@ -11,7 +11,7 @@ automatically by this repository. Start with:
 ## Provisioning checklist (one-time)
 
 - [ ] Google Cloud project (owned by ≥2 people with 2-step verification) with one OAuth web client for Sign in with Google; every `WEB_URL` in its Authorized JavaScript origins (`../../docs/deployment.md` → One-time setup)
-- [ ] `SESSION_SECRET` (≥ 32 characters), the same in web, admin and shop, kept only in the cPanel **Setup Node.js App** screens and the password manager
+- [ ] `SESSION_SECRET` (≥ 32 characters), the same in web, admin and store, kept only in the cPanel **Setup Node.js App** screens and the password manager
 - [ ] The old Firebase project: delete it (or at least its service-account keys) once nobody needs its accounts list
 - [ ] cPanel MySQL: one database, one MySQL user per app (`../../docs/deployment.md` → One-time setup)
 - [ ] Files folder `FILE_STORAGE_DIR` outside the app folders; nightly dump + files backup and a weekly off-server copy (`../../docs/disaster-recovery.md`)

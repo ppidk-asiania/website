@@ -12,8 +12,8 @@ vi.mock("@website/db/sql", () => ({
   })),
 }));
 
-const apps = ["web", "admin", "shop"] as const;
-const roles = { web: "web_ro", admin: "admin_rw", shop: "shop_rw" } as const;
+const apps = ["web", "admin", "store"] as const;
+const roles = { web: "web_ro", admin: "admin_rw", store: "store_rw" } as const;
 type GuardModule = typeof WebGuardModule;
 const load = async (app: (typeof apps)[number]) => {
   vi.resetModules();

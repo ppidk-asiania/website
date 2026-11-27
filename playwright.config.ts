@@ -6,7 +6,7 @@ const testEnv = { APP_ENV: "test", API_KEY_PEPPER: "e2e-only-pepper-not-a-secret
 const apps = [
   { name: "web", port: 3000 },
   { name: "admin", port: 3001 },
-  { name: "shop", port: 3002 },
+  { name: "store", port: 3002 },
   { name: "gateway", port: 3003 },
 ] as const;
 

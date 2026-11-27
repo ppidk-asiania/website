@@ -5,7 +5,7 @@ export const SELF_SERVICE_PERMISSIONS = [
   "registrations.read_own",
   "applications.read_own",
   "applications.write_own",
-  "shop.orders.read_own",
+  "store.orders.read_own",
 ] as const;
 export type SelfServicePermission = (typeof SELF_SERVICE_PERMISSIONS)[number];
 
@@ -91,8 +91,8 @@ export const ADMIN_PAGES = {
   audit: { label: "Audit Log", extras: { revert: "Revert changes" } },
   messages: { label: "Messages (failed e-mails, retry)" },
   apikeys: { label: "API keys" },
-  shop_products: { label: "Shop products" },
-  shop_orders: { label: "Shop orders", extras: { refund: "Refund" } },
+  store_products: { label: "Store products" },
+  store_orders: { label: "Store orders", extras: { refund: "Refund" } },
   okr: { label: "OKR (vision, mission, objectives, key results)" },
   programs: {
     label: "Work programmes",

@@ -23,7 +23,7 @@ async function LoginWithReturn({ searchParams }: { searchParams: SearchParams })
   const next = (await searchParams)["next"];
   if (typeof next !== "string") return <LoginForm next={null} />;
   const urls = getAppUrls();
-  const allowed = [urls.WEB_URL, urls.ADMIN_URL, urls.SHOP_URL].filter(
+  const allowed = [urls.WEB_URL, urls.ADMIN_URL, urls.STORE_URL].filter(
     (url): url is string => url !== undefined,
   );
   return <LoginForm next={safeReturnUrl(next, allowed)} />;

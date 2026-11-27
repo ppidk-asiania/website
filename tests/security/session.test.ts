@@ -64,7 +64,7 @@ describe("session endpoint (Google, e-mail + password → server session cookie)
     expect(cookie).not.toMatch(/Domain=/i);
   });
 
-  it("uses a __Secure- cookie so one session can be shared by web, admin and shop", () => {
+  it("uses a __Secure- cookie so one session can be shared by web, admin and store", () => {
     expect(SESSION_COOKIE).toBe("__Secure-session");
   });
 
@@ -137,7 +137,7 @@ describe("session endpoint (Google, e-mail + password → server session cookie)
     expect((await routes.POST(notJson)).status).toBe(400);
   });
 
-  it("refuses every sign-in where no sign-in methods are configured (admin, shop)", async () => {
+  it("refuses every sign-in where no sign-in methods are configured (admin, store)", async () => {
     const routes = createSessionRoutes({ identity: provider().identity, maxAgeHours: 8 });
     expect((await routes.POST(post({ method: "google", credential: "good" }))).status).toBe(400);
   });

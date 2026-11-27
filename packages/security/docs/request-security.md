@@ -3,7 +3,7 @@
 ## What it does
 
 Every request to every app passes one guard before it reaches a page, API route or server
-action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gateway):
+action (`src/proxy.ts` in web/admin/store, `requestGuard` middleware in the gateway):
 
 1. **Origin restriction** — `/api/*` and every non-GET request must come from the same origin
    (`Origin` header or `Sec-Fetch-Site: same-origin`); otherwise `403`. Page navigation from other
@@ -15,13 +15,13 @@ action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gatew
    limit always applies: over it the response is `429` with `Retry-After`. Responses carry
    `RateLimit-Limit` and `RateLimit-Remaining`. Gateway API keys also have their own per-key minute limit.
 3. **Private caching** — private paths get `Cache-Control: private, no-store`
-   (web: `/api/`, `/settings`; shop: `/api/`, `/account`, `/cart`, `/checkout`; admin and gateway: everything).
+   (web: `/api/`, `/settings`; store: `/api/`, `/account`, `/cart`, `/checkout`; admin and gateway: everything).
 
 ## Where it lives
 
 - Policy and guard: `packages/security/src/` (`rate-limit.ts`, `request-guard.ts`, `errors.ts`, `validation.ts`)
 - Shared counter store: `packages/db/src/sql/rate-limit.ts` (`rateLimits/{key}`)
-- App wiring: `apps/{web,admin,shop}/src/server/request-guard.ts` + `src/proxy.ts`;
+- App wiring: `apps/{web,admin,store}/src/server/request-guard.ts` + `src/proxy.ts`;
   `apps/gateway/src/middleware/request-guard.ts`
 - Tests: `tests/security/` (and `tests/e2e/security.spec.ts`)
 
@@ -49,11 +49,11 @@ action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gatew
 
 ## Configuration
 
-| Variable            | Where            | Notes                                                                                                        |
-| ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| `RATE_LIMIT_SECRET` | every app        | ≥ 32 chars, different per environment. Required in staging/production (the app refuses to serve without it). |
-| `DATABASE_URL`      | web, admin, shop | Counter store (staging/production only)                                                                      |
-| Cron job `expire`   | admin            | Deletes old counters (`rateLimits.expiresAt`, `apps/admin/docs/cron.md`)                                     |
+| Variable            | Where             | Notes                                                                                                        |
+| ------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `RATE_LIMIT_SECRET` | every app         | ≥ 32 chars, different per environment. Required in staging/production (the app refuses to serve without it). |
+| `DATABASE_URL`      | web, admin, store | Counter store (staging/production only)                                                                      |
+| Cron job `expire`   | admin             | Deletes old counters (`rateLimits.expiresAt`, `apps/admin/docs/cron.md`)                                     |
 
 ## Tighter limits for some paths
 

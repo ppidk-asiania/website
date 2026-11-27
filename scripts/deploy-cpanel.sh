@@ -19,9 +19,9 @@ upload_apps() {
 
   pnpm install --frozen-lockfile
   APP_ENV=production NEXT_OUTPUT=standalone \
-    pnpm exec turbo run build --filter=web --filter=admin --filter=shop
+    pnpm exec turbo run build --filter=web --filter=admin --filter=store
 
-  for app in web admin shop; do
+  for app in web admin store; do
     standalone="apps/$app/.next/standalone"
     mkdir -p "$standalone/apps/$app/.next"
     cp -r "apps/$app/.next/static" "$standalone/apps/$app/.next/static"

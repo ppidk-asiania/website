@@ -1,6 +1,6 @@
-# shop
+# store
 
-Online shop: products, categories, cart, checkout and orders.
+Online store: products, categories, cart, checkout and orders.
 
 ## Responsibilities
 
@@ -21,16 +21,16 @@ Online shop: products, categories, cart, checkout and orders.
 
 ## Rules
 
-- Domain `shop.example.org`, local port **3002**.
-- Depends only on `@website/domain/shop` (extraction boundary — enforced by lint).
+- Domain `store.example.org`, local port **3002**.
+- Depends only on `@website/domain/store` (extraction boundary — enforced by lint).
 - Money is always integer minor units; the payment provider is the source of truth for payments.
 
 ## Commands
 
 ```bash
-pnpm --filter shop dev      # http://localhost:3002
-pnpm --filter shop build
-pnpm --filter shop lint
+pnpm --filter store dev      # http://localhost:3002
+pnpm --filter store build
+pnpm --filter store lint
 ```
 
 ## Documentation

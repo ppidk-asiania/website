@@ -15,7 +15,7 @@ function files(dir: string, extensions: string[]): string[] {
 }
 
 const styleSources = [
-  ...["apps/web/src", "apps/admin/src", "apps/shop/src", "packages/ui/src"].flatMap((dir) =>
+  ...["apps/web/src", "apps/admin/src", "apps/store/src", "packages/ui/src"].flatMap((dir) =>
     files(dir, [".css", ".tsx"]),
   ),
 ].filter((path) => path.replaceAll("\\", "/") !== TOKENS);

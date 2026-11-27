@@ -5,7 +5,7 @@ import type { MemberProfileRepository } from "@website/domain/members";
 import type { ChapterReader } from "@website/domain/organizations";
 import type { RoleReader, SignInRecorder, UserDirectory } from "./users";
 
-export type DatabaseRole = "web_ro" | "admin_rw" | "shop_rw" | "gateway_rw";
+export type DatabaseRole = "web_ro" | "admin_rw" | "store_rw" | "gateway_rw";
 
 export interface WebRepositories {
   readonly content: ContentReader;
@@ -29,11 +29,11 @@ export interface GatewayRepositories {
   readonly apiKeys: ApiKeyStore;
 }
 
-export type ShopRepositories = Readonly<Record<never, never>>;
+export type StoreRepositories = Readonly<Record<never, never>>;
 
 export interface RepositoriesByRole {
   web_ro: WebRepositories;
   admin_rw: AdminRepositories;
-  shop_rw: ShopRepositories;
+  store_rw: StoreRepositories;
   gateway_rw: GatewayRepositories;
 }

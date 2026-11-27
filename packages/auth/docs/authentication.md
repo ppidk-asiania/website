@@ -1,6 +1,6 @@
 # Authentication
 
-**One user pool for everyone** — staff, members and shop customers — kept in MySQL
+**One user pool for everyone** — staff, members and store customers — kept in MySQL
 (`authAccounts/{uid}`, see `packages/db/docs/database.md`) and used by every environment. The
 account says _who_ someone is; _what_ they may do comes only from RBAC role assignments in MySQL
 (`users/{uid}`). No third-party identity service holds accounts or sessions: Google is only asked to
@@ -139,7 +139,7 @@ sign in: POST /api/passkeys/login-options → browser signs → POST /api/passke
 ## Sessions
 
 **One session for every app** (DEC-13): sign in once on the web app and you are signed in on
-admin and shop too; signing out in any app signs you out of all of them.
+admin and store too; signing out in any app signs you out of all of them.
 
 ```text
 browser ─ Google credential / e-mail + password / reset token ─▶ web POST /api/session
@@ -151,7 +151,7 @@ every request, every app: cookie → signature + expiry → authAccounts/{uid} (
 ```
 
 - The cookie is set on the parent domain (`SESSION_COOKIE_DOMAIN`, e.g. `ppiasiania.id`), so web,
-  admin and shop all receive it. It stays HttpOnly (scripts cannot read it), Secure and
+  admin and store all receive it. It stays HttpOnly (scripts cannot read it), Secure and
   SameSite=Lax. Without a domain (local development) it is host-only; `localhost` apps still share
   it because cookies ignore the port.
 - Sharing the session does **not** share permissions: admin still requires a staff role
@@ -159,7 +159,7 @@ every request, every app: cookie → signature + expiry → authAccounts/{uid} (
 - Sign-in happens on the web app. A signed-out visitor who opens a login-required page in any app
   is redirected (307) to `WEB_URL/login?next=<that page's URL>` (`signInUrl`). After signing in the
   web app returns there only if `safeReturnUrl` accepts the target (a relative path, or a URL on
-  WEB_URL / ADMIN_URL / SHOP_URL — no open redirect). Admin needs `WEB_URL` and `ADMIN_URL` set for
+  WEB_URL / ADMIN_URL / STORE_URL — no open redirect). Admin needs `WEB_URL` and `ADMIN_URL` set for
   the redirect; without them it shows "sign-in required" instead.
 - That redirect is sent by each app's `src/proxy.ts` (`signInRedirect` in
   `src/server/request-guard.ts`) when the session cookie is missing, before the page renders. With
@@ -170,11 +170,11 @@ every request, every app: cookie → signature + expiry → authAccounts/{uid} (
   `{ method: "reset-request", email }` (always `204`, no cookie) or
   `{ method: "reset", token, password }` → `204` + cookie; invalid body `400`; wrong credentials
   or an expired link `401` (reason not disclosed); sign-up of a taken address `409`.
-  `DELETE /api/session` (web, admin, shop) → ends all sessions of the user and clears the cookie
-  (same Domain). Admin and shop have no `POST`: sign-in happens on the web app. Implemented once
+  `DELETE /api/session` (web, admin, store) → ends all sessions of the user and clears the cookie
+  (same Domain). Admin and store have no `POST`: sign-in happens on the web app. Implemented once
   in `packages/auth/src/session-routes.ts`; each app's `src/app/api/session/route.ts` wires it.
 - Use the same `SESSION_SECRET`, `SESSION_MAX_AGE_HOURS` and `SESSION_COOKIE_DOMAIN` in web, admin
-  and shop. Changing `SESSION_SECRET` signs everybody out and voids unused e-mail links.
+  and store. Changing `SESSION_SECRET` signs everybody out and voids unused e-mail links.
 - The bodies are `.strict()` — the uid always comes from the verified credential, never the body.
 - Sign-out, deactivation, e-mail changes and role changes call `revokeSessions`, which sets
   `sessionsValidAfter` on the account and so ends its sessions in every app at once.
