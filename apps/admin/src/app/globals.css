@@ -2031,8 +2031,6 @@ a.admin-stat-card:hover {
     var(--color-black) calc(100% - var(--space-8)),
     var(--fade-end)
   );
-  view-transition-name: match-element;
-  view-transition-class: admin-tabs;
 }
 
 .admin-tabs[data-start="true"] .admin-tabs__list {
@@ -2135,27 +2133,33 @@ a.admin-stat-card:hover {
   }
 }
 
-/* Content swap of a tab click (transition type "admin-tab"): the tab bar stays live, only the
-   content fades; the group does not resize, so nothing is cut while heights differ. */
-::view-transition-group(.admin-tab-swap) {
-  animation: none;
-}
-
+/* Tab click (transition type "admin-tab"): only table rows fade out, pause and fade in. The
+   rest of the main area (header, tabs, counts, pager) switches at once and stays live. */
 ::view-transition-old(.admin-tab-swap) {
-  animation: admin-tab-out var(--tab-out) var(--ease-out) both;
-}
-
-::view-transition-new(.admin-tab-swap) {
-  animation: admin-tab-in var(--tab-in) var(--ease-out) calc(var(--tab-out) + var(--tab-pause)) both;
-}
-
-:root:active-view-transition-type(admin-tab)::view-transition-old(.admin-tabs) {
   display: none;
 }
 
-:root:active-view-transition-type(admin-tab)::view-transition-group(.admin-tabs),
-:root:active-view-transition-type(admin-tab)::view-transition-new(.admin-tabs) {
+::view-transition-group(.admin-tab-swap),
+::view-transition-new(.admin-tab-swap) {
   animation: none;
+}
+
+:root:active-view-transition-type(admin-tab) :is(.admin-table tbody, .admin-table__empty) {
+  view-transition-name: match-element;
+  view-transition-class: admin-rows;
+}
+
+/* The group does not resize, so taller old rows are never cut while they fade. */
+::view-transition-group(.admin-rows) {
+  animation: none;
+}
+
+::view-transition-old(.admin-rows) {
+  animation: admin-tab-out var(--tab-out) var(--ease-out) both;
+}
+
+::view-transition-new(.admin-rows) {
+  animation: admin-tab-in var(--tab-in) var(--ease-out) calc(var(--tab-out) + var(--tab-pause)) both;
 }
 
 @keyframes admin-tab-out {

@@ -167,10 +167,11 @@ router.push("/things"); router.refresh();
   active tab; tabs never change width (no bold, hover changes only colour). Keyboard: arrow keys
   move focus between tabs (wrapping), Home/End jump to the first/last, Enter/Space selects. On
   phones (≤767px) up to 4 tabs are a segmented control and 5 or more a button that opens a bottom
-  sheet (`mobileTabs` in `list-model.ts`). A click switches the content as a view transition of
-  type `admin-tab`: the content fades out, pauses 80ms and fades in (`--tab-out`, `--tab-pause`,
-  `--tab-in`), the tab row stays live, and the content box keeps its size while it swaps; tabs
-  that navigate with `router.push` keep the default crossfade. Page CSS may change gaps and
+  sheet (`mobileTabs` in `list-model.ts`). A click runs a view transition of type `admin-tab`
+  in which only table rows (`.admin-table tbody`, and the empty message) fade out, pause 80ms and
+  fade in (`--tab-out`, `--tab-pause`, `--tab-in`); the header, tabs, counts and pager switch at
+  once. Each table keeps its height until the new rows are in, and the rows skip their own
+  staggered entrance. Tabs that navigate with `router.push` keep the default crossfade. Page CSS may change gaps and
   margins, not the row's overflow.
 - **Scrollbar.** Every scrollbar (page, side panel, popups, menus, tables, code blocks) is a slim
   rounded thumb on a transparent track (`*::-webkit-scrollbar` in `globals.css`); the tab row has none (see Tabs). Only the page reserves its gutter

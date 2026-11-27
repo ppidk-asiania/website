@@ -200,13 +200,27 @@ export function Tabs<K extends string>({
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const swapped = useRef(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const current = tabs.find((tab) => tab.key === active) ?? tabs[0];
   const layoutKey = tabs.map((tab) => `${tab.key}:${tab.count ?? ""}`).join();
 
-  // The content swap runs as a view transition of type "admin-tab" (see the admin main area).
+  // The rows swap runs as a view transition of type "admin-tab" (see the admin main area).
   const select = (key: K) => {
     if (key === active) return;
+    const wrap = wrapRef.current;
+    const tables = [
+      ...(wrap?.closest("main")?.querySelectorAll<HTMLElement>(".admin-table-wrap") ?? []),
+    ];
+    // Hold each table's height until its new rows have faded in (the indicator slides for the
+    // whole swap, so its duration is the swap's; 0s with reduced motion), so nothing below jumps.
+    const indicator = wrap?.querySelector(".admin-tabs__indicator");
+    const swapMs = indicator
+      ? parseFloat(getComputedStyle(indicator).transitionDuration) * 1000
+      : 0;
+    for (const table of tables) table.style.minHeight = `${table.offsetHeight}px`;
+    setTimeout(() => tables.forEach((table) => (table.style.minHeight = "")), swapMs);
+    swapped.current = true;
     startTransition(() => {
       addTransitionType("admin-tab");
       onSelect(key);
@@ -228,6 +242,13 @@ export function Tabs<K extends string>({
       wrap.dataset["end"] = String(list.scrollWidth - list.clientWidth - list.scrollLeft > 1);
     };
     update();
+    if (swapped.current) {
+      swapped.current = false;
+      // On a tab switch the fade is the rows' entrance: skip their own staggered one.
+      for (const row of wrap.closest("main")?.querySelectorAll(".admin-table tbody tr") ?? []) {
+        for (const animation of row.getAnimations()) animation.finish();
+      }
+    }
     const tab = list.querySelector<HTMLElement>("[aria-selected='true']");
     if (
       tab &&
