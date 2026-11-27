@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isPageChange } from "../../packages/ui/src/navigation-progress";
+import { isPageChange } from "../../packages/ui/src/page-change";
 
 const ROOT = join(import.meta.dirname, "../..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");

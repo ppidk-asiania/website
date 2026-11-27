@@ -2450,12 +2450,28 @@ body:has(.auth-page) :is(.site-header, .site-footer) {
   line-height: var(--leading-xs);
 }
 
-/* Google's own button is an iframe it draws (Google Identity Services); the badge sits on top. */
+/* Google's own button (an iframe, 40 px tall) lies invisibly over ours and takes the click. */
 .auth-google {
   position: relative;
-  display: flex;
-  justify-content: center;
-  min-height: calc(var(--space-10) + var(--space-1));
+}
+
+.auth-google__slot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  opacity: 0.0001;
+}
+
+.auth-google__slot > div {
+  transform: scaleY(1.4); /* 40 px → the 56 px of .auth-card .ui-button */
+}
+
+.auth-google:focus-within .ui-button {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .auth-card .ui-button[data-variant="outline"] {
@@ -2468,7 +2484,8 @@ body:has(.auth-page) :is(.site-header, .site-footer) {
     background: color-mix(in srgb, var(--color-white) 12%, var(--color-primary));
   }
 
-  .auth-card .ui-button[data-variant="outline"]:not(:disabled):hover {
+  .auth-card .ui-button[data-variant="outline"]:not(:disabled):hover,
+  .auth-google:hover .ui-button {
     background: var(--color-brand-200);
   }
 }

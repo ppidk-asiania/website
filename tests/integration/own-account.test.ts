@@ -69,11 +69,8 @@ const profileInput = {
 
 let fake: ReturnType<typeof fakeDb>;
 let providers: LinkedProvider[];
-let admin: OwnAccountAdmin & {
-  changeEmail: ReturnType<typeof vi.fn>;
-  unlinkProvider: ReturnType<typeof vi.fn>;
-  deleteUser: ReturnType<typeof vi.fn>;
-};
+let admin: Pick<OwnAccountAdmin, "details"> &
+  Record<"changeEmail" | "unlinkProvider" | "deleteUser", ReturnType<typeof vi.fn>>;
 let passkeys: ReturnType<typeof createMemoryPasskeyStore>;
 let send: ReturnType<typeof vi.fn<(message: unknown, key: string) => Promise<unknown>>>;
 let removed: string[];
@@ -217,7 +214,7 @@ describe("e-mail codes", () => {
       emails: emails(),
       hash: (uid, code) => `${uid}-${code}`,
       now: () => later(EMAIL_CODE_TTL_MS),
-    } as Parameters<typeof createOwnAccount>[0]);
+    });
     expect(
       await expired.confirmCode({ ...siti, authTime: nowSeconds + 900 - 60 }, { code: "0007" }),
     ).toEqual({

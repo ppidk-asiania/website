@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import {
+  GOOGLE_PROVIDER as GOOGLE,
   isRecentSignIn,
   type LinkedProvider,
   type OwnAccountAdmin,
@@ -14,7 +15,6 @@ import type { Message } from "@website/domain/messaging";
 export const EMAIL_CODE_TTL_MS = 15 * 60 * 1000;
 /** Typed by the person to switch the delete button on. */
 export const CLOSE_CONFIRMATION = "DELETE ACCOUNT";
-const GOOGLE = "google.com";
 
 export type AccountOwner = Pick<VerifiedIdentity, "uid" | "email" | "emailVerified" | "authTime">;
 

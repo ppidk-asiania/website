@@ -10,7 +10,7 @@ prove a Google account (Sign in with Google, Google Identity Services).
 
 | Method           | Sign up                                                                              | Sign in                                                         | Where                                |
 | ---------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------ |
-| Google           | `/signup` or `/login` → Google's "Continue with Google" button (same action)         | same                                                            | Google Identity Services, our server |
+| Google           | `/signup` or `/login` → "Continue with Google" (same action)                         | same                                                            | Google Identity Services, our server |
 | Email + password | `/signup` (8+ characters, confirmation; verification email sent)                     | `/login`                                                        | Our server (scrypt hash)             |
 | Passkey          | Added from `/settings/account` after signing in (needs a sign-in in the last 15 min) | `/login` → "Continue with passkey"                              | Our server (WebAuthn)                |
 | Forgot password  | —                                                                                    | `/forgot-password` → e-mail link → `/reset-password` (signs in) | Our server                           |
@@ -32,7 +32,8 @@ prove a Google account (Sign in with Google, Google Identity Services).
 ## Google (Google Identity Services)
 
 ```text
-/login → https://accounts.google.com/gsi/client draws Google's button (popup)
+/login → https://accounts.google.com/gsi/client draws Google's button (popup), invisible over
+         our own "Continue with Google" button so it looks like the other sign-in buttons
        → Google returns an ID token ("credential") to the page
        → POST /api/session { method: "google", credential }
 server: verifyGoogleIdToken — RS256 signature against Google's keys
@@ -130,6 +131,10 @@ sign in: POST /api/passkeys/login-options → browser signs → POST /api/passke
    person out by guessing.
 6. Fresh start (27 Nov 2026): accounts of the former Firebase user pool were not carried over;
    everyone signs in again and gets a new uid, and roles are granted again in Role Manager.
+   Their leftover `users` rows (with profiles, passkeys and roles) are cleaned with
+   `node --env-file=apps/admin/.env.local infrastructure/scripts/remove-old-accounts.mjs`: a dry
+   run lists them, `--apply` removes their personal data, passkeys and roles and keeps an
+   anonymous, audited `users` row (like deleting one's own account). PPIDK imports are left out.
 
 ## Sessions
 

@@ -16,7 +16,7 @@ test("internal APIs refuse requests from other websites and non-browser clients"
   );
   const crossSite = await request.post("/api/session", {
     headers: { origin: "https://evil.example" },
-    data: { idToken: "x" },
+    data: { method: "google", credential: "x" },
   });
   expect(crossSite.status()).toBe(403);
   expect(await crossSite.json()).toEqual({ error: "forbidden", message: "Request not allowed." });

@@ -171,6 +171,8 @@ export function CountryMap(props: {
             role="button"
             tabIndex={0}
             aria-label={names.of(country.code)}
+            // Node and the browser ship different CLDR data, so a few names differ (e.g. "SAR" vs "DAK").
+            suppressHydrationWarning
             aria-pressed={props.selected === country.code}
             data-hover={hovered === country.code || undefined}
           />

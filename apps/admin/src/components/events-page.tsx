@@ -667,6 +667,7 @@ function EventsList({
             </MenuItem>
             {canSeeRegistrants || serving[r.id] !== undefined ? (
               // A full page load, not router.push: the camera Permissions-Policy is set per document.
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- see above
               <MenuItem icon="qr" onClick={() => window.location.assign(`/events/${r.id}/scan`)}>
                 Door scanner
               </MenuItem>

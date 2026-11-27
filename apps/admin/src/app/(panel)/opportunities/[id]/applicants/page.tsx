@@ -12,7 +12,9 @@ export const instant = false;
 
 export default async function OpportunityApplicantsRoute({
   params,
-}: PageProps<"/opportunities/[id]/applicants">) {
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const viewer = await requireAdminViewer(`/opportunities/${id}/applicants`, "opportunities.read");
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;

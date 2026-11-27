@@ -81,6 +81,7 @@ export {
 } from "./finance";
 export { createSqlPasskeyStore } from "./passkeys";
 export { createSqlAuthAccountStore } from "./auth-accounts";
+export { listOldAccounts, removeOldAccount } from "./old-accounts";
 export {
   createSqlAccountEmailStore,
   EMAIL_CODE_ATTEMPTS,

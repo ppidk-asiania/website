@@ -1,15 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isPageChange } from "./page-change";
 
 const GIVE_UP_MS = 10_000;
-
-/** True when following `href` from the page at `current` loads another page of the same site. */
-export function isPageChange(current: string, href: string): boolean {
-  const from = new URL(current);
-  const to = new URL(href, from);
-  return to.origin === from.origin && to.pathname + to.search !== from.pathname + from.search;
-}
 
 /**
  * Thin bar at the top of the window while a link is loading its page.
