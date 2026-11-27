@@ -2,9 +2,10 @@
 
 import { useRef, useState, type InputHTMLAttributes } from "react";
 import type { FeaturedImage } from "@website/domain/content";
+import { CountryMap } from "@website/ui";
 import {
-  CHAPTER_REGIONS,
   CHAPTER_RISKS,
+  chapterRegion,
   type ChapterRisk,
   type SocialLink,
 } from "@website/domain/organizations";
@@ -22,8 +23,6 @@ import { Select } from "@/components/ui/select";
 interface Form {
   name: string;
   countryCode: string;
-  region: string;
-  mapNo: string;
   timezone: string;
   logo: FeaturedImage | null;
   contactName: string;
@@ -35,8 +34,6 @@ interface Form {
   email: string;
   instagram: string;
   socials: SocialLink[];
-  latitude: string;
-  longitude: string;
   slug: string;
   memberCount: string;
   conditions: string;
@@ -44,11 +41,9 @@ interface Form {
   active: boolean;
 }
 
-const fromChapter = (c: ChapterItem | null, suggestedMapNo?: number): Form => ({
+const fromChapter = (c: ChapterItem | null): Form => ({
   name: c?.name ?? "",
   countryCode: c?.countryCode ?? "",
-  region: c?.region ?? "",
-  mapNo: c ? String(c.mapNo ?? "") : String(suggestedMapNo ?? ""),
   timezone: c?.timezone ?? "",
   logo: c?.logo ?? null,
   contactName: c?.contactName ?? "",
@@ -60,8 +55,6 @@ const fromChapter = (c: ChapterItem | null, suggestedMapNo?: number): Form => ({
   email: c?.email ?? "",
   instagram: c?.instagram ?? "",
   socials: c?.socials ?? [],
-  latitude: c ? String(c.latitude) : "",
-  longitude: c ? String(c.longitude) : "",
   slug: c?.slug ?? "",
   memberCount: String(c?.memberCount ?? 0),
   conditions: c?.conditions.join("\n") ?? "",
@@ -71,12 +64,11 @@ const fromChapter = (c: ChapterItem | null, suggestedMapNo?: number): Form => ({
 
 export function ChapterForm(props: {
   chapter: ChapterItem | null;
-  suggestedMapNo?: number;
   contactOnly?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const [form, setForm] = useState<Form>(() => fromChapter(props.chapter, props.suggestedMapNo));
+  const [form, setForm] = useState<Form>(() => fromChapter(props.chapter));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,8 +112,6 @@ export function ChapterForm(props: {
       ...(props.chapter ? { id: props.chapter.id } : {}),
       version: props.chapter?.version ?? null,
       ...fields,
-      latitude: Number(form.latitude),
-      longitude: Number(form.longitude),
       memberCount: Number(memberCount),
       conditions: conditions
         .split("\n")
@@ -180,6 +170,30 @@ export function ChapterForm(props: {
           pattern: "[A-Za-z]{2}",
           title: "A 2-letter country code, e.g. JP",
         })}
+        <div className="admin-field admin-form-grid__full">
+          <span className="admin-field__label">Map pin *</span>
+          <div className="admin-country-map">
+            <CountryMap
+              locale="en"
+              labels={{
+                map: "Choose the PPI's country",
+                zoomIn: "Zoom in",
+                zoomOut: "Zoom out",
+                reset: "Reset map",
+              }}
+              marked={[]}
+              selected={form.countryCode.toUpperCase() || null}
+              focus={props.chapter?.countryCode ?? null}
+              onSelect={(code) => {
+                if (!props.contactOnly) set("countryCode", code);
+              }}
+            />
+          </div>
+          <FieldError
+            id="chapter-map-error"
+            hint={`Click the country to pin the PPI there (sets Country). Region, automatic: ${label(CHAPTER_REGION_LABELS, chapterRegion(form.countryCode.toUpperCase()))}`}
+          />
+        </div>
         {field("timezone", "Time zone *", "IANA name, e.g. Australia/Sydney", "text", true, {
           required: true,
         })}
@@ -199,41 +213,6 @@ export function ChapterForm(props: {
             <option value="inactive">Inactive (hidden from the map)</option>
           </Select>
         </div>
-        <div className="admin-field">
-          <label className="admin-field__label" htmlFor="chapter-region">
-            Map region
-          </label>
-          <Select
-            id="chapter-region"
-            className="admin-select"
-            disabled={props.contactOnly}
-            value={form.region}
-            onChange={(e) => set("region", e.target.value)}
-          >
-            <option value="">Not shown on the map</option>
-            {CHAPTER_REGIONS.map((region) => (
-              <option key={region} value={region}>
-                {label(CHAPTER_REGION_LABELS, region)}
-              </option>
-            ))}
-          </Select>
-          <FieldError
-            id="chapter-region-error"
-            message={errors["region"]}
-            hint="The group on /map's country table"
-          />
-        </div>
-        {field(
-          "mapNo",
-          "Map number",
-          "№ on /map's country table (next free: pre-filled)",
-          "number",
-          true,
-          {
-            min: 1,
-            step: 1,
-          },
-        )}
         <div className="admin-field">
           <label className="admin-field__label" htmlFor="chapter-risk">
             Risk
@@ -273,18 +252,6 @@ export function ChapterForm(props: {
           />
         </div>
         {field("slug", "URL", "Built from the name when empty", "text", true)}
-        {field("latitude", "Map latitude *", "Marker position, e.g. 36.2", "number", true, {
-          required: true,
-          min: -90,
-          max: 90,
-          step: "any",
-        })}
-        {field("longitude", "Map longitude *", "e.g. 138.25", "number", true, {
-          required: true,
-          min: -180,
-          max: 180,
-          step: "any",
-        })}
         {field("contactName", "Contact person", "Shown publicly")}
         {field("contactPublic", "Public contact", "E-mail or phone the contact allows to publish")}
         {field("role", "Role", "e.g. Ketua — shown with the contact person")}

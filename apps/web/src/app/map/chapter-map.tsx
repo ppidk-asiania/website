@@ -1,39 +1,62 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { CountryMap, type CountryMapHandle } from "@website/ui";
+import type { Language } from "@/i18n/dictionaries";
+import { countryName } from "@/lib/country-names";
 
 export function ChapterMap(props: {
-  label: string;
-  closeLabel: string;
-  markers: readonly { slug: string; name: string; x: number; y: number; card: ReactNode }[];
+  language: Language;
+  labels: {
+    map: string;
+    close: string;
+    noInfo: string;
+    zoomIn: string;
+    zoomOut: string;
+    reset: string;
+  };
+  panels: Readonly<Record<string, ReactNode>>;
+  list: ReactNode;
 }) {
+  const map = useRef<CountryMapHandle>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const current = props.markers.find((m) => m.slug === selected);
+
+  const show = (target: EventTarget) => {
+    const code = (target as Element).closest("[data-code]")?.getAttribute("data-code");
+    if (!code) return;
+    setSelected(code);
+    map.current?.fitTo(code);
+  };
+
   return (
     <div className="site-map">
-      <div className="site-map__box" role="group" aria-label={props.label}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- static SVG asset */}
-        <img className="site-map__image" src="/map/asia-oceania.svg" alt="" />
-        {props.markers.map((m) => (
-          <button
-            key={m.slug}
-            type="button"
-            className="site-map__marker"
-            style={{ left: `${m.x}%`, top: `${m.y}%` }}
-            aria-label={m.name}
-            aria-pressed={selected === m.slug}
-            onClick={() => setSelected(selected === m.slug ? null : m.slug)}
-          />
-        ))}
+      <div className="site-map__map">
+        <CountryMap
+          ref={map}
+          locale={props.language}
+          labels={props.labels}
+          marked={Object.keys(props.panels)}
+          selected={selected}
+          onSelect={(code) => setSelected((current) => (current === code ? null : code))}
+        />
       </div>
-      {current && (
-        <div className="site-map__card" role="status">
-          {current.card}
-          <button type="button" className="ui-button" onClick={() => setSelected(null)}>
-            {props.closeLabel}
-          </button>
-        </div>
-      )}
+      <aside onClick={(e) => show(e.target)}>
+        {selected ? (
+          <section className="chapter__panel" aria-live="polite">
+            <button
+              type="button"
+              className="chapter__back site-map__close"
+              onClick={() => setSelected(null)}
+            >
+              ← {props.labels.close}
+            </button>
+            <h2 className="chapter__name">{countryName(selected, props.language)}</h2>
+            {props.panels[selected] ?? <p className="chapter__about">{props.labels.noInfo}</p>}
+          </section>
+        ) : (
+          props.list
+        )}
+      </aside>
     </div>
   );
 }

@@ -23,7 +23,7 @@ import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { MenuDivider, MenuItem, RowMenu, Tabs, useListTable } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { ToastBanner, useToastMessage } from "@/components/ui/toast";
-import { CHAPTER_RISK_LABELS, label } from "@/labels";
+import { CHAPTER_REGION_LABELS, CHAPTER_RISK_LABELS, label } from "@/labels";
 import type { ChapterItem } from "./chapters-model";
 import type { PeriodItem } from "./periods-model";
 import { Select } from "@/components/ui/select";
@@ -172,10 +172,6 @@ function OrganizationsList({
   const periods = useMemo(() => periodList ?? [], [periodList]);
   const toast = useToastMessage();
   const router = useRouter();
-  const nextMapNo = useMemo(
-    () => ppis.reduce((max, c) => Math.max(max, c.mapNo ?? 0), 0) + 1,
-    [ppis],
-  );
   const [chapterForm, setChapterForm] = useState<ChapterItem | "new" | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<OrgView>(
@@ -743,7 +739,7 @@ function OrganizationsList({
           </a>
           <div className="admin-table__sub admin-org-code">
             #{r.countryCode}
-            {r.mapNo !== null ? ` · №${r.mapNo}` : ""}
+            {` · ${label(CHAPTER_REGION_LABELS, r.region)}`}
           </div>
         </div>
       ),
@@ -879,7 +875,6 @@ function OrganizationsList({
       {chapterForm !== null ? (
         <ChapterForm
           chapter={chapterForm === "new" ? null : chapterForm}
-          suggestedMapNo={nextMapNo}
           contactOnly={!canEdit}
           onClose={() => setChapterForm(null)}
           onSaved={(text) => {

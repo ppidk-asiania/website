@@ -89,6 +89,11 @@ const COUNTRIES = [
     mapNo: 17,
     desc: "Sri Lanka is an island country in the Indian Ocean, off the southeastern tip of India. The Palk Strait and the Gulf of Mannar separate it from the Indian subcontinent. It is known for its tea, beaches and ancient Buddhist heritage. Its commercial capital is Colombo, and its legislative capital is Sri Jayawardenepura Kotte.",
   },
+  {
+    name: "PPI Uzbekistan",
+    mapNo: 18,
+    desc: "Uzbekistan is a doubly landlocked country in Central Asia: it, and every country it borders, has no coast. It borders Kazakhstan, Kyrgyzstan, Tajikistan, Afghanistan and Turkmenistan. It is known for the Silk Road cities of Samarkand, Bukhara and Khiva, with their historic mosques and madrasas. Its capital and largest city is Tashkent.",
+  },
 ] as const;
 
 export interface PpiSliderStrings {

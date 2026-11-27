@@ -374,3 +374,101 @@ a.ui-button {
   padding: 0;
   list-style: none;
 }
+
+.ui-map {
+  position: relative;
+}
+
+.ui-map__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1000 / 900;
+  background: var(--color-brand-200);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.ui-map__svg:active {
+  cursor: grabbing;
+}
+
+.ui-map__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.ui-map__country {
+  fill: color-mix(in srgb, var(--color-brand-950) 40%, var(--color-brand-200));
+  stroke: var(--color-brand-200);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  outline: none;
+  transition:
+    fill 200ms ease,
+    stroke 200ms ease;
+}
+
+.ui-map__country--marked {
+  fill: var(--color-brand-950);
+}
+
+.ui-map__country[data-hover],
+.ui-map__country:focus-visible {
+  fill: color-mix(in srgb, var(--color-brand-600) 60%, var(--color-brand-950));
+}
+
+.ui-map__country[aria-pressed="true"] {
+  fill: var(--color-brand-600);
+}
+
+.ui-map__outline {
+  fill: none;
+  stroke: var(--color-brand-400);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  animation: ui-map-outline 200ms ease;
+}
+
+@keyframes ui-map-outline {
+  from {
+    stroke-opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-map__country,
+  .ui-map__outline {
+    transition: none;
+    animation: none;
+  }
+}
+
+.ui-map__controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ui-map__control {
+  width: var(--space-8);
+  height: var(--space-8);
+  padding: 0;
+  border: 0;
+  background: var(--color-brand-950);
+  color: var(--color-brand-50);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  cursor: pointer;
+}

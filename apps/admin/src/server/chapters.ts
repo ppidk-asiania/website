@@ -21,12 +21,8 @@ const SaveInput = ChapterInputSchema.extend({
 const BOARD_FIELDS = [
   "name",
   "countryCode",
-  "region",
-  "mapNo",
   "timezone",
   "logo",
-  "latitude",
-  "longitude",
   "slug",
   "memberCount",
   "conditions",

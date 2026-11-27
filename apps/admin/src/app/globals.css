@@ -3550,27 +3550,40 @@ form.admin-toolbar::before {
 
 .admin-event-stages {
   margin-bottom: var(--space-3);
-  padding: var(--space-3) var(--space-4);
 }
 
 .admin-event-stages__list {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  margin: 0 0 var(--space-2);
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
   padding: 0;
   list-style: none;
 }
 
+/* Progress bar on top, title below; completed and active stages are filled. */
 .admin-event-stages__item {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  opacity: 0.6;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--admin-ink-muted);
 }
 
-.admin-event-stages__item[aria-current="step"] {
-  opacity: 1;
-  border-bottom: 2px solid var(--color-primary);
+.admin-event-stages__item::before {
+  content: "";
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-panel-line);
+}
+
+.admin-event-stages__item[data-state="completed"]::before,
+.admin-event-stages__item[data-state="active"]::before {
+  background: var(--color-highlight);
+}
+
+.admin-event-stages__item[data-state="active"] {
+  color: var(--admin-ink);
 }
 
 .admin-event-after {
@@ -5643,4 +5656,8 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.admin-country-map {
+  max-width: 32rem;
 }

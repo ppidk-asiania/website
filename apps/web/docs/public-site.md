@@ -23,7 +23,7 @@ and unit agendas can never appear (`tests/integration/highlights.test.ts`). **Ac
 (`src/components/highlights.tsx`) without the limit of 3.
 
 **PPI slider** (Home, `src/components/ppi-slider.tsx`): a full-screen section that PINS
-(`position: sticky`, one screen of page scroll per country) while the page scroll moves the 17
+(`position: sticky`, one screen of page scroll per country) while the page scroll moves the 18
 country texts sideways over ONE still scenery photo. Each country is ONE block (no copies): the
 current one sits at 63% of the width, and as the next one slides in from the right it moves 37%
 left and fades to 45% (the faded "previous country" in the design), then out (on phones the
@@ -122,45 +122,37 @@ signature for letters: upload (`POST /api/account/signature`, PNG/JPEG ≤ 2 MB,
 preview (`GET`, owner only), printed width and rotation, removal (`src/server/signature.ts`).
 Rules: `packages/domain/docs/documents.md` → Personal signatures.
 
-**Map**: `/map` is a static design page (user) — the black news page frame, the title
-"Map PPI Negara Kawasan Asia Oseania" with the shared tagline, then a two-column block:
-the region map image left (design asset `images/Map/Asia-Oseania.png`, copied to
-`public/map/asia-oseania-design.png`; the map column has a **fixed width**
-(52rem = 832px) and the image scales down to it at its own 940:860 aspect, so the
-map is **smaller than native but never cropped** (user) — no shrinking or cropping
-at any column size; the column is constant, so the image keeps its size no matter
-which chapters the list shows), and on the right the **side.svg design recreated
-from the chapters data** (user): a square table straight on the black page — no
-cream panel, no rounded corners — with the region groups of the design (OCEANIA ·
-SOUTH EAST ASIA · EAST ASIA · SOUTH ASIA · MIDDLE ASIA · Others; order from
-`lib/country-names.ts`, translated headings in `map.regions`), and one
-cream-banded row per chapter — the design's registry number in a **dark round
-badge** (brand-950, the design's 21 px circle), the dark country name (`Intl.DisplayNames` in the page language,
-ISO code as fallback) and the chapter's PPI alias on the same row (e.g.
-"5 Thailand PERMITHA", "10 South Korea PERPIKA"; only names that do not start with
-"PPI" count as aliases). The rows come from the **active chapters only**
-(`src/server/chapters.ts`, cached for minutes under the tag "chapters"): a
-deactivated chapter disappears from the table at once. The **group of each row is
-the chapter's own `region` field** (`packages/domain/docs/organization.md`), so the
-national board can move a chapter to another group (e.g. Middle Asia → Others) or
-hide it from the table (empty region) from the admin chapter form — a data change,
-not a code change. The **badge number is the chapter's own `mapNo`**, also set in the
-admin form (a new PPI comes pre-filled with the next free number), so a new country
-shows with its own number; empty = no badge, rows sort by number first. Only the
-heading order is a design constant left in `lib/country-names.ts`. (The 17 seed
-chapters carry the design's numbers in their data; the real production chapters
-need their `mapNo` backfilled — until then they show without a badge.) Because the map column is fixed
-width, **the image does not change size when the chapters change** (user): adding
-or removing rows makes the table taller or shorter; the map stays put and the
-rows below it never crop it. Gotcha: the interactive member-council map's
-`.site-map__image` rule (About/Profile) must stay scoped to `.site-map__box` —
-its `height: 100%` otherwise overrides the map page's `height: auto` and
-stretches the image to the table's height. Below 64rem the column shrinks
-(40rem cap, aspect kept); below 56rem the boxes stack. `public/map/side-list.svg` (the static
-list image) is no longer used.
+**Map**: `/map` has the black news page frame, the title "Map PPI Negara Kawasan
+Asia Oseania" with the shared tagline, then a two-column block. Left: an
+**interactive SVG map** (`CountryMap` from `@website/ui`, wrapped by `app/map/chapter-map.tsx`) of the countries of
+UN Asia (without Western Asia) and Oceania only — one `<path>` per country, from
+`packages/ui/src/map-countries.ts` (Natural Earth, public domain, Mercator: 1:50m simplified to
+25% offline with mapshaper + d3-geo, countries under ~8,000 km² from the unsimplified
+1:10m set so they stay recognisable when zoomed; an overseas territory sharing its
+country's code, e.g. Australia's Christmas Island, is left out so the zoom box is the
+mainland; regenerate the file the same way to change the region — neither tool is a
+dependency). Drag (mouse or one finger) pans, wheel /
+pinch / the + − buttons zoom (1× to 8×, or further while zoomed to a small country), ⟲ resets; the buttons, reset and a list choice glide to the new view (off with reduced motion). Hovering a country outlines it in brand-400 (user), and every country has an invisible 16 px hit area around it, small countries on top, so islands and tiny countries are easy to click (user); the pan/zoom maths is in
+`packages/ui/src/map-view.ts`. Countries with an active chapter are dark (brand-950), the rest
+lighter; the chosen country turns brand-600. Countries are focusable buttons
+(Enter/Space chooses). There are no numbers on the map (user). Right: with nothing
+chosen, the **region list** — groups OCEANIA · SOUTH EAST ASIA · EAST ASIA · SOUTH
+ASIA · MIDDLE ASIA · Others (order in `lib/country-names.ts`, headings in
+`map.regions`), one row per chapter with the country name (`Intl.DisplayNames`)
+and its alias (names not starting with "PPI"), sorted by country name. Choosing
+a country (map or list) swaps the list for an **information panel** in the same
+place — a list row does not open `/map/[slug]` (user) — and a list row also zooms
+the map so the country fills 70% of the map's width or height (`fitView`). The panel shows the country name and, for every active chapter with that
+`countryCode`, the same details as the chapter page (`app/map/chapter-details.tsx`);
+a country without a chapter shows `map.noInfo` (user). "← Close" goes back to the
+list. All data is the admin chapters list (active chapters only,
+`src/server/chapters.ts`, cached for minutes under the tag "chapters"); the group
+of a row is automatic from the chapter's country (`chapterRegion`,
+`packages/domain/docs/organization.md`; unknown countries go under Others). Below 64rem the map column shrinks; below 56rem the boxes stack. The old
+static images in `public/map/` (`asia-oseania-design.*`, `asia-oceania.svg`,
+`side-list.svg`) are no longer used.
 
-**Chapter detail page** (`/map/[slug]`): every row of the /map table links to its
-chapter's detail page (the row is the `<a>`). The page uses the same black frame,
+**Chapter detail page** (`/map/[slug]`): no longer linked from /map; the URL still works. The page uses the same black frame,
 and the page header is **the same title + tagline as /map** (user: "Tambahkan
 teks Map PPI Negara Kawasan Asia Oseania … Seperti halaman map" — `t.title` /
 `t.tagline`, so the h1 is the map title and the country name is an h2). Below

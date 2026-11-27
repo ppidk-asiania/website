@@ -665,6 +665,12 @@ function EventsList({
             <MenuItem icon="copy" onClick={() => copyLink(r)}>
               Copy<span className="admin-long"> Link</span>
             </MenuItem>
+            {canSeeRegistrants || serving[r.id] !== undefined ? (
+              // A full page load, not router.push: the camera Permissions-Policy is set per document.
+              <MenuItem icon="qr" onClick={() => window.location.assign(`/events/${r.id}/scan`)}>
+                Door scanner
+              </MenuItem>
+            ) : null}
             {canEdit ? (
               <>
                 <MenuDivider />
@@ -738,20 +744,26 @@ function EventsList({
         </div>
 
         {editing ? (
-          <section className="admin-card admin-event-stages" aria-label="Event stages">
+          <section className="admin-event-stages" aria-label="Event stages">
             <ol className="admin-event-stages__list">
-              {editing.stages.map((stage) => (
-                <li
-                  key={stage.key}
-                  className="admin-event-stages__item"
-                  aria-current={stage.key === editing.stage ? "step" : undefined}
-                >
-                  <strong>{stage.label}</strong>
-                  <span className="admin-table__sub">
-                    {stage.from ? formatInZone(stage.from, editing.timezone) : "—"}
-                  </span>
-                </li>
-              ))}
+              {editing.stages.map((stage, index) => {
+                const current = editing.stages.findIndex((s) => s.key === editing.stage);
+                return (
+                  <li
+                    key={stage.key}
+                    className="admin-event-stages__item"
+                    data-state={
+                      index < current ? "completed" : index === current ? "active" : "inactive"
+                    }
+                    aria-current={index === current ? "step" : undefined}
+                  >
+                    <strong>{stage.label}</strong>
+                    <span className="admin-table__sub">
+                      {stage.from ? formatInZone(stage.from, editing.timezone) : "—"}
+                    </span>
+                  </li>
+                );
+              })}
             </ol>
             <p className="admin-table__sub">
               {statusLabel(editing, today)}

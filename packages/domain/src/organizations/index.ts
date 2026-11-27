@@ -27,12 +27,25 @@ export const CHAPTER_REGIONS = [
 ] as const;
 export type ChapterRegion = (typeof CHAPTER_REGIONS)[number];
 
+const REGION_COUNTRIES: Readonly<Record<Exclude<ChapterRegion, "others">, string>> = {
+  oceania: "AS AU CK FJ FM GU KI MH MP NC NF NR NU NZ PF PG PN PW SB TO TV VU WF WS",
+  southeastAsia: "BN ID KH LA MM MY PH SG TH TL VN",
+  eastAsia: "CN HK JP KP KR MN MO TW",
+  southAsia: "AF BD BT IN IR LK MV NP PK",
+  middleAsia: "KG KZ TJ TM UZ",
+};
+
+export function chapterRegion(countryCode: string): ChapterRegion {
+  const found = Object.entries(REGION_COUNTRIES).find(([, codes]) =>
+    codes.split(" ").includes(countryCode),
+  );
+  return (found?.[0] as ChapterRegion | undefined) ?? "others";
+}
+
 export interface Chapter extends EntityMeta {
   readonly slug: string;
   readonly name: string;
   readonly countryCode: string;
-  readonly region: ChapterRegion | null;
-  readonly mapNo: number | null;
   readonly active: boolean;
   readonly timezone: string;
   readonly logo: FeaturedImage | null;
@@ -45,8 +58,6 @@ export interface Chapter extends EntityMeta {
   readonly email: string | null;
   readonly instagram: string | null;
   readonly socials: readonly SocialLink[];
-  readonly latitude: number;
-  readonly longitude: number;
   readonly memberCount: number;
   readonly conditions: readonly string[];
   readonly risk: ChapterRisk;
@@ -73,21 +84,6 @@ export const ChapterInputSchema = z
       .trim()
       .toUpperCase()
       .refine(isValidCountryCode, "Use the 2-letter ISO country code, e.g. JP."),
-    region: z
-      .union([z.enum(CHAPTER_REGIONS), z.literal("")])
-      .default("")
-      .transform((v) => v || null),
-    mapNo: z
-      .union([
-        z
-          .string()
-          .trim()
-          .regex(/^\d{1,3}$/, "Use a whole number, e.g. 18."),
-        z.literal(""),
-      ])
-      .default("")
-      .transform((v) => (v === "" ? null : Number(v)))
-      .pipe(z.number().int().min(1).max(999).nullable()),
     timezone: TimezoneSchema,
     logo: FeaturedImageSchema.nullable(),
     contactName: optionalText(120),
@@ -103,8 +99,6 @@ export const ChapterInputSchema = z
     socials: z
       .array(z.object({ label: safeText(40), url: httpLink }).strict())
       .max(5, "At most 5 other links."),
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
     slug: z
       .string()
       .trim()
@@ -120,17 +114,11 @@ export const ChapterInputSchema = z
   .strict();
 export type ChapterInput = z.infer<typeof ChapterInputSchema>;
 
-export function mapPosition(latitude: number, longitude: number): { x: number; y: number } {
-  const clamp = (value: number) => Math.min(100, Math.max(0, Math.round(value * 100) / 100));
-  return { x: clamp(0.78094 * longitude - 46.762), y: clamp(57.991 - 0.71079 * latitude) };
-}
-
 export interface PublicChapter {
   readonly slug: string;
   readonly name: string;
   readonly countryCode: string;
-  readonly region: ChapterRegion | null;
-  readonly mapNo: number | null;
+  readonly region: ChapterRegion;
   readonly active: boolean;
   readonly timezone: string;
   readonly logo: FeaturedImage | null;
@@ -143,7 +131,6 @@ export interface PublicChapter {
   readonly email: string | null;
   readonly instagram: string | null;
   readonly socials: readonly SocialLink[];
-  readonly position: { x: number; y: number };
 }
 
 export function toPublicChapter(c: Chapter): PublicChapter {
@@ -151,8 +138,7 @@ export function toPublicChapter(c: Chapter): PublicChapter {
     slug: c.slug,
     name: c.name,
     countryCode: c.countryCode,
-    region: c.region,
-    mapNo: c.mapNo,
+    region: chapterRegion(c.countryCode),
     active: c.active,
     timezone: c.timezone,
     logo: c.logo,
@@ -165,7 +151,6 @@ export function toPublicChapter(c: Chapter): PublicChapter {
     email: c.email,
     instagram: c.instagram,
     socials: c.socials,
-    position: mapPosition(c.latitude, c.longitude),
   };
 }
 

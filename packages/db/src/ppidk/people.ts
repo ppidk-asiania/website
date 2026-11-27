@@ -139,8 +139,6 @@ export function mapPpidk(
       email: c["email"],
       instagram: c["instagram"],
       socials: [],
-      latitude: 0,
-      longitude: 0,
       ...meta,
     });
     set(`chapterSlugs/${c["slug"] ?? ""}`, { id: docId });

@@ -57,25 +57,24 @@ These members are display data for the cabinet page only — not accounts and no
   the chapter agreed to publish only; nothing private is kept on a chapter. Chapters saved before
   these fields existed read as 0 / none / "none".
 - Country: 2-letter ISO code (upper-cased); time zone: IANA name; links http(s); at most 5 other
-  links; latitude/longitude in degrees (the marker, e.g. the country's centre).
+  links.
 - Public chapter profile (the detail page `/map/[slug]`, user): `description` (long text),
   `role` (the contact person's role, e.g. "Ketua", shown with the name) and `phone` are chapter
   fields like the rest — the page reads only the chapter document, nothing is hardcoded.
-- `mapPosition(lat, lng)` turns the coordinates into percent of the map box. The map is
-  equirectangular; the constants are fitted to the PPIDK map (Astana, Tokyo, Wellington).
-- One reader list (`listActive`) drives the markers, the About list, the count and the `/map`
+- One reader list (`listActive`) drives the map, the About list, the count and the `/map`
   country table, so they never disagree; inactive chapters are hidden everywhere
   (`PublicChapter` carries `active`).
-- Each chapter has a `region` (`CHAPTER_REGIONS`: oceania, southeastAsia, eastAsia, southAsia,
-  middleAsia, others; empty = hidden from the table) and a `mapNo` (badge number on the
-  `/map` table; empty = no badge) set by the national board: they decide the `/map` group and
-  number of the chapter, so moving a chapter to another group (e.g. Middle Asia → Others) or
-  giving a new PPI the next free number is a data change. Only the heading order lives in
-  `apps/web/src/lib/country-names.ts`, not in the data.
+- The map pin is the chapter's country: the national board clicks the country on the map in the
+  chapter form (shared `CountryMap` from `@website/ui`), which sets `countryCode` (user). There is
+  no map number, region field or latitude/longitude any more (user); old rows that still carry
+  them are ignored. The `/map` group is automatic: `chapterRegion(countryCode)` returns oceania,
+  southeastAsia, eastAsia, southAsia or middleAsia (UN subregions; Iran under South Asia) and
+  `others` for any other country, and `toPublicChapter` puts it in `region`. Change a country's
+  group in `REGION_COUNTRIES` (code), not in the data.
 - Permission `organizations.edit` (global) to add, edit and delete;
   `organizations.read` to see the page. A chapter admin (`organizations.edit` for one chapter)
   edits only that chapter's contact person, public contact, website, e-mail, Instagram and links;
-  name, country, region, map number, time zone, logo, URL, map position, member count, conditions and risk stay with
+  name, country (the map pin), time zone, logo, URL, member count, conditions and risk stay with
   the national board (refused on the server, disabled in the form). Audit module `organizations`,
   resource `chapter`; revertible for 14 days except edits that changed the URL.
 - Delete (chapters, periods, units) is soft: `deletedAt` is set, the item leaves the admin lists

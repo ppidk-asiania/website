@@ -340,6 +340,10 @@ const id = {
     instagram: "Instagram",
     empty: "Daftar PPI Negara belum tersedia.",
     close: "Tutup",
+    noInfo: "Belum ada info PPI di negara ini.",
+    zoomIn: "Perbesar peta",
+    zoomOut: "Perkecil peta",
+    reset: "Atur ulang peta",
   },
   forms: {
     required: "wajib",
@@ -1455,6 +1459,10 @@ const en: Dictionary = {
     instagram: "Instagram",
     empty: "The list of national associations is not available yet.",
     close: "Close",
+    noInfo: "There is no PPI information for this country yet.",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    reset: "Reset map",
   },
   forms: {
     required: "required",

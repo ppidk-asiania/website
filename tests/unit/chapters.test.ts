@@ -3,7 +3,7 @@ import {
   canDeletePeriod,
   periodDatesFromName,
   ChapterInputSchema,
-  mapPosition,
+  chapterRegion,
   OrgUnitInputSchema,
   unitPeopleCount,
   toPublicChapter,
@@ -24,8 +24,6 @@ const valid = {
   email: "info@ppijepang.org",
   instagram: "@ppijepang",
   socials: [{ label: "YouTube", url: "https://youtube.com/@ppijepang" }],
-  latitude: 36.2,
-  longitude: 138.25,
   slug: "",
 };
 
@@ -38,36 +36,27 @@ describe("chapters (PPI Negara, feature A2)", () => {
       instagram: "",
       role: "",
       phone: "",
-      region: "",
-      mapNo: "",
     });
     expect(parsed).toMatchObject({
       countryCode: "JP",
-      region: null,
-      mapNo: null,
       website: null,
       email: null,
       instagram: null,
       role: null,
       phone: null,
     });
-    expect(ChapterInputSchema.parse({ ...valid, region: "southeastAsia" }).region).toBe(
-      "southeastAsia",
-    );
-    expect(ChapterInputSchema.safeParse({ ...valid, region: "atlantis" }).success).toBe(false);
-    expect(ChapterInputSchema.parse({ ...valid, mapNo: "18" }).mapNo).toBe(18);
-    expect(ChapterInputSchema.safeParse({ ...valid, mapNo: "0" }).success).toBe(false);
-    expect(ChapterInputSchema.safeParse({ ...valid, mapNo: "abc" }).success).toBe(false);
   });
 
-  it("refuses bad country codes, zones, links, e-mails, coordinates and unknown keys", () => {
+  it("refuses bad country codes, zones, links, e-mails and unknown keys (map fields are gone)", () => {
     for (const bad of [
       { countryCode: "JPN" },
       { timezone: "Tokyo" },
       { website: "javascript:x" },
       { email: "not-an-email" },
-      { latitude: 91 },
-      { longitude: -181 },
+      { latitude: 36.2 },
+      { longitude: 138.25 },
+      { region: "eastAsia" },
+      { mapNo: "18" },
       { socials: [{ label: "X", url: "ftp://x" }] },
       { socials: Array(6).fill({ label: "X", url: "https://x.example" }) },
       { name: "P" },
@@ -79,16 +68,14 @@ describe("chapters (PPI Negara, feature A2)", () => {
     }
   });
 
-  it("places markers on the Asia–Oceania map from latitude and longitude (percent of the box)", () => {
-    const close = (p: { x: number; y: number }, x: number, y: number) => {
-      expect(p.x).toBeCloseTo(x, 0);
-      expect(p.y).toBeCloseTo(y, 0);
-    };
-    close(mapPosition(51.17, 71.43), 9.02, 21.62);
-    close(mapPosition(35.68, 139.69), 62.45, 32.55);
-    close(mapPosition(-41.29, 174.78), 89.73, 87.34);
-    expect(mapPosition(85, -10)).toEqual({ x: 0, y: 0 });
-    expect(mapPosition(-80, 190)).toEqual({ x: 100, y: 100 });
+  it("puts every country in its map region automatically, the rest under Others", () => {
+    expect(chapterRegion("AU")).toBe("oceania");
+    expect(chapterRegion("NZ")).toBe("oceania");
+    expect(chapterRegion("SG")).toBe("southeastAsia");
+    expect(chapterRegion("TW")).toBe("eastAsia");
+    expect(chapterRegion("LK")).toBe("southAsia");
+    expect(chapterRegion("UZ")).toBe("middleAsia");
+    expect(chapterRegion("NL")).toBe("others");
   });
 
   it("the public DTO carries only public fields", () => {
@@ -114,10 +101,8 @@ describe("chapters (PPI Negara, feature A2)", () => {
         "email",
         "instagram",
         "logo",
-        "mapNo",
         "name",
         "phone",
-        "position",
         "region",
         "role",
         "slug",
@@ -126,7 +111,7 @@ describe("chapters (PPI Negara, feature A2)", () => {
         "website",
       ].sort(),
     );
-    expect(dto.position.x).toBeCloseTo(61.2, 0);
+    expect(dto.region).toBe("eastAsia");
   });
 });
 

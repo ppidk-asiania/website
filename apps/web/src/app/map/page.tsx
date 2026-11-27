@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { LinesSkeleton } from "@/components/site-skeleton";
@@ -8,6 +7,8 @@ import { DICTIONARIES, LANG_COOKIE, languageFrom, type Language } from "@/i18n/d
 import { Localized } from "@/i18n/localized";
 import { REGION_ORDER, chapterAlias, countryName } from "@/lib/country-names";
 import { activeChapters } from "@/server/chapters";
+import { ChapterDetails } from "./chapter-details";
+import { ChapterMap } from "./chapter-map";
 
 export const metadata: Metadata = { title: "Map" };
 
@@ -31,18 +32,14 @@ export default function MapPage() {
   );
 }
 
-const rank = (c: PublicChapter): number => c.mapNo ?? Number.MAX_SAFE_INTEGER;
-
 function MapRow({ chapter, language }: { chapter: PublicChapter; language: Language }) {
-  const no = chapter.mapNo;
   const alias = chapterAlias(chapter.name);
   return (
     <li className="site-map__item">
-      <Link className="site-map__row" href={`/map/${chapter.slug}`}>
-        {no !== null && <span className="site-map__no">{no}</span>}
+      <button type="button" className="site-map__row" data-code={chapter.countryCode}>
         <span className="site-map__label">{countryName(chapter.countryCode, language)}</span>
         {alias && <span className="site-map__alias">{alias}</span>}
-      </Link>
+      </button>
     </li>
   );
 }
@@ -51,39 +48,55 @@ async function LocalizedMapPage() {
   const language = languageFrom((await cookies()).get(LANG_COOKIE)?.value);
   const t = DICTIONARIES[language].map;
   const chapters = await activeChapters();
-  const shown = chapters.filter((c) => c.region !== null);
   const groups = REGION_ORDER.map((region) => ({
     region,
-    rows: shown
+    rows: chapters
       .filter((c) => c.region === region)
-      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
+      .map((c) => ({ chapter: c, country: countryName(c.countryCode, language) }))
+      .sort(
+        (a, b) =>
+          a.country.localeCompare(b.country) || a.chapter.name.localeCompare(b.chapter.name),
+      )
+      .map((row) => row.chapter),
   })).filter((group) => group.rows.length > 0);
+  const panels = Object.fromEntries(
+    chapters.map((c) => [
+      c.countryCode,
+      chapters
+        .filter((other) => other.countryCode === c.countryCode)
+        .map((other) => <ChapterDetails key={other.slug} chapter={other} t={t} />),
+    ]),
+  );
   return (
-    <>
-      <div className="site-map">
-        <div className="site-map__map">
-          {/* eslint-disable-next-line @next/next/no-img-element -- design asset, sized by CSS */}
-          <img className="site-map__image" src="/map/asia-oseania-design.png" alt="" />
-        </div>
-        <aside>
-          {shown.length > 0 ? (
-            <div className="site-map__groups">
-              {groups.map(({ region, rows }) => (
-                <section className="site-map__group" key={region}>
-                  <h3 className="site-map__group-title">{t.regions[region]}</h3>
-                  <ul className="site-map__list">
-                    {rows.map((chapter) => (
-                      <MapRow key={chapter.slug} chapter={chapter} language={language} />
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <p className="site-muted">{t.empty}</p>
-          )}
-        </aside>
-      </div>
-    </>
+    <ChapterMap
+      language={language}
+      labels={{
+        map: t.label,
+        close: t.close,
+        noInfo: t.noInfo,
+        zoomIn: t.zoomIn,
+        zoomOut: t.zoomOut,
+        reset: t.reset,
+      }}
+      panels={panels}
+      list={
+        chapters.length > 0 ? (
+          <div className="site-map__groups">
+            {groups.map(({ region, rows }) => (
+              <section className="site-map__group" key={region}>
+                <h3 className="site-map__group-title">{t.regions[region]}</h3>
+                <ul className="site-map__list">
+                  {rows.map((chapter) => (
+                    <MapRow key={chapter.slug} chapter={chapter} language={language} />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <p className="site-muted">{t.empty}</p>
+        )
+      }
+    />
   );
 }

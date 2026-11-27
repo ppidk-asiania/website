@@ -38,8 +38,6 @@ const chapter = {
   email: "",
   instagram: "@ppijepang",
   socials: [],
-  latitude: 36.2,
-  longitude: 138.25,
   slug: "",
 };
 
@@ -66,8 +64,6 @@ describe("chapters (Organizations → PPI) and the map", () => {
       name: "PPI Australia",
       countryCode: "AU",
       timezone: "Australia/Sydney",
-      latitude: -25,
-      longitude: 134,
       logo: {
         url: "https://storage.example/chapters/logos/au.webp",
         thumbUrl: "https://storage.example/chapters/logos/au_thumb.webp",
@@ -136,7 +132,7 @@ describe("chapters (Organizations → PPI) and the map", () => {
     expect(await store.get(jpId)).toMatchObject(contact);
     for (const change of [
       { name: "PPI Nippon" },
-      { latitude: 35 },
+      { countryCode: "JO" },
       { slug: "ppi-nippon" },
       { memberCount: 9 },
       { conditions: ["Tidak ada kontak resmi"] },
@@ -195,7 +191,9 @@ describe("chapters (Organizations → PPI) and the map", () => {
       ...chapter,
       slug: "ppi-legacy",
       active: true,
+      region: "middleAsia",
       mapNo: 20,
+      latitude: 36.2,
     };
     delete legacy["description"];
     delete legacy["role"];
@@ -210,7 +208,14 @@ describe("chapters (Organizations → PPI) and the map", () => {
         updatedAt: now,
       });
     const [onMap] = await createSqlChapterReader(fake.db as unknown as Db).listActive();
-    expect(onMap).toMatchObject({ slug: "ppi-legacy", description: "", role: null, phone: null });
+    expect(onMap).toMatchObject({
+      slug: "ppi-legacy",
+      description: "",
+      role: null,
+      phone: null,
+      region: "eastAsia",
+    });
+    expect(onMap).not.toHaveProperty("mapNo");
   });
 
   it("deletes softly: gone from the list and the map until the audit entry is reverted", async () => {

@@ -1,9 +1,10 @@
 import type { FeaturedImage } from "@website/domain/content";
-import type {
-  Chapter,
-  ChapterRegion,
-  ChapterRisk,
-  SocialLink,
+import {
+  chapterRegion,
+  type Chapter,
+  type ChapterRegion,
+  type ChapterRisk,
+  type SocialLink,
 } from "@website/domain/organizations";
 
 export interface ChapterItem {
@@ -12,8 +13,7 @@ export interface ChapterItem {
   name: string;
   slug: string;
   countryCode: string;
-  region: ChapterRegion | null;
-  mapNo: number | null;
+  region: ChapterRegion;
   country: string;
   timezone: string;
   utcOffset: string;
@@ -28,8 +28,6 @@ export interface ChapterItem {
   email: string | null;
   instagram: string | null;
   socials: SocialLink[];
-  latitude: number;
-  longitude: number;
   memberCount: number;
   conditions: string[];
   risk: ChapterRisk;
@@ -51,8 +49,7 @@ export function toChapterItem(c: Chapter): ChapterItem {
     name: c.name,
     slug: c.slug,
     countryCode: c.countryCode,
-    region: c.region,
-    mapNo: c.mapNo,
+    region: chapterRegion(c.countryCode),
     country: regionNames.of(c.countryCode) ?? c.countryCode,
     timezone: c.timezone,
     utcOffset: utcOffset(c.timezone),
@@ -67,8 +64,6 @@ export function toChapterItem(c: Chapter): ChapterItem {
     email: c.email,
     instagram: c.instagram,
     socials: [...c.socials],
-    latitude: c.latitude,
-    longitude: c.longitude,
     memberCount: c.memberCount,
     conditions: [...c.conditions],
     risk: c.risk,
