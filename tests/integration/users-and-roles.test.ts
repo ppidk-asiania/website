@@ -948,3 +948,102 @@ describe("Role Manager → Edit Role: custom roles are data", () => {
     for (const role of await deps.roles.list()) expect(ROLE_COLORS).toContain(role.color);
   });
 });
+
+describe("Role Manager → Add New People from a pasted list (N3.3)", () => {
+  const auditCount = () =>
+    [...fake.docs.keys()].filter((path) => path.startsWith("auditLogs/")).length;
+  const list = (...lines: string[]) => lines.join("\n");
+  const preview = (who: string, text: string, roleId: string | null = "alumni") =>
+    createAccountActions(deps).previewPeople(...as(who))({ list: text, roleId });
+  const apply = (who: string, text: string, roleId: string | null = "alumni") =>
+    createAccountActions(deps).addPeople(...as(who))({ list: text, roleId });
+  const outcomes = (result: { ok: boolean; data?: { lines: { outcome: string }[] } }) =>
+    result.data?.lines.map((l) => l.outcome);
+
+  it("the preview marks every line and changes nothing", async () => {
+    const before = auditCount();
+    const result = await preview(
+      "boss",
+      list(
+        "ana@example.org ; Alumni",
+        "new1@example.org ; Editor",
+        "",
+        "new2@example.org",
+        "NEW1@example.org ; Alumni",
+        "someone@example.org ; Nope",
+        "not-an-email",
+      ),
+    );
+    expect(outcomes(result as never)).toEqual([
+      "assign",
+      "invite",
+      "invite",
+      "duplicate",
+      "unknown_role",
+      "invalid",
+    ]);
+    expect(auditCount()).toBe(before);
+    expect(invitesSent).toEqual([]);
+    expect(revokeSessions).not.toHaveBeenCalled();
+  });
+
+  it("apply gives the role to existing accounts and invites the rest: one audit entry and one e-mail per line", async () => {
+    const before = auditCount();
+    const result = await apply(
+      "boss",
+      list("ana@example.org ; Alumni", "new1@example.org ; Editor", "new2@example.org"),
+    );
+    expect(result).toMatchObject({ ok: true });
+    expect(
+      (result as { data: { lines: { done: string | null }[] } }).data.lines.map((l) => l.done),
+    ).toEqual(["assigned", "invited", "invited"]);
+    expect(fake.docs.get("users/ana")).toMatchObject({ roleIds: ["visitor", "alumni"] });
+    expect(invitesSent).toEqual([
+      { email: "new1@example.org", roleName: "Editor" },
+      { email: "new2@example.org", roleName: "Alumni" },
+    ]);
+    expect(auditCount() - before).toBe(3);
+  });
+
+  it("a line that would escalate is refused and the others are applied", async () => {
+    const result = await apply(
+      "manager",
+      list("new1@example.org ; Editor", "new2@example.org ; Alumni"),
+    );
+    expect(outcomes(result as never)).toEqual(["not_allowed", "invite"]);
+    expect(invitesSent).toEqual([{ email: "new2@example.org", roleName: "Alumni" }]);
+    expect(
+      (result as { data: { lines: { done: string | null }[] } }).data.lines.map((l) => l.done),
+    ).toEqual([null, "invited"]);
+  });
+
+  it("a line that fails does not stop the rest, and says why", async () => {
+    fake.docs.set("users/bob", { uid: "bob", ...user(["visitor"]), email: "bob@example.org" });
+    const result = await apply(
+      "boss",
+      list("bob@example.org ; Editor", "new2@example.org ; Alumni"),
+    );
+    const lines = (result as { data: { lines: { done: string | null; message?: string }[] } }).data
+      .lines;
+    expect(lines.map((l) => l.done)).toEqual(["failed", "invited"]);
+    expect(lines[0]?.message).toContain("second sign-in method");
+    expect(fake.docs.get("users/bob")).toMatchObject({ roleIds: ["visitor"] });
+    expect(invitesSent).toEqual([{ email: "new2@example.org", roleName: "Alumni" }]);
+  });
+
+  it("takes at most 100 lines, needs users.edit, and a recent sign-in to apply", async () => {
+    const many = Array.from({ length: 101 }, (_, i) => `p${i}@example.org`).join("\n");
+    expect(await preview("boss", many)).toMatchObject({ ok: false, error: "refused" });
+    expect(await apply("boss", many)).toMatchObject({ ok: false, error: "refused" });
+    fake.docs.set("users/visitor1", { uid: "visitor1", ...user(["visitor"]) });
+    expect(await preview("visitor1", "a@example.org")).toMatchObject({ error: "forbidden" });
+    const stale = createAccountActions(deps).addPeople(
+      () => principalOf("boss"),
+      () => Promise.resolve({ actorEmail: null, requestId: "req-123456", authTime: null }),
+    );
+    expect(await stale({ list: "a@example.org", roleId: "alumni" })).toMatchObject({
+      error: "reauthenticate",
+    });
+    expect(invitesSent).toEqual([]);
+  });
+});

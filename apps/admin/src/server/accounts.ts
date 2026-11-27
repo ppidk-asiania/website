@@ -4,7 +4,7 @@ import { hasTwoSignInMethods, type AccountAdmin, type PasskeyStore } from "@webs
 import type { AuditEvent } from "@website/audit";
 import type { AuditChange, Invite, UserSummary } from "@website/db";
 import type { SqlAccountStore, SqlMemberProfileStore, SqlRoleStore } from "@website/db/sql";
-import { RuleViolationError } from "@website/domain/shared";
+import { ConcurrencyConflictError, RuleViolationError } from "@website/domain/shared";
 import { logSecurityEvent, type Logger } from "@website/observability";
 import {
   accountChangeRefusal,
@@ -24,7 +24,7 @@ export interface AccountDeps {
     SqlAccountStore,
     "change" | "get" | "findByEmail" | "findByName" | "searchByPrefix" | "invite" | "cancelInvite"
   >;
-  readonly roles: Pick<SqlRoleStore, "get">;
+  readonly roles: Pick<SqlRoleStore, "get" | "list">;
   readonly memberProfiles: Pick<SqlMemberProfileStore, "findByUserId">;
   readonly passkeys: Pick<PasskeyStore, "listByUser">;
   readonly authAdmin: AccountAdmin;
@@ -65,6 +65,31 @@ const PersonInput = z
   })
   .strict();
 const InviteRef = z.object({ email: z.email().max(254) }).strict();
+
+/** The most lines one pasted list may have. */
+export const MAX_PEOPLE_LINES = 100;
+const PeopleListInput = z
+  .object({
+    list: z.string().max(30_000),
+    /** The role of a line that names none. */
+    roleId: safeId.nullable(),
+  })
+  .strict();
+
+export type PersonLineOutcome =
+  "invite" | "assign" | "duplicate" | "unknown_role" | "not_allowed" | "invalid";
+export interface PersonLine {
+  /** Position among the non-empty lines (1 = the first). */
+  readonly line: number;
+  readonly email: string;
+  readonly roleName: string | null;
+  readonly outcome: PersonLineOutcome;
+}
+export interface PersonLineReport extends PersonLine {
+  /** What was done; null when the line was not applied (see `outcome`). */
+  readonly done: "invited" | "assigned" | "failed" | null;
+  readonly message?: string;
+}
 
 const sameAssignment = (a: RoleAssignment, b: RoleAssignment) =>
   a.roleId === b.roleId &&
@@ -187,49 +212,142 @@ export function createAccountActions(deps: AccountDeps) {
     handler: give,
   });
 
+  /** One person: the role at once when an account exists, else an invite. Shared by the single form and the pasted list. */
+  const addOne = async (
+    { person, roleId }: z.infer<typeof PersonInput>,
+    principal: Principal,
+    audit: AuditBuilder,
+  ) => {
+    const isEmail = person.includes("@");
+    const found = isEmail
+      ? [await deps.accounts.findByEmail(person)].filter((u) => u !== null)
+      : await deps.accounts.findByName(person);
+    if (found.length > 1) {
+      throw new RuleViolationError("Several accounts have this name. Use the e-mail address.");
+    }
+    const account = found[0];
+    if (account) {
+      const scope = { type: "global" } as const;
+      await give({ uid: account.uid, version: account.version, roleId, scope }, principal, audit);
+      return { invited: false };
+    }
+    if (!isEmail) {
+      throw new RuleViolationError(
+        "No account has this name. Invite the person by e-mail instead.",
+      );
+    }
+    const role = await loadRole(roleId);
+    if (!canAssignRole(principal, role)) refuse("forbidden");
+    const invite = await deps.accounts.invite(
+      person,
+      role.id,
+      principal.userId,
+      (change, action, id) =>
+        audit({
+          module: "users",
+          action,
+          resourceType: "invite",
+          resourceId: id,
+          title: person.toLowerCase(),
+          ...change,
+          revertible: false,
+        }),
+      new Date(),
+    );
+    await deps.sendInvite(invite, role.name);
+    return { invited: true };
+  };
+
   const addPerson = createGuardedAction({
     permission: "users.edit",
     input: PersonInput,
     recentSignIn: true,
-    handler: async ({ person, roleId }, principal, audit) => {
-      const isEmail = person.includes("@");
-      const found = isEmail
-        ? [await deps.accounts.findByEmail(person)].filter((u) => u !== null)
-        : await deps.accounts.findByName(person);
-      if (found.length > 1) {
-        throw new RuleViolationError("Several accounts have this name. Use the e-mail address.");
+    handler: addOne,
+  });
+
+  /** Reads the pasted lines and says, per line, what applying would do. Never writes. */
+  const classify = async (
+    { list, roleId }: z.infer<typeof PeopleListInput>,
+    principal: Principal,
+  ): Promise<PersonLine[]> => {
+    const rows = list
+      .split(/\r?\n/)
+      .map((text) => text.trim())
+      .filter((text) => text !== "");
+    if (rows.length > MAX_PEOPLE_LINES) {
+      throw new RuleViolationError(`Paste at most ${MAX_PEOPLE_LINES} lines.`);
+    }
+    const roles = await deps.roles.list();
+    const byName = new Map(roles.map((r) => [r.name.trim().toLowerCase(), r]));
+    const fallback = roleId ? roles.find((r) => r.id === roleId) : undefined;
+    const seen = new Set<string>();
+    const lines: PersonLine[] = [];
+    for (const [index, row] of rows.entries()) {
+      const [address = "", named] = row.split(";").map((part) => part.trim());
+      const line = index + 1;
+      const email = address.toLowerCase();
+      if (!z.email().max(254).safeParse(address).success) {
+        lines.push({ line, email: address, roleName: named ?? null, outcome: "invalid" });
+        continue;
       }
-      const account = found[0];
-      if (account) {
-        const scope = { type: "global" } as const;
-        await give({ uid: account.uid, version: account.version, roleId, scope }, principal, audit);
-        return { invited: false };
+      const role = named ? byName.get(named.toLowerCase()) : fallback;
+      const roleName = role?.name ?? named ?? null;
+      if (seen.has(email)) {
+        lines.push({ line, email, roleName, outcome: "duplicate" });
+        continue;
       }
-      if (!isEmail) {
-        throw new RuleViolationError(
-          "No account has this name. Invite the person by e-mail instead.",
-        );
+      seen.add(email);
+      if (!role) {
+        lines.push({ line, email, roleName, outcome: "unknown_role" });
+      } else if (!canAssignRole(principal, role)) {
+        lines.push({ line, email, roleName, outcome: "not_allowed" });
+      } else {
+        const exists = (await deps.accounts.findByEmail(email)) !== null;
+        lines.push({ line, email, roleName, outcome: exists ? "assign" : "invite" });
       }
-      const role = await loadRole(roleId);
-      if (!canAssignRole(principal, role)) refuse("forbidden");
-      const invite = await deps.accounts.invite(
-        person,
-        role.id,
-        principal.userId,
-        (change, action, id) =>
-          audit({
-            module: "users",
-            action,
-            resourceType: "invite",
-            resourceId: id,
-            title: person.toLowerCase(),
-            ...change,
-            revertible: false,
-          }),
-        new Date(),
-      );
-      await deps.sendInvite(invite, role.name);
-      return { invited: true };
+    }
+    return lines;
+  };
+
+  const previewPeople = createGuardedAction({
+    permission: "users.edit",
+    input: PeopleListInput,
+    handler: async (input, principal) => ({ lines: await classify(input, principal) }),
+  });
+
+  /** Runs the single add per line that can be applied; a line that fails never stops the rest. */
+  const addPeople = createGuardedAction({
+    permission: "users.edit",
+    input: PeopleListInput,
+    recentSignIn: true,
+    handler: async (input, principal, audit) => {
+      const roles = await deps.roles.list();
+      const roleOf = (name: string | null) =>
+        roles.find((r) => r.name.toLowerCase() === name?.toLowerCase());
+      const report: PersonLineReport[] = [];
+      for (const line of await classify(input, principal)) {
+        const role = roleOf(line.roleName);
+        if ((line.outcome !== "invite" && line.outcome !== "assign") || !role) {
+          report.push({ ...line, done: null });
+          continue;
+        }
+        try {
+          await addOne({ person: line.email, roleId: role.id }, principal, audit);
+          report.push({ ...line, done: line.outcome === "invite" ? "invited" : "assigned" });
+        } catch (error) {
+          const message =
+            error instanceof RuleViolationError
+              ? error.message
+              : error instanceof ConcurrencyConflictError
+                ? "The account changed meanwhile. Add this line again."
+                : "This line could not be applied.";
+          if (!(error instanceof RuleViolationError)) {
+            deps.logger.error("people list line failed", { error: String(error) });
+          }
+          report.push({ ...line, done: "failed", message });
+        }
+      }
+      return { lines: report };
     },
   });
 
@@ -361,6 +479,8 @@ export function createAccountActions(deps: AccountDeps) {
   return {
     assignRole,
     addPerson,
+    previewPeople,
+    addPeople,
     findPeople,
     cancelInvite,
     personDetails,

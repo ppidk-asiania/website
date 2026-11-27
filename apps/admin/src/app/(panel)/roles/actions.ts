@@ -13,6 +13,14 @@ export async function addPersonAction(input: unknown) {
   return done(await accountActions().addPerson(getPrincipal, getAuditContext)(input));
 }
 
+export async function previewPeopleAction(input: unknown) {
+  return accountActions().previewPeople(getPrincipal, getAuditContext)(input);
+}
+
+export async function addPeopleAction(input: unknown) {
+  return done(await accountActions().addPeople(getPrincipal, getAuditContext)(input));
+}
+
 export async function cancelInviteAction(input: unknown) {
   return done(await accountActions().cancelInvite(getPrincipal, getAuditContext)(input));
 }

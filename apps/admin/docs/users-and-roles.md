@@ -21,6 +21,16 @@ read-only in the popup and changed where they come from.
   that matches no account or several accounts is refused. While typing (2+ characters, 300 ms
   after the last key) up to 8 accounts whose e-mail or name starts with the text are suggested
   (`findPeople`, `users.edit`); arrow keys + Enter or a click picks one (its e-mail is used).
+- **Paste a list** (N3.3, a switch inside Add New People): up to 100 non-empty lines, each an
+  `e-mail` or `e-mail ; role name` (role names match without regard to case; a line without a role
+  takes the dialog's default role). The **preview** (`previewPeople`, writes nothing) marks every
+  line: will invite / gets the role now (an account exists) / duplicate (the same e-mail again; the
+  first line wins) / unknown role / not allowed for you (`canAssignRole`) / not an e-mail. **Apply**
+  (`addPeople`, recent sign-in) runs the single add above for each line that can be applied, so every
+  rule of the single add holds per line (two sign-in methods before a staff role, the account
+  rules, one audit entry and one e-mail per line); a line that fails is reported with its reason
+  and never stops the rest. Not built: the organisation-domain rule of step 15.1 (that account
+  type does not exist yet).
 - The **pencil** opens the person popup: status, last sign-in, sign-in methods (read on open),
   the website role (one dropdown; "Visitor (no role)" removes it, then Save), the organizational
   roles (read-only) and Deactivate / Reactivate. An invite's popup has "Cancel invite".

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { ROLE_COLORS, type RoleColor } from "@website/permissions";
 import {
+  addPeopleAction,
   addPersonAction,
   assignRoleAction,
   cancelInviteAction,
@@ -20,11 +21,13 @@ import {
   findPeopleAction,
   logPeopleExportAction,
   personDetailsAction,
+  previewPeopleAction,
   revokeRoleAction,
   saveRoleAction,
   setStatusAction,
 } from "@/app/(panel)/roles/actions";
 import type { AppointmentRoleMap } from "@website/domain/organizations";
+import type { PersonLine, PersonLineOutcome, PersonLineReport } from "@/server/accounts";
 import { ActionError } from "@/components/action-error";
 import { actionMessage, type ActionFailure } from "@/components/action-message";
 import { RoleMapModal } from "@/components/appointment-forms";
@@ -335,6 +338,52 @@ interface Suggestion {
 
 const SUGGEST_DELAY_MS = 300;
 
+const LINE_OUTCOME: Record<
+  PersonLineOutcome,
+  { text: string; tone: "success" | "warn" | "danger" | "neutral" }
+> = {
+  invite: { text: "Will invite", tone: "success" },
+  assign: { text: "Gets the role now", tone: "success" },
+  duplicate: { text: "Duplicate", tone: "neutral" },
+  unknown_role: { text: "Unknown role", tone: "warn" },
+  not_allowed: { text: "Not allowed for you", tone: "danger" },
+  invalid: { text: "Not an e-mail", tone: "danger" },
+};
+
+const reportBadge = (line: PersonLineReport) =>
+  line.done === "invited"
+    ? { text: "Invited", tone: "success" as const }
+    : line.done === "assigned"
+      ? { text: "Role given", tone: "success" as const }
+      : line.done === "failed"
+        ? { text: "Failed", tone: "danger" as const }
+        : { text: `Skipped: ${LINE_OUTCOME[line.outcome].text}`, tone: "neutral" as const };
+
+/** One row of a pasted list: the line, and what applying it does (or did). */
+function PersonLines({ lines }: { lines: readonly (PersonLine | PersonLineReport)[] }) {
+  return (
+    <dl className="admin-detail-list">
+      {lines.map((line) => {
+        const badge = "done" in line ? reportBadge(line) : LINE_OUTCOME[line.outcome];
+        return (
+          <div key={line.line} className="admin-detail-list__row">
+            <dt>
+              {line.email}
+              {line.roleName ? ` · ${line.roleName}` : ""}
+            </dt>
+            <dd>
+              <Badge tone={badge.tone}>{badge.text}</Badge>
+              {"message" in line && line.message ? (
+                <span className="admin-detail-list__text"> {line.message}</span>
+              ) : null}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 function AddPeopleModal({
   open,
   roles,
@@ -354,6 +403,10 @@ function AddPeopleModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Readonly<Record<string, string>>>({});
+  const [mode, setMode] = useState<"one" | "list">("one");
+  const [pasted, setPasted] = useState("");
+  const [preview, setPreview] = useState<readonly PersonLine[] | null>(null);
+  const [report, setReport] = useState<readonly PersonLineReport[] | null>(null);
   const listId = useId();
   const [found, setFound] = useState<{ text: string; items: Suggestion[] }>({
     text: "",
@@ -390,7 +443,27 @@ function AddPeopleModal({
     setRoleId("");
     setError(null);
     setFields({});
+    setMode("one");
+    setPasted("");
+    setPreview(null);
+    setReport(null);
     onClose();
+  };
+  /** Pasted list: the first submit shows the preview, the second applies it and shows the report. */
+  const submitList = async () => {
+    setBusy(true);
+    setError(null);
+    const input = { list: pasted, roleId: roleId || null };
+    if (preview === null) {
+      const result = await previewPeopleAction(input);
+      setBusy(false);
+      return result.ok ? setPreview(result.data.lines) : setError(actionMessage(result));
+    }
+    const result = await addPeopleAction(input);
+    setBusy(false);
+    if (!result.ok) return setError(actionMessage(result));
+    setReport(result.data.lines);
+    router.refresh();
   };
   const submit = async () => {
     setBusy(true);
@@ -415,119 +488,193 @@ function AddPeopleModal({
       open={open}
       title="Add New People"
       onClose={close}
-      onSubmit={() => void submit()}
+      onSubmit={() => void (mode === "one" ? submit() : report ? close() : submitList())}
       footer={
         <div className="admin-modal__footer-row">
-          <Button variant="outline" icon="chevronLeft" onClick={close}>
+          <Button
+            variant="outline"
+            icon="chevronLeft"
+            onClick={() => (mode === "list" && preview && !report ? setPreview(null) : close())}
+          >
             Back
           </Button>
           <Button
             type="submit"
             variant="primary"
             icon="send"
-            disabled={busy || !person.trim() || !roleId}
+            disabled={
+              busy ||
+              (mode === "one"
+                ? !person.trim() || !roleId
+                : !report &&
+                  (preview === null
+                    ? !pasted.trim()
+                    : !preview.some((l) => l.outcome === "invite" || l.outcome === "assign")))
+            }
           >
-            Invite
+            {mode === "one" ? "Invite" : report ? "Done" : preview ? "Apply" : "Preview"}
           </Button>
         </div>
       }
     >
       <div className="admin-role-form">
-        <div className="admin-field">
-          <label className="admin-field__label" htmlFor="people-person">
-            Email or Name
-          </label>
-          <div className="admin-role-suggest">
-            <input
-              id="people-person"
-              className="admin-input"
-              required
-              maxLength={120}
-              autoComplete="off"
-              placeholder="username@example.com or John Kennedy"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={suggestions.length > 0}
-              aria-controls={listId}
-              {...(suggestions[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
-              value={person}
-              onChange={(e) => {
-                setPerson(e.target.value);
-                setActive(0);
-                setListOpen(true);
-              }}
-              onFocus={() => setListOpen(true)}
-              onBlur={() => setListOpen(false)}
-              onKeyDown={(event) => {
-                if (suggestions.length === 0) return;
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  const step = event.key === "ArrowDown" ? 1 : -1;
-                  setActive((i) => Math.min(Math.max(i + step, 0), suggestions.length - 1));
-                } else if (event.key === "Enter" && suggestions[active]) {
-                  event.preventDefault();
-                  choose(suggestions[active]);
-                } else if (event.key === "Escape") {
-                  event.preventDefault();
-                  setListOpen(false);
-                }
-              }}
-              {...(fields["person"] ? { "aria-invalid": true } : {})}
-              aria-describedby="people-person-error"
-            />
-            {suggestions.length > 0 ? (
-              <ul
-                id={listId}
-                role="listbox"
-                aria-label="Matching people"
-                className="admin-row-menu__panel admin-combo__list admin-role-suggest__list"
-              >
-                {suggestions.map((item, i) => (
-                  <li
-                    key={item.uid}
-                    id={`${listId}-${i}`}
-                    role="option"
-                    aria-selected={i === active}
-                    style={{ "--i": i } as CSSProperties}
-                    className={`admin-row-menu__item${i === active ? " admin-combo__option--active" : ""}`}
-                    onMouseEnter={() => setActive(i)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => choose(item)}
-                  >
-                    <span className="admin-role-suggest__name">{item.name ?? item.email}</span>
-                    {item.name && item.email ? (
-                      <span className="admin-role-suggest__email">{item.email}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-          <FieldError
-            id="people-person-error"
-            message={fields["person"]}
-            hint="An e-mail without an account gets an invite."
-          />
-        </div>
-        <div className="admin-field">
-          <label className="admin-field__label" htmlFor="people-role">
-            Role
-          </label>
-          <Select
-            id="people-role"
-            className="admin-select"
-            required
-            value={roleId}
-            onChange={(e) => setRoleId(e.target.value)}
+        {preview === null && report === null ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={mode === "one" ? "users" : "user"}
+            onClick={() => setMode(mode === "one" ? "list" : "one")}
           >
-            <option value="">Select Role</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </Select>
-        </div>
+            {mode === "one" ? "Paste a list" : "Add one person"}
+          </Button>
+        ) : null}
+        {mode === "list" ? (
+          <>
+            {report ? (
+              <PersonLines lines={report} />
+            ) : preview ? (
+              <PersonLines lines={preview} />
+            ) : (
+              <>
+                <div className="admin-field">
+                  <label className="admin-field__label" htmlFor="people-list">
+                    People (up to 100 lines)
+                  </label>
+                  <textarea
+                    id="people-list"
+                    className="admin-input admin-textarea"
+                    rows={8}
+                    spellCheck={false}
+                    placeholder={"ana@example.org\nbudi@example.org ; Editor"}
+                    value={pasted}
+                    onChange={(e) => setPasted(e.target.value)}
+                  />
+                  <p className="admin-field__hint">
+                    One per line: an e-mail, or an e-mail ; role name.
+                  </p>
+                </div>
+                <div className="admin-field">
+                  <label className="admin-field__label" htmlFor="people-list-role">
+                    Role for lines without one
+                  </label>
+                  <Select
+                    id="people-list-role"
+                    className="admin-select"
+                    value={roleId}
+                    onChange={(e) => setRoleId(e.target.value)}
+                  >
+                    <option value="">No default role</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="people-person">
+                Email or Name
+              </label>
+              <div className="admin-role-suggest">
+                <input
+                  id="people-person"
+                  className="admin-input"
+                  required
+                  maxLength={120}
+                  autoComplete="off"
+                  placeholder="username@example.com or John Kennedy"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={suggestions.length > 0}
+                  aria-controls={listId}
+                  {...(suggestions[active]
+                    ? { "aria-activedescendant": `${listId}-${active}` }
+                    : {})}
+                  value={person}
+                  onChange={(e) => {
+                    setPerson(e.target.value);
+                    setActive(0);
+                    setListOpen(true);
+                  }}
+                  onFocus={() => setListOpen(true)}
+                  onBlur={() => setListOpen(false)}
+                  onKeyDown={(event) => {
+                    if (suggestions.length === 0) return;
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      const step = event.key === "ArrowDown" ? 1 : -1;
+                      setActive((i) => Math.min(Math.max(i + step, 0), suggestions.length - 1));
+                    } else if (event.key === "Enter" && suggestions[active]) {
+                      event.preventDefault();
+                      choose(suggestions[active]);
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      setListOpen(false);
+                    }
+                  }}
+                  {...(fields["person"] ? { "aria-invalid": true } : {})}
+                  aria-describedby="people-person-error"
+                />
+                {suggestions.length > 0 ? (
+                  <ul
+                    id={listId}
+                    role="listbox"
+                    aria-label="Matching people"
+                    className="admin-row-menu__panel admin-combo__list admin-role-suggest__list"
+                  >
+                    {suggestions.map((item, i) => (
+                      <li
+                        key={item.uid}
+                        id={`${listId}-${i}`}
+                        role="option"
+                        aria-selected={i === active}
+                        style={{ "--i": i } as CSSProperties}
+                        className={`admin-row-menu__item${i === active ? " admin-combo__option--active" : ""}`}
+                        onMouseEnter={() => setActive(i)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => choose(item)}
+                      >
+                        <span className="admin-role-suggest__name">{item.name ?? item.email}</span>
+                        {item.name && item.email ? (
+                          <span className="admin-role-suggest__email">{item.email}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <FieldError
+                id="people-person-error"
+                message={fields["person"]}
+                hint="An e-mail without an account gets an invite."
+              />
+            </div>
+            <div className="admin-field">
+              <label className="admin-field__label" htmlFor="people-role">
+                Role
+              </label>
+              <Select
+                id="people-role"
+                className="admin-select"
+                required
+                value={roleId}
+                onChange={(e) => setRoleId(e.target.value)}
+              >
+                <option value="">Select Role</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </>
+        )}
         <ActionError text={error} reauthUrl={reauthUrl} />
       </div>
     </Modal>
