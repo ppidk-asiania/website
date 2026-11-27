@@ -12,6 +12,7 @@ import {
 import {
   createOpportunityAction,
   deleteOpportunityAction,
+  setMentorshipFormAction,
   setOpportunityStatusAction,
   updateOpportunityAction,
 } from "@/app/(panel)/opportunities/actions";
@@ -68,6 +69,7 @@ export interface OpportunityRow {
   chapterId: string | null;
   owner: string;
   clicks: number;
+  applicants: number;
   canEdit: boolean;
 }
 
@@ -108,7 +110,7 @@ const stateOf = (r: OpportunityRow) =>
   opportunityPhase({ status: r.status, deadline: r.deadline, deletedAt: null }, today());
 const STATE_LABELS = { open: "Open", past: "Past deadline", archived: "Closed", hidden: "" };
 
-type SortKey = "posting" | "type" | "status" | "clicks";
+type SortKey = "posting" | "type" | "status" | "clicks" | "applicants";
 const sortValue = (r: OpportunityRow, key: SortKey): string | number =>
   key === "posting"
     ? r.title.toLowerCase()
@@ -116,16 +118,24 @@ const sortValue = (r: OpportunityRow, key: SortKey): string | number =>
       ? TYPE_LABELS[r.type]
       : key === "status"
         ? STATE_LABELS[stateOf(r)]
-        : r.clicks;
+        : key === "clicks"
+          ? r.clicks
+          : r.applicants;
 const filterText = (r: OpportunityRow, key: SortKey): string =>
-  key === "posting" ? r.title : key === "clicks" ? String(r.clicks) : String(sortValue(r, key));
+  key === "posting"
+    ? r.title
+    : key === "clicks" || key === "applicants"
+      ? String(sortValue(r, key))
+      : String(sortValue(r, key));
 
 /** The opportunities board: postings of the region and of chapters (N6.1). */
 export function OpportunitiesPage(props: {
   rows: OpportunityRow[];
   owners: { value: string; label: string }[];
+  /** The account form people fill in for mentorship; null when the viewer may not choose it. */
+  mentorship: { formId: string; forms: { id: string; title: string }[] } | null;
 }) {
-  const { rows, owners } = props;
+  const { rows, owners, mentorship } = props;
   const router = useRouter();
   const toast = useToastMessage();
   const upload = useImageUpload("thumbnail");
@@ -137,6 +147,7 @@ export function OpportunitiesPage(props: {
   const [query, setQuery] = useState("");
   const [searchKey, setSearchKey] = useState(0);
   const [deleting, setDeleting] = useState<OpportunityRow | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -209,6 +220,15 @@ export function OpportunitiesPage(props: {
     toast.show(row.status === "open" ? "Posting closed" : "Posting reopened");
   };
 
+  const saveMentorship = async () => {
+    if (picking === null) return;
+    const result = await setMentorshipFormAction({ formId: picking || null });
+    if (!result.ok) return toast.show(actionMessage(result));
+    setPicking(null);
+    router.refresh();
+    toast.show("Mentorship form saved");
+  };
+
   const remove = async () => {
     if (!deleting) return;
     const result = await deleteOpportunityAction({ id: deleting.id, version: deleting.version });
@@ -254,31 +274,51 @@ export function OpportunitiesPage(props: {
       render: (row) => row.clicks,
     },
     {
+      key: "applicants",
+      header: table.header("applicants", "Applicants"),
+      align: "right",
+      render: (row) => (row.applyUrl === "" ? row.applicants : "–"),
+    },
+    {
       key: "aksi",
       header: "",
       align: "right",
       render: (row) =>
-        row.canEdit ? (
+        row.canEdit || row.applyUrl === "" ? (
           <div className="admin-table__actions">
-            <Button
-              variant="ghost"
-              size="icon"
-              icon="edit"
-              aria-label="Edit"
-              title="Edit"
-              onClick={() => open(row)}
-            />
+            {row.canEdit ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                icon="edit"
+                aria-label="Edit"
+                title="Edit"
+                onClick={() => open(row)}
+              />
+            ) : null}
             <RowMenu>
-              <MenuItem
-                icon={row.status === "open" ? "lock" : "undo"}
-                onClick={() => void toggleStatus(row)}
-              >
-                {row.status === "open" ? "Close" : "Reopen"}
-                <span className="admin-long"> Posting</span>
-              </MenuItem>
-              <MenuItem icon="trash" danger onClick={() => setDeleting(row)}>
-                Delete<span className="admin-long"> Posting</span>
-              </MenuItem>
+              {row.applyUrl === "" ? (
+                <MenuItem
+                  icon="users"
+                  onClick={() => router.push(`/opportunities/${row.id}/applicants`)}
+                >
+                  Applicants
+                </MenuItem>
+              ) : null}
+              {row.canEdit ? (
+                <>
+                  <MenuItem
+                    icon={row.status === "open" ? "lock" : "undo"}
+                    onClick={() => void toggleStatus(row)}
+                  >
+                    {row.status === "open" ? "Close" : "Reopen"}
+                    <span className="admin-long"> Posting</span>
+                  </MenuItem>
+                  <MenuItem icon="trash" danger onClick={() => setDeleting(row)}>
+                    Delete<span className="admin-long"> Posting</span>
+                  </MenuItem>
+                </>
+              ) : null}
             </RowMenu>
           </div>
         ) : null,
@@ -305,11 +345,23 @@ export function OpportunitiesPage(props: {
           </p>
         </div>
         <div className="admin-page-header__actions">
-          {canAdd ? (
+          {canAdd || mentorship ? (
             <div className="admin-fab">
-              <Button variant="primary" size="sm" icon="plus" onClick={() => open("new")}>
-                Add Posting
-              </Button>
+              {mentorship ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon="users"
+                  onClick={() => setPicking(mentorship.formId)}
+                >
+                  Mentorship Form
+                </Button>
+              ) : null}
+              {canAdd ? (
+                <Button variant="primary" size="sm" icon="plus" onClick={() => open("new")}>
+                  Add Posting
+                </Button>
+              ) : null}
             </div>
           ) : null}
           <SortMenu columns={columns} />
@@ -531,6 +583,46 @@ export function OpportunitiesPage(props: {
               {message ?? upload.error ?? inline.error}
             </p>
           ) : null}
+        </div>
+      </Modal>
+      <Modal
+        asForm
+        open={picking !== null}
+        title="Mentorship Form"
+        subtitle="The board links to this form. It must be answered while signed in."
+        onClose={() => setPicking(null)}
+        footer={
+          <div className="admin-modal__footer-row">
+            <Button variant="outline" icon="chevronLeft" onClick={() => setPicking(null)}>
+              Back
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              icon="cloud"
+              onClick={() => void saveMentorship()}
+            >
+              Save
+            </Button>
+          </div>
+        }
+      >
+        <div className="admin-field">
+          <label className="admin-field__label" htmlFor="mentorship-form">
+            Form
+          </label>
+          <Select
+            id="mentorship-form"
+            value={picking ?? ""}
+            onChange={(e) => setPicking(e.target.value)}
+          >
+            <option value="">No mentorship link</option>
+            {(mentorship?.forms ?? []).map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.title}
+              </option>
+            ))}
+          </Select>
         </div>
       </Modal>
       <ToastBanner message={toast.message} />

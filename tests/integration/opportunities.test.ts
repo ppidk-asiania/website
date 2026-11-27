@@ -41,6 +41,7 @@ const actions = () =>
   createOpportunityActions({
     opportunities: createSqlOpportunityStore(db()),
     chapterExists: (id) => Promise.resolve(id === "ch-1" || id === "ch-2"),
+    isAccountForm: (id) => Promise.resolve(id === "form-1"),
     now: () => now,
   });
 const created = async (principal: Principal, over: Record<string, unknown> = {}) => {
@@ -110,5 +111,22 @@ describe("opportunities board (N6.1)", () => {
     await reader.countClick(id);
     expect(fake.docs.get(`opportunityClicks/${id}`)).toEqual({ count: 2 });
     expect((await createSqlOpportunityStore(db()).clickCounts([id])).get(id)).toBe(2);
+  });
+
+  it("the mentorship form is a global setting and must be an account form", async () => {
+    const reader = createSqlOpportunityReader(db());
+    expect(await reader.mentorshipFormId()).toBeNull();
+    expect(
+      await actions().setMentorshipForm(...as(chapterEditor))({ formId: "form-1" }),
+    ).toMatchObject({ error: "forbidden" });
+    expect(await actions().setMentorshipForm(...as(global))({ formId: "other" })).toMatchObject({
+      error: "refused",
+    });
+    expect(await actions().setMentorshipForm(...as(global))({ formId: "form-1" })).toMatchObject({
+      ok: true,
+    });
+    expect(await reader.mentorshipFormId()).toBe("form-1");
+    await actions().setMentorshipForm(...as(global))({ formId: null });
+    expect(await reader.mentorshipFormId()).toBeNull();
   });
 });

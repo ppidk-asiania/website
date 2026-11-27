@@ -400,7 +400,9 @@ sees the state of their offers below the form. Code: `apps/web/src/server/invent
 button) with filters by type and country, and the career guides (news category `career`) below.
 `/opportunities/archive` lists closed postings. An external "Apply" goes through
 `/opportunities/{id}/apply`: signed-in only, counts one click, then redirects to the posting's https
-link (never shown in the page). Cached for minutes (`cacheTag("opportunities")`). Code:
+link (never shown in the page). A posting without a link shows an "Apply here" form for signed-in members
+(cover letter + CV PDF, `POST /api/opportunities/{id}/applications`) and, once applied, the status; a guest
+gets a sign-in link. A "Find a mentor" button links the account form chosen in the admin. Cached for minutes (`cacheTag("opportunities")`). Code:
 `apps/web/src/server/opportunities.ts`, `apps/web/src/app/opportunities`.
 
 ## Configuration

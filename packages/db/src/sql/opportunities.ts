@@ -1,4 +1,4 @@
-import type { Snapshot } from "@website/audit";
+import type { AuditEvent, Snapshot } from "@website/audit";
 import type { FeaturedImage } from "@website/domain/content";
 import type {
   Opportunity,
@@ -6,12 +6,13 @@ import type {
   OpportunityType,
 } from "@website/domain/opportunities";
 import { safeId } from "@website/security/validation";
+import { createSqlAuditWriter } from "./audit";
 import { createSluggedStore, toDate } from "./slugged";
 import type { Database } from "./store";
 
 export type OpportunityFields = Omit<Opportunity, "id" | "version" | "createdAt" | "updatedAt">;
 
-function toOpportunity(id: string, data: Record<string, unknown>): Opportunity {
+export function toOpportunity(id: string, data: Record<string, unknown>): Opportunity {
   return {
     id,
     title: data["title"] as string,
@@ -65,6 +66,11 @@ const opportunities = (db: Database) =>
 
 const MAX_LIST = 1000;
 
+/** The account form people fill in to sign up for mentorship (one setting, no store of its own). */
+const mentorshipFormOf = async (db: Database): Promise<string | null> =>
+  ((await db.collection("settings").doc("opportunities").get()).get("mentorshipFormId") as
+    string | null | undefined) ?? null;
+
 /** Admin side: every posting that is not deleted, newest first, and the click counts. */
 export function createSqlOpportunityStore(db: Database) {
   const store = opportunities(db);
@@ -86,6 +92,21 @@ export function createSqlOpportunityStore(db: Database) {
         ),
       );
     },
+    mentorshipFormId: () => mentorshipFormOf(db),
+    /** Choose (or clear) the mentorship form, with one audit entry in the same transaction. */
+    async setMentorshipForm(
+      formId: string | null,
+      auditFor: (before: Snapshot, after: Snapshot) => AuditEvent,
+    ): Promise<void> {
+      const ref = db.collection("settings").doc("opportunities");
+      const audit = createSqlAuditWriter(db);
+      await db.runTransaction(async (tx) => {
+        const current = (await tx.get(ref)).get("mentorshipFormId") as string | null | undefined;
+        const log = await audit.begin(tx);
+        tx.set(ref, { mentorshipFormId: formId });
+        log.append(auditFor({ mentorshipFormId: current ?? null }, { mentorshipFormId: formId }));
+      });
+    },
     get: store.get,
     write: store.write,
   };
@@ -104,6 +125,7 @@ export function createSqlOpportunityReader(db: Database) {
         .filter((o) => o.deletedAt === null);
     },
     get: store.get,
+    mentorshipFormId: () => mentorshipFormOf(db),
     /** One more click on a posting. Nothing about the person is stored. */
     async countClick(id: string): Promise<void> {
       const ref = clicks.doc(safeId.parse(id));

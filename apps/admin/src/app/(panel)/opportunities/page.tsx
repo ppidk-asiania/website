@@ -10,9 +10,12 @@ export default async function AdminOpportunitiesPage() {
   const viewer = await requireAdminViewer("/opportunities", "opportunities.read");
   if (typeof viewer === "string") return <AccessMessage reason={viewer} />;
   const { principal } = viewer;
-  const [all, chapters] = await Promise.all([
+  const globalEditor = can(principal, "opportunities.edit");
+  const [all, chapters, forms, mentorshipFormId] = await Promise.all([
     adminReads.listOpportunities(),
     adminReads.listChapters(),
+    globalEditor ? adminReads.listRegistrationForms() : Promise.resolve([]),
+    globalEditor ? adminReads.mentorshipFormId() : Promise.resolve(null),
   ]);
   const chapterName = new Map(chapters.map((c) => [c.id, c.name]));
   const scope = (chapterId: string | null) => (chapterId ? { chapterId } : {});
@@ -35,14 +38,18 @@ export default async function AdminOpportunitiesPage() {
       chapterId: o.chapterId,
       owner: o.chapterId ? `Chapter ${chapterName.get(o.chapterId) ?? "(removed)"}` : "Region",
       clicks: o.clicks,
+      applicants: o.applicants,
       canEdit: can(principal, "opportunities.edit", scope(o.chapterId)),
     }));
   // Where a new posting may go: the region and each chapter the viewer may edit.
   const owners = [
-    ...(can(principal, "opportunities.edit") ? [{ value: "", label: "Region" }] : []),
+    ...(globalEditor ? [{ value: "", label: "Region" }] : []),
     ...chapters
       .filter((c) => can(principal, "opportunities.edit", { chapterId: c.id }))
       .map((c) => ({ value: c.id, label: `Chapter ${c.name}` })),
   ];
-  return <OpportunitiesPage rows={rows} owners={owners} />;
+  const mentorship = globalEditor
+    ? { formId: mentorshipFormId ?? "", forms: forms.map((f) => ({ id: f.id, title: f.title })) }
+    : null;
+  return <OpportunitiesPage rows={rows} owners={owners} mentorship={mentorship} />;
 }

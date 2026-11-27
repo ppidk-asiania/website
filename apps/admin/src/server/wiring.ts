@@ -86,6 +86,7 @@ import { createInventoryActions } from "./inventory";
 import { createInventoryFlowActions } from "./inventory-flows";
 import { createLoanActions } from "./loans";
 import { createOpportunityActions } from "./opportunities";
+import { createOpportunityApplicationActions } from "./opportunity-applications";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
@@ -238,6 +239,21 @@ export const opportunityActions = lazyEnv(() =>
   createOpportunityActions({
     opportunities: adminStores().opportunities,
     chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    isAccountForm: async (id) =>
+      (await adminReads.listRegistrationForms()).some((form) => form.id === id),
+    now: () => new Date(),
+  }),
+);
+
+export const opportunityApplicationActions = lazyEnv(() =>
+  createOpportunityApplicationActions({
+    opportunities: adminStores().opportunities,
+    applications: adminStores().opportunityApplications,
+    storage: imageStorage(),
+    notify: {
+      applicationStatus: (userId, application, title, status) =>
+        notices().applicationStatus(userId, application, title, status),
+    },
     now: () => new Date(),
   }),
 );
@@ -1378,9 +1394,20 @@ export const adminReads = {
   listSponsors: () => adminStores().sponsors.listForAdmin(),
   listOpportunities: async () => {
     const rows = await adminStores().opportunities.listForAdmin();
-    const clicks = await adminStores().opportunities.clickCounts(rows.map((o) => o.id));
-    return rows.map((o) => ({ ...o, clicks: clicks.get(o.id) ?? 0 }));
+    const [clicks, applicants] = await Promise.all([
+      adminStores().opportunities.clickCounts(rows.map((o) => o.id)),
+      adminStores().opportunityApplications.counts(),
+    ]);
+    return rows.map((o) => ({
+      ...o,
+      clicks: clicks.get(o.id) ?? 0,
+      applicants: applicants.get(o.id) ?? 0,
+    }));
   },
+  getOpportunity: (id: string) => adminStores().opportunities.get(id),
+  listApplicants: (opportunityId: string) =>
+    adminStores().opportunityApplications.forOpportunity(opportunityId),
+  mentorshipFormId: () => adminStores().opportunities.mentorshipFormId(),
   listInventory: () => adminStores().inventory.list(),
   listLoans: () => adminStores().loans.list(),
   listReservations: () => adminStores().flows.listReservations(),

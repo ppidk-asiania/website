@@ -13,7 +13,9 @@ import { safeId } from "@website/security/validation";
 import { createGuardedAction, type AuditBuilder } from "./guarded-action";
 
 export interface OpportunityDeps {
-  readonly opportunities: Pick<SqlOpportunityStore, "get" | "write">;
+  readonly opportunities: Pick<SqlOpportunityStore, "get" | "write" | "setMentorshipForm">;
+  /** An account form (public, answered while signed in) that exists. */
+  readonly isAccountForm: (formId: string) => Promise<boolean>;
   readonly chapterExists: (chapterId: string) => Promise<boolean>;
   readonly now: () => Date;
 }
@@ -135,5 +137,31 @@ export function createOpportunityActions(deps: OpportunityDeps) {
     },
   });
 
-  return { create, update, setStatus, remove };
+  /** The mentorship sign-up is one account form chosen here; the board links to it. Region-wide: global holders only. */
+  const setMentorshipForm = createGuardedAction({
+    permission: "opportunities.edit",
+    input: z.object({ formId: safeId.nullable() }).strict(),
+    handler: async ({ formId }, _principal, audit) => {
+      if (formId !== null && !(await deps.isAccountForm(formId))) {
+        throw new RuleViolationError("Choose a form that people answer while signed in.");
+      }
+      await deps.opportunities.setMentorshipForm(formId, (before, after) =>
+        audit({
+          module: "opportunities",
+          action: "UPDATE",
+          resourceType: "opportunitySettings",
+          resourceId: "opportunities",
+          title: "Mentorship form",
+          before,
+          after,
+          versionBefore: null,
+          versionAfter: null,
+          revertible: false,
+        }),
+      );
+      return { formId };
+    },
+  });
+
+  return { create, update, setStatus, remove, setMentorshipForm };
 }

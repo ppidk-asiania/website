@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ApplicationInputSchema,
+  applicationId,
+  assertCanApplyOnPlatform,
+  canMoveTo,
+  nextStatuses,
+  toMyApplication,
   OpportunityInputSchema,
   boardOf,
   canApply,
@@ -123,5 +129,67 @@ describe("opportunities (N6.1)", () => {
       apply: false,
       phase: "past",
     });
+  });
+});
+
+describe("applications (N6.2)", () => {
+  it("is one application per account per posting", () => {
+    expect(applicationId("o1", "u1")).toBe("o1_u1");
+    expect(applicationId("o1", "u1")).not.toBe(applicationId("o1", "u2"));
+  });
+
+  it("needs a cover letter of some length", () => {
+    expect(ApplicationInputSchema.safeParse({ coverLetter: "short" }).success).toBe(false);
+    expect(
+      ApplicationInputSchema.safeParse({ coverLetter: "I would like to join because..." }).success,
+    ).toBe(true);
+    expect(ApplicationInputSchema.safeParse({ coverLetter: "x".repeat(20), cv: "x" }).success).toBe(
+      false,
+    );
+  });
+
+  it("only an open posting without an outside link takes applications on the platform", () => {
+    const platform = post({ applyUrl: null });
+    expect(() => assertCanApplyOnPlatform(platform, "2026-06-01")).not.toThrow();
+    expect(() => assertCanApplyOnPlatform(post(), "2026-06-01")).toThrow(/outside/i);
+    expect(() => assertCanApplyOnPlatform(platform, "2027-01-01")).toThrow(/closed/i);
+    expect(() => assertCanApplyOnPlatform({ ...platform, status: "closed" }, "2026-06-01")).toThrow(
+      /closed/i,
+    );
+    expect(() =>
+      assertCanApplyOnPlatform({ ...platform, deletedAt: new Date() }, "2026-06-01"),
+    ).toThrow(/exist/i);
+  });
+
+  it("moves forward through the chain; offered and rejected are final", () => {
+    expect(nextStatuses("submitted")).toEqual(["under_review", "rejected"]);
+    expect(canMoveTo("under_review", "interview")).toBe(true);
+    expect(canMoveTo("submitted", "interview")).toBe(false);
+    expect(canMoveTo("interview", "submitted")).toBe(false);
+    expect(nextStatuses("offered")).toEqual([]);
+    expect(nextStatuses("rejected")).toEqual([]);
+  });
+
+  it("never gives the applicant the internal note or the CV path", () => {
+    const mine = toMyApplication(
+      {
+        id: "o1_u1",
+        opportunityId: "o1",
+        userId: "u1",
+        coverLetter: "Hello there, I am keen",
+        cvPath: "opportunities/cv/o1_u1.pdf",
+        status: "interview",
+        note: "weak English",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      },
+      "Summer internship",
+    );
+    expect(mine).toMatchObject({
+      opportunityId: "o1",
+      title: "Summer internship",
+      status: "interview",
+    });
+    expect(JSON.stringify(mine)).not.toMatch(/weak English|cv\/o1_u1/);
   });
 });

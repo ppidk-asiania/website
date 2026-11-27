@@ -1,6 +1,7 @@
 import { sanitizeRichText } from "@website/security/html";
 import type { PublicOpportunity } from "@website/domain/opportunities";
 import type { Dictionary } from "@/i18n/dictionaries";
+import { ApplyForm } from "./apply-form";
 
 type Labels = Dictionary["opportunities"];
 
@@ -9,10 +10,15 @@ export function OpportunityList({
   items,
   labels,
   empty,
+  signedIn = false,
+  applied = new Map(),
 }: {
   items: readonly PublicOpportunity[];
   labels: Labels;
   empty: string;
+  signedIn?: boolean;
+  /** Posting id → status of this account's application. */
+  applied?: ReadonlyMap<string, string>;
 }) {
   if (items.length === 0) return <p className="site-muted">{empty}</p>;
   return (
@@ -68,6 +74,25 @@ export function OpportunityList({
               </a>{" "}
               <span className="site-muted">{labels.applyHint}</span>
             </p>
+          ) : null}
+          {o.apply && !o.external ? (
+            applied.has(o.id) ? (
+              <p>
+                {labels.applied}:{" "}
+                {labels.statuses[applied.get(o.id) as keyof typeof labels.statuses] ?? ""}
+              </p>
+            ) : signedIn ? (
+              <details>
+                <summary>{labels.applyHere}</summary>
+                <ApplyForm id={o.id} labels={labels} />
+              </details>
+            ) : (
+              <p>
+                <a className="ui-button" href="/login?next=/opportunities">
+                  {labels.signInToApply}
+                </a>
+              </p>
+            )
           ) : null}
         </li>
       ))}

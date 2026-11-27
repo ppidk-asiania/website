@@ -1,7 +1,12 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { cacheLife, cacheTag } from "next/cache";
 import { lazyEnv } from "@website/config/env";
-import { createSqlOpportunityReader } from "@website/db/sql";
+import {
+  createSqlFormWebStore,
+  createSqlOpportunityApplicationWebStore,
+  createSqlOpportunityReader,
+} from "@website/db/sql";
 import {
   boardOf,
   canApply,
@@ -10,9 +15,37 @@ import {
   type PublicOpportunity,
   toPublicOpportunity,
 } from "@website/domain/opportunities";
-import { webDb } from "./db";
+import { webDb, webStorage } from "./db";
+import { messenger } from "./messaging";
+import { createOpportunityApplications } from "./opportunity-applications";
+import { hasCompleteProfile } from "./profile-wiring";
 
 const reader = lazyEnv(() => createSqlOpportunityReader(webDb()));
+const applications = lazyEnv(() => createSqlOpportunityApplicationWebStore(webDb()));
+
+/** An application made on the platform: cover letter and CV (PDF). */
+export const applying = lazyEnv(() =>
+  createOpportunityApplications({
+    applications: applications(),
+    storage: webStorage(),
+    send: (message, key) => messenger().send(message, key),
+    profileComplete: hasCompleteProfile,
+    now: () => new Date(),
+    uuid: randomUUID,
+  }),
+);
+
+/** The postings this account already applied to, with the status of each (never the staff note). */
+export async function appliedStatuses(userId: string): Promise<Map<string, string>> {
+  return new Map((await applications().mine(userId)).map((a) => [a.opportunityId, a.status]));
+}
+
+/** `/f/{token}` of the mentorship form chosen in the admin, or null when none is chosen. */
+export async function mentorshipLink(): Promise<string | null> {
+  const formId = await reader().mentorshipFormId();
+  const token = formId && (await createSqlFormWebStore(webDb()).tokenOf(formId));
+  return token ? `/f/${token}` : null;
+}
 
 export const today = () => new Date().toISOString().slice(0, 10);
 

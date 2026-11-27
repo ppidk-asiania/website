@@ -469,8 +469,41 @@ export function createNotices(deps: NoticeDeps) {
       }
     });
 
+  // The applicant hears of every change of status, never of the internal note.
+  const applicationStatus = (
+    userId: string,
+    application: { id: string; opportunityId: string },
+    title: string,
+    status: "submitted" | "under_review" | "interview" | "offered" | "rejected",
+  ) =>
+    safely("applicationStatus", application.id, async () => {
+      const texts: Record<typeof status, readonly [string, string]> = {
+        submitted: ["Lamaranmu diterima.", "Your application is received."],
+        under_review: ["Lamaranmu sedang ditinjau.", "Your application is under review."],
+        interview: [
+          "Kamu diundang ke tahap wawancara. Kami akan menghubungimu.",
+          "You are invited to an interview. We will contact you.",
+        ],
+        offered: ["Selamat! Kamu mendapat tawaran.", "Congratulations! You have an offer."],
+        rejected: [
+          "Lamaranmu belum dapat dilanjutkan.",
+          "We cannot take your application further.",
+        ],
+      };
+      const [id, en] = texts[status];
+      await tell(
+        [userId],
+        {
+          subject: `Lamaran / Application: ${title}`,
+          text: `${both(id, en)}\n\n${deps.webUrl}/account`,
+        },
+        (to) => `opportunity:${application.id}:${status}:${to}`,
+      );
+    });
+
   return {
     loanStep,
+    applicationStatus,
     eventPlacement,
     application,
     proof,

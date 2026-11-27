@@ -9,7 +9,8 @@ import { NewsCards } from "@/components/news-cards";
 import { SubmitOnChangeSelect } from "@/components/submit-on-change-select";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
 import { publicNews } from "@/server/news";
-import { opportunitiesFor } from "@/server/opportunities";
+import { appliedStatuses, mentorshipLink, opportunitiesFor } from "@/server/opportunities";
+import { getSignedInUser } from "@/server/session";
 import { OpportunityList } from "./opportunity-list";
 
 export const metadata: Metadata = { title: "Peluang · Opportunities" };
@@ -20,7 +21,12 @@ const one = (value: string | string[] | undefined) => (Array.isArray(value) ? va
 export default async function OpportunitiesPage({ searchParams }: PageProps<"/opportunities">) {
   const params = await searchParams;
   const t = DICTIONARIES[languageFrom((await cookies()).get(LANG_COOKIE)?.value)];
-  const board = await opportunitiesFor("board");
+  const [board, user, mentorship] = await Promise.all([
+    opportunitiesFor("board"),
+    getSignedInUser(),
+    mentorshipLink(),
+  ]);
+  const applied = user ? await appliedStatuses(user.uid) : new Map<string, string>();
   const countries = [...new Set(board.map((o) => o.country))].sort();
   const type = OPPORTUNITY_TYPES.find((v): v is OpportunityType => v === one(params["type"]));
   const country = countries.find((c) => c === one(params["country"]));
@@ -56,7 +62,20 @@ export default async function OpportunitiesPage({ searchParams }: PageProps<"/op
           </SubmitOnChangeSelect>
         </label>
       </form>
-      <OpportunityList items={items} labels={labels} empty={labels.empty} />
+      {mentorship ? (
+        <p>
+          <a className="ui-button" href={mentorship}>
+            {labels.mentorship}
+          </a>
+        </p>
+      ) : null}
+      <OpportunityList
+        items={items}
+        labels={labels}
+        empty={labels.empty}
+        signedIn={user !== null}
+        applied={applied}
+      />
       <p>
         <a href="/opportunities/archive">{labels.archiveLink}</a>
       </p>

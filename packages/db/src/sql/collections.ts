@@ -96,4 +96,5 @@ export const COLLECTIONS = [
   "outsideLoans",
   "opportunities",
   "opportunityClicks",
+  "opportunityApplications",
 ] as const;

@@ -293,6 +293,13 @@ export function getDatabaseForRole(config: DatabaseRoleConfig): Database {
   return getDatabase({ url: config.url, connectionLimit: config.connectionLimit });
 }
 export {
+  createSqlOpportunityApplicationStore,
+  createSqlOpportunityApplicationWebStore,
+  type OpportunityApplicationAudit,
+  type SqlOpportunityApplicationStore,
+  type SqlOpportunityApplicationWebStore,
+} from "./opportunity-applications";
+export {
   createSqlOpportunityReader,
   createSqlOpportunityStore,
   opportunitySnapshot,

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { safeId, safeText } from "@website/security/validation";
 import { FeaturedImageSchema, type FeaturedImage } from "../content";
 import { LinkSchema } from "../organizations/documents";
-import type { EntityMeta } from "../shared";
+import { RuleViolationError, type EntityMeta } from "../shared";
 
 /** The opportunities board (N6.1, DEC-30): jobs, internships, volunteer work and scholarships. */
 export const OPPORTUNITY_TYPES = [
@@ -140,3 +140,80 @@ export function toPublicOpportunity(o: Opportunity, today: string): PublicOpport
     external: o.applyUrl !== null,
   };
 }
+
+/** Applications made on the platform (N6.2). */
+export const APPLICATION_STATUSES = [
+  "submitted",
+  "under_review",
+  "interview",
+  "offered",
+  "rejected",
+] as const;
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+const NEXT: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
+  submitted: ["under_review", "rejected"],
+  under_review: ["interview", "offered", "rejected"],
+  interview: ["offered", "rejected"],
+  offered: [],
+  rejected: [],
+};
+export const nextStatuses = (status: ApplicationStatus): readonly ApplicationStatus[] =>
+  NEXT[status];
+export const canMoveTo = (from: ApplicationStatus, to: ApplicationStatus): boolean =>
+  NEXT[from].includes(to);
+
+export interface OpportunityApplication {
+  /** `{opportunityId}_{userId}`: the id itself makes it one application per account per posting. */
+  readonly id: string;
+  readonly opportunityId: string;
+  readonly userId: string;
+  readonly coverLetter: string;
+  /** A private PDF; only staff of the posting open it, by a short-lived link. */
+  readonly cvPath: string;
+  readonly status: ApplicationStatus;
+  /** Internal: never sent to the applicant. */
+  readonly note: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export const applicationId = (opportunityId: string, userId: string): string =>
+  `${opportunityId}_${userId}`;
+
+export const ApplicationInputSchema = z
+  .object({
+    coverLetter: safeText(3000, { multiline: true }).pipe(
+      z.string().min(20, "Write a short cover letter (at least 20 characters)."),
+    ),
+  })
+  .strict();
+export type ApplicationInput = z.infer<typeof ApplicationInputSchema>;
+
+/** Throws when the posting does not take an application made on the platform today. */
+export function assertCanApplyOnPlatform(
+  o: Pick<Opportunity, "status" | "deadline" | "deletedAt" | "applyUrl">,
+  today: string,
+): void {
+  const phase = opportunityPhase(o, today);
+  if (phase === "hidden") throw new RuleViolationError("This posting does not exist.");
+  if (!canApply(phase)) throw new RuleViolationError("This posting is closed.");
+  if (o.applyUrl !== null) {
+    throw new RuleViolationError("This posting takes applications outside the platform.");
+  }
+}
+
+/** What an applicant sees of their own application: no note, no file path. */
+export interface MyApplication {
+  readonly opportunityId: string;
+  readonly title: string;
+  readonly status: ApplicationStatus;
+  readonly appliedAt: Date;
+}
+
+export const toMyApplication = (a: OpportunityApplication, title: string): MyApplication => ({
+  opportunityId: a.opportunityId,
+  title,
+  status: a.status,
+  appliedAt: a.createdAt,
+});
