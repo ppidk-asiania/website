@@ -148,6 +148,10 @@ router.push("/things"); router.refresh();
     navigation crossfades the old page into the new one; the side panel stays still. Anything
     that runs as a transition (e.g. `router.refresh()` after saving) fades the same way. No
     fade with reduced motion, or in browsers without the View Transitions API.
+  - Loading bar: `RouteProgress` (root layout, `NavigationProgress` from `@website/ui`) shows a thin
+    gold bar at the top while a clicked link loads its page. It does not cover `router.push`.
+  - Side panel: the page you are on (exact path) is plain text with `aria-current`, not a link.
+    On a sub-page (e.g. `/x/123`) the item is highlighted but stays a link, to go back to the list.
   - Buttons: flat (no inset lines, shadow or glow); a press scales with `--admin-ease-spring`.
   - Popups (modal, row menu, dropdown, account menu, link popover) start from opacity 0 and
     scale 0.9 (`@starting-style`); every scrolling box has `overscroll-behavior: contain`.

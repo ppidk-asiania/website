@@ -140,3 +140,13 @@ describe("dashboard page views and setup check", () => {
     expect(source).toMatch(/superadmin \? integrationStatus\(/);
   });
 });
+
+describe("admin side panel: current page", () => {
+  it("is shown as text with aria-current, not as a link", () => {
+    const source = readFileSync(
+      join(import.meta.dirname, "../../apps/admin/src/components/admin-sidebar.tsx"),
+      "utf8",
+    );
+    expect(source).toMatch(/<span[^>]*aria-current="page"/);
+  });
+});

@@ -167,14 +167,20 @@ export function AdminSidebar(props: {
                   const active = isActive(pathname, item.href);
                   return (
                     <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className="admin-nav-link"
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => setDrawerOpen(false)}
-                      >
-                        {item.label}
-                      </Link>
+                      {pathname === item.href ? (
+                        <span className="admin-nav-link" aria-current="page">
+                          {item.label}
+                        </span>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          className="admin-nav-link"
+                          aria-current={active ? "page" : undefined}
+                          onClick={() => setDrawerOpen(false)}
+                        >
+                          {item.label}
+                        </Link>
+                      )}
                     </li>
                   );
                 })}

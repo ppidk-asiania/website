@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import "@website/ui/styles.css";
 import "./globals.css";
+import { RouteProgress } from "@/components/route-progress";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -18,7 +19,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={poppins.variable}>
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

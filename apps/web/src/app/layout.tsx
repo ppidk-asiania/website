@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import "@website/ui/styles.css";
 import "./globals.css";
 import { PageViewTracker } from "@/components/page-view-tracker";
+import { RouteProgress } from "@/components/route-progress";
 import { SiteFooter, SiteHeader } from "@/components/site-frame";
 import { Localized } from "@/i18n/localized";
 
@@ -23,6 +24,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="id" className={poppins.variable}>
       <body>
         <PageViewTracker />
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
         <Localized render={(t) => <SiteHeader t={t} />} />
         {children}
         <Localized render={(t) => <SiteFooter t={t} />} />

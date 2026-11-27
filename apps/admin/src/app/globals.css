@@ -225,6 +225,10 @@
   font-weight: var(--font-semibold);
 }
 
+span.admin-nav-link {
+  cursor: default;
+}
+
 .admin-panel :focus-visible {
   outline-color: var(--color-highlight);
 }

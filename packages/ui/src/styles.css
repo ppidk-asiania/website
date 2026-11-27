@@ -164,6 +164,29 @@ a {
   outline-offset: var(--focus-ring-offset);
 }
 
+.ui-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  height: var(--space-1);
+  background: var(--color-highlight);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.ui-progress[data-pending="true"] {
+  opacity: 1;
+  animation: ui-progress 10s var(--ease-out) forwards;
+}
+
+@keyframes ui-progress {
+  to {
+    transform: scaleX(0.9);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
