@@ -689,7 +689,8 @@ export function createSqlVerificationReader(db: Database) {
       };
     },
 
-    async certificatesByEmailHash(emailHash: string) {
+    /** Issued batches only; `withCancelled` also returns the cancelled ones (the account page lists them without a download). */
+    async certificatesByEmailHash(emailHash: string, withCancelled = false) {
       const snapshot = await db
         .collection("certificates")
         .where("emailHash", "==", emailHash)
@@ -704,7 +705,11 @@ export function createSqlVerificationReader(db: Database) {
       return sheets.flatMap((certificate) => {
         const data = batches.get(certificate.batchId);
         const letter = data ? toLetter(certificate.batchId, data) : null;
-        return letter?.status === "issued" && !letter.deletedAt ? [{ letter, certificate }] : [];
+        return letter &&
+          !letter.deletedAt &&
+          (letter.status === "issued" || (withCancelled && letter.status === "cancelled"))
+          ? [{ letter, certificate }]
+          : [];
       });
     },
   };

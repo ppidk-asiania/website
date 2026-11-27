@@ -229,6 +229,9 @@ Many sheets from one template, from PPIDK `SertifikatService` (the opposite of t
   token and that the batch is issued, then renders the sheet (`attachment`). Bad, expired or
   foreign tokens are 404. Sheets without an e-mail cannot be picked up (the participants page
   says so per sheet).
+- **My certificates (N3.2)**: `/account` runs the same lookup without typing, with the hash of the
+  signed-in account's VERIFIED e-mail (an unverified e-mail finds nothing). Unlike the pickup page it
+  also lists the sheets of a CANCELLED batch, marked cancelled and with no link.
 - **Bulk sending (D5, step 7.10)**: on the participants page of an ISSUED batch (never a draft or
   a cancelled one), staff with `letters.edit` paste the same list with e-mails again (e-mails
   are never stored, so lines are matched to sheets by `emailHash`). Each matched sheet gets a

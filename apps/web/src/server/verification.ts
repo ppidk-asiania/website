@@ -105,6 +105,15 @@ export interface PickupSheet {
   readonly href: string;
 }
 
+export interface OwnSheet {
+  readonly number: string;
+  readonly activity: string;
+  readonly letterDate: string | null;
+  readonly cancelled: boolean;
+  /** Null for a cancelled batch: it is listed, never downloadable. */
+  readonly href: string | null;
+}
+
 export type PickupResult =
   | { readonly ok: true; readonly sheets: readonly PickupSheet[] }
   | { readonly ok: false; readonly error: "email" | "captcha" };
@@ -136,5 +145,23 @@ export function createCertificatePickup(deps: {
       })),
     };
   }
-  return { lookup };
+
+  /** The account's own sheets: matched by the hash of its VERIFIED e-mail, nothing is typed. */
+  async function own(user: { email: string | null; emailVerified: boolean }): Promise<OwnSheet[]> {
+    // The same normalisation as the typed lookup, so both reach the same sheets.
+    const email = user.emailVerified ? NewsletterEmailSchema.safeParse(user.email) : null;
+    if (!email?.success) return [];
+    const found = await deps.reader.certificatesByEmailHash(deps.hashEmail(email.data), true);
+    return found.map(({ letter, certificate }) => {
+      const cancelled = letter.status === "cancelled";
+      return {
+        number: sheetNumber(letter.sheetNumberTemplate, certificate.seq) ?? "",
+        activity: letter.subject,
+        letterDate: letter.letterDate,
+        cancelled,
+        href: cancelled ? null : deps.link(certificate.verificationCode),
+      };
+    });
+  }
+  return { lookup, own };
 }

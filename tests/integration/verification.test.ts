@@ -346,6 +346,19 @@ describe("certificate pickup (D5-P)", () => {
     });
   });
 
+  it("my certificates: only by the verified e-mail, a cancelled batch is listed without a download", async () => {
+    const own = (email: string | null, emailVerified = true) =>
+      pickup().own({ email, emailVerified });
+    const sheets = await own("  Arif@Example.org ");
+    expect(sheets.map((s) => [s.activity, s.cancelled, s.href])).toEqual([
+      ["Activity b1", false, "https://admin.example.org/certificates/pickup?code=B1AAA-AAAA1"],
+      ["Activity b2", true, null],
+    ]);
+    expect(await own("arif@example.org", false)).toEqual([]);
+    expect(await own(null)).toEqual([]);
+    expect(await own("other-person@example.org")).toEqual([]);
+  });
+
   it("refuses a failed captcha before reading anything, and a malformed e-mail", async () => {
     expect(await pickup().lookup({ email: "arif@example.org", captcha: "bot" })).toEqual({
       ok: false,

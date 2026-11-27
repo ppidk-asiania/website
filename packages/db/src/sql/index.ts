@@ -357,3 +357,8 @@ export {
   type StoredCommittee,
   type StoredDecision,
 } from "./event-committees";
+export {
+  createSqlSubmissionReader,
+  type SqlSubmissionReader,
+  type SubmissionRow,
+} from "./submissions";

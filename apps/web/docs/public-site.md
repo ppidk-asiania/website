@@ -54,7 +54,7 @@ an external registration link opens in a new tab; without one, a signed-in membe
 (confirmed or waitlisted by capacity, one registration per member, reCAPTCHA v3 action
 `event_register`, confirmation e-mail key `event:{id}:registered:{uid}`) and a guest is sent to
 sign in first. After the deadline the page says registration is closed. `/account` lists the
-member's own registrations. An event with a future publish time is hidden until then. A cancelled
+member's own submissions (see below). An event with a future publish time is hidden until then. A cancelled
 event stays reachable and says so (with the reason). Once an event is past the register button gives way
 to "This event has ended", with the final attendance, its note, the recap link and the album's first
 photos when they are filled in (step N1.1).
@@ -104,6 +104,18 @@ sheets of issued certificate batches (exact match on a keyed hash, reCAPTCHA, th
 limit) and gives 15-minute signed download links to the admin app, where sheets are rendered.
 Needs SUBSCRIBER_HASH_SECRET, LINK_SIGNING_SECRET (both as in admin) and ADMIN_URL.
 Rules: `packages/domain/docs/documents.md` → Certificates (D5) → Pickup.
+
+**My submissions and my certificates** (`/account`, N3.2): one function `submissionsOf(uid)`
+(`apps/web/src/server/submissions.ts`) lists everything the signed-in account sent, newest first: event
+registrations (with the ticket link), recruitment applications (status and next action), answers to
+forms that need an account (committee applications and mentorship are such forms), opportunity
+applications, loan requests and donations. It takes only the session's uid, and the application's staff
+note never reaches the list. A module adds its rows with one reader (`packages/db/src/sql/submissions.ts`
+for recruitment, forms, opportunities and donations; the event and loan stores for the rest). "My
+certificates" lists the sheets whose e-mail hash equals the hash of the account's VERIFIED e-mail (the
+pickup lookup without typing); a cancelled batch is listed as cancelled, without a link. Not listed:
+offered items (they stay on `/inventory`), and the "send the missing document" hint of a recruitment
+(open the application for it).
 
 **Signature**: `/account/signature` (linked from `/account`) holds the signed-in person's own
 signature for letters: upload (`POST /api/account/signature`, PNG/JPEG ≤ 2 MB, stored encrypted),

@@ -5,11 +5,12 @@ import { hasTwoSignInMethods, signInUrl } from "@website/auth";
 import { isProfileComplete } from "@website/domain/members";
 import { AppShell } from "@website/ui";
 import { DICTIONARIES, LANG_COOKIE, languageFrom } from "@/i18n/dictionaries";
-import { formatEventTime } from "@/lib/event-time";
-import { registrations } from "@/server/events";
 import { ownSignInMethods } from "@/server/passkeys";
 import { ownProfile } from "@/server/profile-wiring";
 import { getSignedInUser } from "@/server/session";
+import { submissionsOf } from "@/server/submissions-wiring";
+import { certificatePickup } from "@/server/verification-wiring";
+import type { Submission } from "@/server/submissions";
 import { AccountActions } from "./account-actions";
 
 export const metadata: Metadata = { title: "Your account", robots: { index: false } };
@@ -21,17 +22,42 @@ const PROVIDER_LABEL: Record<string, string> = {
   password: "E-mail and password",
 };
 
+type Dictionary = (typeof DICTIONARIES)[keyof typeof DICTIONARIES];
+const word = (words: object, key: string) => (words as Record<string, string>)[key] ?? key;
+
+/** The words of one row's state: each kind keeps its states in the dictionary of its own page. */
+function stateText(d: Dictionary, row: Submission): string {
+  switch (row.kind) {
+    case "event":
+      return word(d.events.statuses, row.state);
+    case "recruitment":
+      return `${word(d.recruitment.statuses, row.state)}${
+        row.next ? ` · ${word(d.recruitment.actions, row.next)}` : ""
+      }`;
+    case "opportunity":
+      return word(d.opportunities.statuses, row.state);
+    case "loan":
+      return word(d.inventory.mine.states, row.state);
+    case "donation":
+      return word(d.submissions.donationStates, row.state);
+    case "form":
+      return d.submissions.sent;
+  }
+}
+
 export default async function AccountPage() {
   const user = await getSignedInUser();
   if (!user) redirect(signInUrl("", "/account"));
-  const [methods, mine, jar, profile] = await Promise.all([
+  const [methods, mine, certificates, jar, profile] = await Promise.all([
     ownSignInMethods(user.uid),
-    registrations().listByUser(user.uid),
+    submissionsOf()(user.uid),
+    certificatePickup().own(user),
     cookies(),
     ownProfile().load(user),
   ]);
   const language = languageFrom(jar.get(LANG_COOKIE)?.value);
-  const t = DICTIONARIES[language].events;
+  const dictionary = DICTIONARIES[language];
+  const t = dictionary.submissions;
   const p = DICTIONARIES[language].profile;
   const s = DICTIONARIES[language].signature;
   return (
@@ -59,21 +85,37 @@ export default async function AccountPage() {
           : "Staff roles need two sign-in methods: add a passkey below (or turn on two-step verification)."}
       </p>
       <AccountActions />
-      <h2>{t.mine}</h2>
+      <h2>{t.title}</h2>
       {mine.length === 0 ? (
-        <p>{t.mineEmpty}</p>
+        <p>{t.empty}</p>
       ) : (
         <ul>
-          {mine.map(({ event, status }) => (
-            <li key={event.id}>
-              <a href={`/events/${event.slug}`}>{event.title}</a> —{" "}
-              {formatEventTime(event.startsAt, event.timezone, language)} · {t.statuses[status]}
-              {(event.fee || status === "confirmed") && (
+          {mine.map((row) => (
+            <li key={`${row.kind}:${row.id}`}>
+              {t.kinds[row.kind]}: {row.href ? <a href={row.href}>{row.title}</a> : row.title} —{" "}
+              {stateText(dictionary, row)}
+              {row.detail ? ` · ${row.detail}` : ""} · {row.at.toLocaleDateString(language)}
+              {row.ticketHref ? (
                 <>
                   {" · "}
-                  <a href={`/events/${event.slug}/ticket`}>{t.ticketOpen}</a>
+                  <a href={row.ticketHref}>{t.ticket}</a>
                 </>
-              )}
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <h2>{t.certificates}</h2>
+      <p className="site-muted">{t.certificatesHint}</p>
+      {certificates.length === 0 ? (
+        <p>{t.certificatesEmpty}</p>
+      ) : (
+        <ul>
+          {certificates.map((c) => (
+            <li key={c.number + c.activity}>
+              {c.activity}
+              {c.number ? ` · ${c.number}` : ""} —{" "}
+              {c.href ? <a href={c.href}>{t.download}</a> : t.cancelled}
             </li>
           ))}
         </ul>

@@ -58,7 +58,7 @@ import { createSluggedStore, toDate } from "./slugged";
 
 export type RecruitmentFields = Omit<Recruitment, "id" | "version" | "createdAt" | "updatedAt">;
 
-function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
+export function toRecruitment(id: string, data: Record<string, unknown>): Recruitment {
   return {
     id,
     periodId: data["periodId"] as string,
