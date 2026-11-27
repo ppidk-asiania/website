@@ -80,7 +80,7 @@ export async function requireAdminViewer(
   if (!viewer.profileComplete) {
     const { WEB_URL, ADMIN_URL } = getAppUrls();
     if (WEB_URL && ADMIN_URL) {
-      redirect(`${WEB_URL}/account/profile?next=${encodeURIComponent(`${ADMIN_URL}${path}`)}`);
+      redirect(`${WEB_URL}/settings/profile?next=${encodeURIComponent(`${ADMIN_URL}${path}`)}`);
     }
     return "profile";
   }

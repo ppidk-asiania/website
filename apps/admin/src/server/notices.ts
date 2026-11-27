@@ -116,7 +116,7 @@ export function createNotices(deps: NoticeDeps) {
         [uid],
         {
           subject: "Bukti status mahasiswa / Student proof",
-          text: `${text}${fix ? `\n\n${review.note}` : ""}\n\n${deps.webUrl}/account/profile`,
+          text: `${text}${fix ? `\n\n${review.note}` : ""}\n\n${deps.webUrl}/settings/profile`,
         },
         () => `proof:${uid}:${review.state}:${review.at.getTime()}`,
       );
@@ -495,7 +495,7 @@ export function createNotices(deps: NoticeDeps) {
         [userId],
         {
           subject: `Lamaran / Application: ${title}`,
-          text: `${both(id, en)}\n\n${deps.webUrl}/account`,
+          text: `${both(id, en)}\n\n${deps.webUrl}/settings/account`,
         },
         (to) => `opportunity:${application.id}:${status}:${to}`,
       );

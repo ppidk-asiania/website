@@ -229,7 +229,7 @@ Many sheets from one template, from PPIDK `SertifikatService` (the opposite of t
   token and that the batch is issued, then renders the sheet (`attachment`). Bad, expired or
   foreign tokens are 404. Sheets without an e-mail cannot be picked up (the participants page
   says so per sheet).
-- **My certificates (N3.2)**: `/account` runs the same lookup without typing, with the hash of the
+- **My certificates (N3.2)**: `/settings/account` runs the same lookup without typing, with the hash of the
   signed-in account's VERIFIED e-mail (an unverified e-mail finds nothing). Unlike the pickup page it
   also lists the sheets of a CANCELLED batch, marked cancelled and with no link.
 - **Bulk sending (D5, step 7.10)**: on the participants page of an ISSUED batch (never a draft or
@@ -249,7 +249,7 @@ Many sheets from one template, from PPIDK `SertifikatService` (the opposite of t
 
 From PPIDK `TandaTanganPengguna`: one image per person, printed on the letters they signed.
 
-- **Own only**: `/account/signature` on the website (any signed-in person; the uid always comes
+- **Own only**: `/settings/signature` on the website (any signed-in person; the uid always comes
   from the session — nobody, not even a superadmin, sees or replaces another person's
   signature). PNG (best with a transparent background) or JPEG, ≤ 2 MB, magic bytes checked.
   Printed width 10-80 mm (default 40) and rotation -180..180 degrees clockwise (to straighten a
@@ -264,7 +264,7 @@ From PPIDK `TandaTanganPengguna`: one image per person, printed on the letters t
   a lost or undecryptable file, or an image pdf-lib cannot read prints the electronic-signature
   box instead — a signature never blocks a letter.
 - Code: `src/documents/signatures.ts`, `packages/db/src/sql/signatures.ts`,
-  `apps/web/src/server/signature.ts`, `apps/web/src/app/account/signature/**`,
+  `apps/web/src/server/signature.ts`, `apps/web/src/app/settings/signature/**`,
   `apps/web/src/app/api/account/signature/route.ts`.
 
 ## Public verification (D7)

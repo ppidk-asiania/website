@@ -25,6 +25,17 @@ export function createMemoryPasskeyStore(): PasskeyStore {
       credentials.set(id, { ...stored, counter: newCounter, lastUsedAt: usedAt });
       return Promise.resolve(true);
     },
+    rename(id, userId, name) {
+      const stored = credentials.get(id);
+      if (stored?.userId !== userId) return Promise.resolve(false);
+      credentials.set(id, { ...stored, name });
+      return Promise.resolve(true);
+    },
+    remove(id, userId) {
+      if (credentials.get(id)?.userId !== userId) return Promise.resolve(false);
+      credentials.delete(id);
+      return Promise.resolve(true);
+    },
     saveChallenge(id, challenge) {
       return Promise.resolve().then(() => {
         challenges.set(safeId.parse(id), challenge);

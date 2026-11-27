@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { initials, shortName } from "../../packages/ui/src/user-name";
-import { parseAccount } from "../../apps/web/src/lib/remembered-account";
+import {
+  parseAccount,
+  readSignInMethod,
+  rememberSignInMethod,
+} from "../../apps/web/src/lib/remembered-account";
 
 describe("avatar initials", () => {
   it("uses the first and last name", () => {
@@ -38,5 +42,23 @@ describe("remembered account in the header", () => {
     expect(parseAccount(null)).toBeNull();
     expect(parseAccount("{not json")).toBeNull();
     expect(parseAccount(JSON.stringify({ name: 1, initials: "AW" }))).toBeNull();
+  });
+});
+
+describe("last used sign-in method", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads back the saved method and ignores unknown values or missing storage", () => {
+    expect(readSignInMethod()).toBeNull();
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+    });
+    expect(readSignInMethod()).toBeNull();
+    rememberSignInMethod("google");
+    expect(readSignInMethod()).toBe("google");
+    store.set("sign-in-method", "facebook");
+    expect(readSignInMethod()).toBeNull();
   });
 });

@@ -56,7 +56,7 @@ export function ApplyForm({ id, labels }: { id: string; labels: Labels }) {
       </button>
       {state === "profile" && (
         <p role="alert" className="ui-message">
-          {labels.profileIncomplete} <a href="/account">/account</a>
+          {labels.profileIncomplete} <a href="/settings/profile">/settings/profile</a>
         </p>
       )}
       {state === "failed" && (

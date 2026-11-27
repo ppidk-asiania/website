@@ -277,7 +277,7 @@ function UserMenu(props: {
         >
           <a
             role="menuitem"
-            href={webPath("/account/profile")}
+            href={webPath("/settings/profile")}
             className="admin-popup-item"
             style={{ "--i": 0 } as CSSProperties}
             onClick={close}
@@ -286,7 +286,7 @@ function UserMenu(props: {
           </a>
           <a
             role="menuitem"
-            href={webPath("/account")}
+            href={webPath("/settings/account")}
             className="admin-popup-item"
             style={{ "--i": 1 } as CSSProperties}
             onClick={close}

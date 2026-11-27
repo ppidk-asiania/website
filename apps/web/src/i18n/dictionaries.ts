@@ -32,6 +32,7 @@ const id = {
     menu: "Akun",
     profile: "Profil",
     account: "Akun",
+    settings: "Pengaturan",
     logout: "Keluar",
     signOutFailed: "Gagal keluar. Silakan coba lagi.",
   },
@@ -491,7 +492,6 @@ const id = {
   },
   signature: {
     title: "Tanda tangan",
-    linkLabel: "Tanda tangan untuk surat",
     intro:
       "Tanda tanganmu dicetak pada surat yang sudah kamu tandatangani secara elektronik. Berkasnya disimpan terenkripsi dan hanya kamu yang bisa melihatnya.",
     hint: "PNG berlatar transparan paling bagus (JPEG juga bisa), paling besar 2 MB.",
@@ -511,7 +511,6 @@ const id = {
     notImage: "Unggah gambar PNG atau JPEG.",
     invalid: "Lebar 10-80 mm, putaran -180 sampai 180 derajat.",
     failed: "Gagal. Coba lagi.",
-    back: "Kembali ke akun",
   },
   verification: {
     title: "Verifikasi Dokumen",
@@ -1147,6 +1146,7 @@ const en: Dictionary = {
     menu: "Account",
     profile: "Profile",
     account: "Account",
+    settings: "Settings",
     logout: "Log out",
     signOutFailed: "Could not sign out. Please try again.",
   },
@@ -1610,7 +1610,6 @@ const en: Dictionary = {
   },
   signature: {
     title: "Signature",
-    linkLabel: "Signature for letters",
     intro:
       "Your signature is printed on letters you have signed electronically. The file is stored encrypted and only you can see it.",
     hint: "A PNG with a transparent background works best (JPEG works too), at most 2 MB.",
@@ -1630,7 +1629,6 @@ const en: Dictionary = {
     notImage: "Upload a PNG or JPEG image.",
     invalid: "Width 10-80 mm, rotation -180 to 180 degrees.",
     failed: "That did not work. Try again.",
-    back: "Back to your account",
   },
   verification: {
     title: "Document Verification",

@@ -8,6 +8,7 @@ import {
   INDONESIA_PROVINCES,
   type MemberProfileInput,
 } from "@website/domain/members";
+import { FieldIcon } from "@/components/site-field-icon";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { saveProfileAction } from "./actions";
 import { CampusPicker } from "./campus-picker";
@@ -98,6 +99,8 @@ export function ProfileForm(props: {
   policyVersion: string;
   chapters: { countryCode: string; name: string }[];
   next: string | null;
+  /** Shows a Back button to this page (editing a saved profile). */
+  backHref?: string | null;
 }) {
   const { t } = props;
   const router = useRouter();
@@ -146,10 +149,17 @@ export function ProfileForm(props: {
       </select>
     </label>
   );
-  const section = (title: string, error: string | undefined, children: ReactNode) => (
-    <fieldset className="ui-form">
+  const section = (
+    title: string,
+    error: string | undefined,
+    children: ReactNode,
+    cols: 2 | 3 = 3,
+  ) => (
+    <fieldset className="site-profile-section">
       <legend>{title}</legend>
-      {children}
+      <div className="site-settings-grid" data-cols={cols}>
+        {children}
+      </div>
       {error && (
         <p role="alert" className="ui-message">
           {error}
@@ -199,7 +209,7 @@ export function ProfileForm(props: {
   const field = (key: keyof ProfileFormValues) => fields[key];
   return (
     <form
-      className="ui-form"
+      className="ui-form site-profile-form"
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -294,8 +304,16 @@ export function ProfileForm(props: {
           {input("emergency.phone", t.emergencyPhone, "tel")}
           {input("emergency.name", t.emergencyName, "text", false)}
           {input("emergency.relationship", t.emergencyRelationship, "text", false)}
-          {input("timezone", t.timezone)}
+          {select(
+            "timezone",
+            t.timezone,
+            // the saved zone may be an alias the list leaves out ("UTC", "Asia/Calcutta")
+            [...new Set([form["timezone"] ?? "", ...Intl.supportedValuesOf("timeZone")])]
+              .filter(Boolean)
+              .map((zone) => [zone, zone] as const),
+          )}
         </>,
+        2,
       )}
       <label className="ui-field">
         <span>
@@ -317,9 +335,18 @@ export function ProfileForm(props: {
           {message.text}
         </p>
       )}
-      <button className="ui-button" type="submit" disabled={busy}>
-        {busy ? t.saving : t.save}
-      </button>
+      <div className="site-settings-actions">
+        {props.backHref && (
+          <a className="site-settings-button" href={props.backHref}>
+            <FieldIcon name="back" className="site-settings-icon" />
+            {t.back}
+          </a>
+        )}
+        <button className="site-settings-button" type="submit" disabled={busy}>
+          <FieldIcon name="save" className="site-settings-icon" />
+          {busy ? t.saving : t.save}
+        </button>
+      </div>
     </form>
   );
 }

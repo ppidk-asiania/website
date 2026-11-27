@@ -14,6 +14,8 @@ function toCredential(data: Record<string, unknown>): PasskeyCredential {
     transports: data["transports"] as string[],
     createdAt: toDate(data["createdAt"]),
     lastUsedAt: data["lastUsedAt"] ? toDate(data["lastUsedAt"]) : null,
+    name: typeof data["name"] === "string" ? data["name"] : "",
+    device: typeof data["device"] === "string" ? data["device"] : "",
   };
 }
 
@@ -46,6 +48,24 @@ export function createSqlPasskeyStore(db: Database): PasskeyStore {
         const stored = (doc.data() as Record<string, unknown>)["counter"] as number;
         if (!(newCounter > stored || (newCounter === 0 && stored === 0))) return false;
         tx.update(ref, { counter: newCounter, lastUsedAt: usedAt });
+        return true;
+      });
+    },
+    rename(id, userId, name) {
+      const ref = credentialRef(id);
+      return db.runTransaction(async (tx) => {
+        const doc = await tx.get(ref);
+        if (!doc.exists || doc.get("userId") !== userId) return false;
+        tx.update(ref, { name });
+        return true;
+      });
+    },
+    remove(id, userId) {
+      const ref = credentialRef(id);
+      return db.runTransaction(async (tx) => {
+        const doc = await tx.get(ref);
+        if (!doc.exists || doc.get("userId") !== userId) return false;
+        tx.delete(ref);
         return true;
       });
     },

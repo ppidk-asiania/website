@@ -26,7 +26,7 @@ const getGuard = lazyEnv(() => {
     appEnv: env.APP_ENV,
     secret: env.RATE_LIMIT_SECRET,
     mode: "same-site",
-    privatePrefixes: ["/api/", "/account"],
+    privatePrefixes: ["/api/", "/settings"],
     extraLimits: [
       {
         name: "verify",
@@ -55,7 +55,7 @@ export function guardRequest(request: Request): Promise<GuardResult> {
 
 export function signInRedirect(request: Request): string | null {
   const { pathname, search } = new URL(request.url);
-  if (pathname !== "/account" && !pathname.startsWith("/account/")) return null;
+  if (pathname !== "/settings" && !pathname.startsWith("/settings/")) return null;
   return readCookie(request, SESSION_COOKIE) ? null : signInUrl("", pathname + search);
 }
 

@@ -55,7 +55,7 @@ export function RegisterButton(props: {
       {message && (
         <p role="status" className="ui-message" data-tone="info">
           {needsProfile ? (
-            <a href={`/account/profile?next=${encodeURIComponent(`/events/${props.slug}`)}`}>
+            <a href={`/settings/profile?next=${encodeURIComponent(`/events/${props.slug}`)}`}>
               {message}
             </a>
           ) : (

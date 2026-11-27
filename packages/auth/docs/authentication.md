@@ -10,13 +10,13 @@ is; _what_ they may do comes only from RBAC role assignments in MySQL (`users/{u
 | ---------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------- |
 | Google           | `/signup` or `/login` → "Continue with Google" (same action)                | same                                                         | Firebase popup        |
 | Email + password | `/signup` (8+ characters, confirmation; verification email sent)            | `/login`                                                     | Firebase              |
-| Passkey          | Added from `/account` after signing in (needs a sign-in in the last 15 min) | `/login` → "Sign in with a passkey"                          | Our server (WebAuthn) |
+| Passkey          | Added from `/settings/account` after signing in (needs a sign-in in the last 15 min) | `/login` → "Sign in with a passkey"                          | Our server (WebAuthn) |
 | Forgot password  | —                                                                           | `/forgot-password` → Firebase reset email → back to `/login` | Firebase              |
 
 - Email must be verified before a member profile can be saved.
 - Staff roles (any role that opens an admin page) are only granted to accounts with **two sign-in
   methods**: an MFA factor, or a passkey plus Google/password (`hasTwoSignInMethods`). Web
-  `/account` lists the account's methods (`createFirebaseAccountAdmin` + our passkeys).
+  `/settings/account` lists the account's methods (`createFirebaseAccountAdmin` + our passkeys).
 - Pages live in `apps/web/src/app/{login,signup,forgot-password,account}`; browser logic in
   `apps/web/src/lib/auth-client.ts`. Firebase keeps nothing in the browser (in-memory persistence):
   after each sign-in the ID token is exchanged for the session cookie and the browser signs out of Firebase.
@@ -30,7 +30,7 @@ Firebase Auth has no passkey support, so the web server verifies WebAuthn itself
 custom token:
 
 ```text
-add:     /account → POST /api/passkeys/register-options (session + recent sign-in)
+add:     /settings/account → POST /api/passkeys/register-options (session + recent sign-in)
          → browser creates passkey → POST /api/passkeys/register-verify → saved in passkeys/{hash}
 sign in: POST /api/passkeys/login-options → browser signs → POST /api/passkeys/login-verify
          → { customToken } → signInWithCustomToken → POST /api/session (normal session cookie)

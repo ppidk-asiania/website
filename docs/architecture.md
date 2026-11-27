@@ -123,7 +123,7 @@ The shell must never contain personal data; authentication and authorization sti
 server for every request (inside the `<Suspense>` part). Current pages: web public pages
 prerender an Indonesian shell and stream the visitor's language (`apps/web/docs/public-site.md`),
 shop `/` is fully static; admin pages (`(panel)` group) use `instant = false` and
-`requireAdminViewer`; web `/account` uses `instant = false` and redirects to `/login?next=/account`. Next.js guide:
+`requireAdminViewer`; web `/settings/account` uses `instant = false` and redirects to `/login?next=/settings/account`. Next.js guide:
 `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`.
 
 ## Asynchronous work

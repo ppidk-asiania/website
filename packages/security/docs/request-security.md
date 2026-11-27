@@ -15,7 +15,7 @@ action (`src/proxy.ts` in web/admin/shop, `requestGuard` middleware in the gatew
    limit always applies: over it the response is `429` with `Retry-After`. Responses carry
    `RateLimit-Limit` and `RateLimit-Remaining`. Gateway API keys also have their own per-key minute limit.
 3. **Private caching** — private paths get `Cache-Control: private, no-store`
-   (web: `/api/`, `/account`; shop: `/api/`, `/account`, `/cart`, `/checkout`; admin and gateway: everything).
+   (web: `/api/`, `/settings`; shop: `/api/`, `/account`, `/cart`, `/checkout`; admin and gateway: everything).
 
 ## Where it lives
 

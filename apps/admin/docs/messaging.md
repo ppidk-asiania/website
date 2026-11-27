@@ -113,7 +113,7 @@ per source for the last 12 months. [OWNER] WAHA dashboard → webhook URL
 
 ## Linking a WhatsApp number by message (step 10.4)
 
-The member opens `/account/profile` → **Link my WhatsApp**: the website makes a code (8 characters
+The member opens `/settings/profile` → **Link my WhatsApp**: the website makes a code (8 characters
 without look-alikes `I L O 0 1`, 30 minutes, single use; a new code cancels the old one; stored as
 `whatsappLinkCodes/{HMAC(code)}` with `SUBSCRIBER_HASH_SECRET`, the same value on web and admin;
 never in clear, deleted by cron `expire`) and shows a `wa.me`

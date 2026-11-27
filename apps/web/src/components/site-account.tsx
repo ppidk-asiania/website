@@ -140,10 +140,10 @@ export function SiteAccount(props: {
           className="site-account-menu"
           onKeyDown={onMenuKeyDown}
         >
-          <a role="menuitem" href="/account/profile">
+          <a role="menuitem" href="/settings/profile">
             {props.t.profile}
           </a>
-          <a role="menuitem" href="/account">
+          <a role="menuitem" href="/settings/account">
             {props.t.account}
           </a>
           <button role="menuitem" type="button" onClick={() => void signOut()}>

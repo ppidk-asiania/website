@@ -75,17 +75,17 @@ describe.each(apps)("%s request guard wiring", (app) => {
 describe("sign-in redirect before the page renders (proxy)", () => {
   const signedIn = { headers: { cookie: `theme=dark; ${SESSION_COOKIE}=token` } };
 
-  it("web sends a visitor without a session cookie from /account to /login", async () => {
+  it("web sends a visitor without a session cookie from /settings to /login", async () => {
     vi.stubEnv("APP_ENV", "test");
     const { signInRedirect } = await load("web");
-    expect(signInRedirect(new Request("https://site.example/account?tab=keys"))).toBe(
-      `/login?next=${encodeURIComponent("/account?tab=keys")}`,
+    expect(signInRedirect(new Request("https://site.example/settings?tab=keys"))).toBe(
+      `/login?next=${encodeURIComponent("/settings?tab=keys")}`,
     );
-    expect(signInRedirect(new Request("https://site.example/account/passkeys"))).toBe(
-      `/login?next=${encodeURIComponent("/account/passkeys")}`,
+    expect(signInRedirect(new Request("https://site.example/settings/account"))).toBe(
+      `/login?next=${encodeURIComponent("/settings/account")}`,
     );
-    expect(signInRedirect(new Request("https://site.example/account", signedIn))).toBeNull();
-    for (const path of ["/", "/accounts", "/login", "/api/session"]) {
+    expect(signInRedirect(new Request("https://site.example/settings", signedIn))).toBeNull();
+    for (const path of ["/", "/settingsx", "/login", "/api/session"]) {
       expect(signInRedirect(new Request(`https://site.example${path}`)), path).toBeNull();
     }
   });
@@ -217,7 +217,7 @@ describe("admin page gate (requireAdminViewer)", () => {
     for (const consent of [null, "2020-01-01"]) {
       adminSession.profileConsent = consent;
       await expect(gate()).rejects.toThrow(
-        `redirect https://web.example/account/profile?next=${encodeURIComponent("https://admin.example/events")}`,
+        `redirect https://web.example/settings/profile?next=${encodeURIComponent("https://admin.example/events")}`,
       );
     }
     expect(await getPrincipal()).toBeNull();

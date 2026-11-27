@@ -59,7 +59,7 @@ const action = nextAction(recruitment, ownApplication, new Date()); // "start" |
   needs the window open, 1..maxChoices distinct units of the recruitment, every required answer
   and a portfolio when a chosen unit is flagged. Withdrawing is possible until a seat is taken.
 - **Apply wizard** (step 11.4): `/recruitment/[id]/apply?step=1..4` on one page: (1) personal data =
-  the profile form of `/account/profile` (same component, same `saveProfileAction`), (2) student
+  the profile form of `/settings/profile` (same component, same `saveProfileAction`), (2) student
   proof = `StudentProofForm` (same route as the profile page), (3) the application form (saves the
   draft when left), (4) review and send (`submitApplicationAction`). `applyStep` opens the first
   unfinished step (profile incomplete -> 1, proof missing -> 2, else 3) and refuses a step past what

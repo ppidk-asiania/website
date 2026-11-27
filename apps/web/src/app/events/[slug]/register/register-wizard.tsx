@@ -116,7 +116,7 @@ export function RegisterWizard(props: {
             </div>
           ))}
         </dl>
-        <a href={`/account/profile?next=${encodeURIComponent(`/events/${props.slug}/register`)}`}>
+        <a href={`/settings/profile?next=${encodeURIComponent(`/events/${props.slug}/register`)}`}>
           {e.editProfile}
         </a>
       </section>
@@ -183,7 +183,7 @@ export function RegisterWizard(props: {
         <p role="status" className="ui-message">
           {needsProfile ? (
             <a
-              href={`/account/profile?next=${encodeURIComponent(`/events/${props.slug}/register`)}`}
+              href={`/settings/profile?next=${encodeURIComponent(`/events/${props.slug}/register`)}`}
             >
               {message}
             </a>

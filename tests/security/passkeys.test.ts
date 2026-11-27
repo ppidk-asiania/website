@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createPasskeyRoutes,
+  deviceLabel,
   PASSKEY_CHALLENGE_COOKIE,
   SESSION_COOKIE,
   type IdentityProvider,
@@ -13,11 +14,24 @@ const ORIGIN = "https://web.example.org";
 const NOW = new Date("2026-10-07T10:00:00Z");
 const nowSeconds = NOW.getTime() / 1000;
 
-function setup(options: { authTime?: number; store?: PasskeyStore; realClock?: boolean } = {}) {
+function setup(
+  options: {
+    authTime?: number;
+    store?: PasskeyStore;
+    realClock?: boolean;
+    providers?: number;
+  } = {},
+) {
   const store = options.store ?? createMemoryPasskeyStore();
-  const createCustomToken = vi.fn((uid: string) => Promise.resolve(`custom-token-for-${uid}`));
+  const startSession = vi.fn(
+    (uid: string) =>
+      new Response(null, {
+        status: 204,
+        headers: { "Set-Cookie": `${SESSION_COOKIE}=for-${uid}` },
+      }),
+  );
   const identity: IdentityProvider = {
-    createSessionCookie: () => Promise.resolve("unused"),
+    createSession: () => Promise.resolve("unused"),
     verifySessionCookie: (cookie) =>
       Promise.resolve(
         cookie === "bob-session"
@@ -25,7 +39,7 @@ function setup(options: { authTime?: number; store?: PasskeyStore; realClock?: b
               uid: "bob",
               email: null,
               emailVerified: false,
-              signInProvider: "custom",
+              signInProvider: "passkey",
               authTime: nowSeconds - 60,
             }
           : cookie === "alice-session"
@@ -39,7 +53,6 @@ function setup(options: { authTime?: number; store?: PasskeyStore; realClock?: b
             : null,
       ),
     revokeSessions: () => Promise.resolve(),
-    createCustomToken,
   };
   let clock = NOW;
   const routes = createPasskeyRoutes({
@@ -47,17 +60,22 @@ function setup(options: { authTime?: number; store?: PasskeyStore; realClock?: b
     identity,
     rpName: "PPIDK Asia-Oseania",
     origin: ORIGIN,
+    providerCount: () => Promise.resolve(options.providers ?? 1),
+    startSession: (uid) => Promise.resolve(startSession(uid)),
     ...(options.realClock ? {} : { now: () => clock }),
   });
   return {
     routes,
     store,
-    createCustomToken,
+    startSession,
     advance: (ms: number) => (clock = new Date(clock.getTime() + ms)),
   };
 }
 
-const post = (body: unknown, cookies: Record<string, string> = {}) =>
+const CHROME_MAC =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
+const post = (body: unknown, cookies: Record<string, string> = {}, userAgent?: string) =>
   new Request(`${ORIGIN}/api/passkeys/x`, {
     method: "POST",
     body: body === undefined ? null : JSON.stringify(body),
@@ -65,6 +83,7 @@ const post = (body: unknown, cookies: Record<string, string> = {}) =>
       cookie: Object.entries(cookies)
         .map(([k, v]) => `${k}=${v}`)
         .join("; "),
+      ...(userAgent ? { "user-agent": userAgent } : {}),
     },
   });
 
@@ -74,17 +93,21 @@ function challengeCookie(res: Response): string {
   return match?.[1] ?? "";
 }
 
-async function registerPasskey(ctx: ReturnType<typeof setup>) {
+async function registerPasskey(ctx: ReturnType<typeof setup>, name?: string) {
   const authenticator = createSoftwareAuthenticator(ORIGIN, "alice");
   const optionsRes = await ctx.routes.registerOptions(
     post(undefined, { [SESSION_COOKIE]: "alice-session" }),
   );
   const options = (await optionsRes.json()) as { challenge: string };
   const res = await ctx.routes.registerVerify(
-    post(authenticator.register(options.challenge), {
-      [SESSION_COOKIE]: "alice-session",
-      [PASSKEY_CHALLENGE_COOKIE]: challengeCookie(optionsRes),
-    }),
+    post(
+      { ...authenticator.register(options.challenge), ...(name === undefined ? {} : { name }) },
+      {
+        [SESSION_COOKIE]: "alice-session",
+        [PASSKEY_CHALLENGE_COOKIE]: challengeCookie(optionsRes),
+      },
+      CHROME_MAC,
+    ),
   );
   return { authenticator, res };
 }
@@ -146,6 +169,8 @@ describe("passkey registration", () => {
       userId: "alice",
       counter: 0,
       transports: ["internal"],
+      name: "",
+      device: "Chrome · macOS",
     });
   });
 
@@ -197,7 +222,7 @@ describe("passkey registration", () => {
 });
 
 describe("passkey sign-in", () => {
-  it("signs the user in: a verified assertion yields a Firebase custom token for that user", async () => {
+  it("signs the user in: a verified assertion starts a session for that user", async () => {
     const ctx = setup();
     const { authenticator } = await registerPasskey(ctx);
     const { options, cookie } = await startLogin(ctx);
@@ -205,9 +230,9 @@ describe("passkey sign-in", () => {
     const res = await ctx.routes.loginVerify(
       post(authenticator.authenticate(options.challenge), { [PASSKEY_CHALLENGE_COOKIE]: cookie }),
     );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ customToken: "custom-token-for-alice" });
-    expect(ctx.createCustomToken).toHaveBeenCalledWith("alice");
+    expect(res.status).toBe(204);
+    expect(ctx.startSession).toHaveBeenCalledWith("alice");
+    expect(res.headers.get("set-cookie")).toContain(`${SESSION_COOKIE}=for-alice`);
     expect((await ctx.store.findById(authenticator.id))?.counter).toBe(1);
     expect(res.headers.get("set-cookie")).toContain("Max-Age=0");
   });
@@ -221,7 +246,7 @@ describe("passkey sign-in", () => {
       ctx.routes.loginVerify(post(assertion, { [PASSKEY_CHALLENGE_COOKIE]: cookie })),
       ctx.routes.loginVerify(post(assertion, { [PASSKEY_CHALLENGE_COOKIE]: cookie })),
     ]);
-    expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(results.map((r) => r.status).sort()).toEqual([204, 401]);
   });
 
   it("rejects expired challenges", async () => {
@@ -254,13 +279,13 @@ describe("passkey sign-in", () => {
         post(attempt(options.challenge), { [PASSKEY_CHALLENGE_COOKIE]: cookie }),
       );
       statuses.push(res.status);
-      if (res.status !== 200)
+      if (res.status !== 204)
         expect(await res.json()).toEqual({
           error: "unauthenticated",
           message: "Sign-in required.",
         });
     }
-    expect(statuses).toEqual([401, 401, 401, 200, 401, 401]);
+    expect(statuses).toEqual([401, 401, 401, 204, 401, 401]);
   });
 
   it("rejects sign-in without a challenge cookie", async () => {
@@ -321,7 +346,7 @@ describe("passkey edge cases", () => {
       post(authenticator.authenticate(options.challenge), { [PASSKEY_CHALLENGE_COOKIE]: cookie }),
     );
     expect(res.status).toBe(401);
-    expect(ctx.createCustomToken).not.toHaveBeenCalled();
+    expect(ctx.startSession).not.toHaveBeenCalled();
   });
 
   it("uses the real clock by default", async () => {
@@ -329,5 +354,106 @@ describe("passkey edge cases", () => {
     const { options, cookie } = await startLogin(ctx);
     expect(options.challenge).toBeTruthy();
     expect(cookie).toBeTruthy();
+  });
+});
+
+describe("passkey names", () => {
+  it("stores the name typed when adding, cleaned; refuses HTML or a name over 32 characters", async () => {
+    const ctx = setup();
+    const { authenticator, res } = await registerPasskey(ctx, "  Work   laptop ");
+    expect(res.status).toBe(204);
+    expect((await ctx.store.findById(authenticator.id))?.name).toBe("Work laptop");
+    for (const name of ["<b>x</b>", "x".repeat(33)]) {
+      const bad = await registerPasskey(ctx, name);
+      expect(bad.res.status).toBe(400);
+    }
+  });
+
+  it("labels the device from the browser's user agent", () => {
+    expect(deviceLabel(CHROME_MAC)).toBe("Chrome · macOS");
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+      ),
+    ).toBe("Safari · iOS");
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0",
+      ),
+    ).toBe("Edge · Windows");
+    expect(
+      deviceLabel("Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"),
+    ).toBe("Firefox · Linux");
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (Linux; Android 15) SamsungBrowser/28.0 Chrome/130 Mobile Safari/537.36",
+      ),
+    ).toBe("Samsung Internet · Android");
+    expect(deviceLabel("Mozilla/5.0 (X11; CrOS x86_64) OPR/110.0")).toBe("Opera · ChromeOS");
+    expect(deviceLabel("Mozilla/5.0 (Windows NT 10.0)")).toBe("Windows");
+    expect(deviceLabel(null)).toBe("");
+  });
+
+  it("renames only the owner's own passkey, with a signed-in session", async () => {
+    const ctx = setup();
+    const { authenticator } = await registerPasskey(ctx);
+    const rename = (body: unknown, session?: string) =>
+      ctx.routes.rename(post(body, session ? { [SESSION_COOKIE]: session } : {}));
+    expect((await rename({ id: authenticator.id, name: "Phone" })).status).toBe(401);
+    expect((await rename({ id: authenticator.id, name: "Phone" }, "bob-session")).status).toBe(400);
+    expect((await rename({ id: authenticator.id, name: "" }, "alice-session")).status).toBe(400);
+    expect(
+      (await rename({ id: authenticator.id, name: "Phone", x: 1 }, "alice-session")).status,
+    ).toBe(400);
+    expect((await rename({ id: authenticator.id, name: "Phone" }, "alice-session")).status).toBe(
+      204,
+    );
+    expect((await ctx.store.findById(authenticator.id))?.name).toBe("Phone");
+  });
+});
+
+describe("removing a passkey", () => {
+  const remove = (ctx: ReturnType<typeof setup>, body: unknown, session?: string) =>
+    ctx.routes.remove(post(body, session ? { [SESSION_COOKIE]: session } : {}));
+
+  it("needs a recent sign-in and the owner's own passkey", async () => {
+    const ctx = setup();
+    const { authenticator } = await registerPasskey(ctx);
+    expect((await remove(ctx, { id: authenticator.id })).status).toBe(401);
+    expect((await remove(ctx, { id: authenticator.id }, "bob-session")).status).toBe(400);
+    expect((await remove(ctx, { nope: 1 }, "alice-session")).status).toBe(400);
+    expect((await remove(ctx, { id: authenticator.id }, "alice-session")).status).toBe(204);
+    expect(await ctx.store.findById(authenticator.id)).toBeNull();
+
+    const stale = setup({ authTime: nowSeconds - 60 * 60 });
+    expect((await remove(stale, { id: authenticator.id }, "alice-session")).status).toBe(401);
+  });
+
+  it("never removes the account's last way to sign in", async () => {
+    const ctx = setup({ providers: 0 });
+    const first = await registerPasskey(ctx);
+    expect((await remove(ctx, { id: first.authenticator.id }, "alice-session")).status).toBe(409);
+    const second = await registerPasskey(ctx);
+    expect((await remove(ctx, { id: first.authenticator.id }, "alice-session")).status).toBe(204);
+    expect((await remove(ctx, { id: second.authenticator.id }, "alice-session")).status).toBe(409);
+  });
+
+  it("rejects rename and remove bodies that are not JSON", async () => {
+    const ctx = setup();
+    const raw = () =>
+      new Request(`${ORIGIN}/api/passkeys/x`, {
+        method: "POST",
+        body: "{not json",
+        headers: { cookie: `${SESSION_COOKIE}=alice-session` },
+      });
+    expect((await ctx.routes.rename(raw())).status).toBe(400);
+    expect((await ctx.routes.remove(raw())).status).toBe(400);
+  });
+
+  it("reports a passkey removed by a concurrent request as invalid", async () => {
+    const memory = createMemoryPasskeyStore();
+    const ctx = setup({ store: { ...memory, remove: () => Promise.resolve(false) } });
+    const { authenticator } = await registerPasskey(ctx);
+    expect((await remove(ctx, { id: authenticator.id }, "alice-session")).status).toBe(400);
   });
 });

@@ -119,7 +119,7 @@ export function useAuthAction(next: string | null = null) {
   };
   async function run(
     action: () => Promise<void>,
-    onSuccess: (go: Navigate) => void = () => go(next ?? "/account"),
+    onSuccess: (go: Navigate) => void = () => go(next ?? "/settings/account"),
   ) {
     setBusy(true);
     setError("");

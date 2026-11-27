@@ -53,7 +53,7 @@ speakers and sponsors (by order number). Registration (flowchart decision): befo
 an external registration link opens in a new tab; without one, a signed-in member registers here
 (confirmed or waitlisted by capacity, one registration per member, reCAPTCHA v3 action
 `event_register`, confirmation e-mail key `event:{id}:registered:{uid}`) and a guest is sent to
-sign in first. After the deadline the page says registration is closed. `/account` lists the
+sign in first. After the deadline the page says registration is closed. `/settings/account` lists the
 member's own submissions (see below). An event with a future publish time is hidden until then. A cancelled
 event stays reachable and says so (with the reason). Once an event is past the register button gives way
 to "This event has ended", with the final attendance, its note, the recap link and the album's first
@@ -105,7 +105,11 @@ limit) and gives 15-minute signed download links to the admin app, where sheets 
 Needs SUBSCRIBER_HASH_SECRET, LINK_SIGNING_SECRET (both as in admin) and ADMIN_URL.
 Rules: `packages/domain/docs/documents.md` → Certificates (D5) → Pickup.
 
-**My submissions and my certificates** (`/account`, N3.2): one function `submissionsOf(uid)`
+**Settings** (`/settings/profile|account|signature`, `src/app/settings/settings-shell.tsx`): one page per tab,
+tabs on the left. The old `/account`, `/account/profile` and `/account/signature` redirect there
+(`next.config.ts`), so links in e-mails already sent keep working.
+
+**My submissions and my certificates** (`/settings/account`, N3.2): one function `submissionsOf(uid)`
 (`apps/web/src/server/submissions.ts`) lists everything the signed-in account sent, newest first: event
 registrations (with the ticket link), recruitment applications (status and next action), answers to
 forms that need an account (committee applications and mentorship are such forms), opportunity
@@ -117,7 +121,7 @@ pickup lookup without typing); a cancelled batch is listed as cancelled, without
 offered items (they stay on `/inventory`), and the "send the missing document" hint of a recruitment
 (open the application for it).
 
-**Signature**: `/account/signature` (linked from `/account`) holds the signed-in person's own
+**Signature**: `/settings/signature` (a tab of Settings) holds the signed-in person's own
 signature for letters: upload (`POST /api/account/signature`, PNG/JPEG ≤ 2 MB, stored encrypted),
 preview (`GET`, owner only), printed width and rotation, removal (`src/server/signature.ts`).
 Rules: `packages/domain/docs/documents.md` → Personal signatures.

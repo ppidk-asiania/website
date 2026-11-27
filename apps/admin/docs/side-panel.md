@@ -58,7 +58,7 @@ export default async function Page() {
   entry `also: [...]` when other audited modules belong under it (Organizations: periods, structure,
   appointments).
 - The name comes from the sign-in provider (Google); otherwise the email is shown.
-- Profile and Account open the public website (`WEB_URL/account/profile`, `WEB_URL/account`;
+- Profile and Account open the public website (`WEB_URL/settings/profile`, `WEB_URL/settings/account`;
   same session cookie), so there is one profile and one account page. The web header has the
   same menu (`apps/web/docs/public-site.md`). Log out calls `DELETE /api/session`.
 - E-mail lives in the MENU as **Email** (`/emails`, `messages.read`): see [messaging.md](messaging.md).

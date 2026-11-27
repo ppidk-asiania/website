@@ -33,7 +33,17 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["firebase-admin", "mysql2"],
   ...standalone,
   async redirects() {
-    return [{ source: "/articles", destination: "/news", permanent: true }];
+    return [
+      { source: "/articles", destination: "/news", permanent: true },
+      // Old account pages moved to the settings tabs; links in sent e-mails still use them.
+      { source: "/account", destination: "/settings/account", permanent: true },
+      {
+        source: "/account/:tab(profile|signature)",
+        destination: "/settings/:tab",
+        permanent: true,
+      },
+      { source: "/settings", destination: "/settings/profile", permanent: false },
+    ];
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

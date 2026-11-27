@@ -26,14 +26,14 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 
 ## Profile page and completeness gate (B3, A4)
 
-- Members fill in `/account/profile` on the website (`apps/web/src/app/account/profile/…`,
+- Members fill in `/settings/profile` on the website (`apps/web/src/app/settings/profile/…`,
   rules in `apps/web/src/server/profile.ts`). The owner always comes from the session (never the
   form); saving needs a verified e-mail, which is copied into the profile. A stale version is
   refused ("changed elsewhere").
 - Consent: the form agrees to `PRIVACY_POLICY_VERSION` (= the date on the Privacy and Terms
   pages, `LEGAL_VERSION`). The first consent date is kept until the policy changes.
 - `isProfileComplete(profile)`: a saved profile that agreed to the current policy. Until it is
-  complete, admin pages send staff to `/account/profile?next=<admin page>` and admin actions are
+  complete, admin pages send staff to `/settings/profile?next=<admin page>` and admin actions are
   refused (`apps/admin/src/server/context.ts`), and event registration answers "complete your
   profile" (member-only). Bumping `PRIVACY_POLICY_VERSION` asks everyone to agree again.
 - Saving also writes `users/{uid}.chapterId` (the active chapter whose `countryCode` is
@@ -50,7 +50,7 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 
 - Rules: `packages/domain/src/members/verification.ts` (guarded fields, graduation); database
   `packages/db/src/sql/member-profiles.ts` (`memberProfiles/{uid}` fields `graduatedOn`,
-  `graduationMarkedBy`, `chapterId`); web `apps/web/src/server/profile.ts` (`/account/profile`).
+  `graduationMarkedBy`, `chapterId`); web `apps/web/src/server/profile.ts` (`/settings/profile`).
 - There is no profile verification (removed 2026-10-24 together with the admin Members page).
   Every change the member saves applies at once. Changes of the guarded fields (PPIDK §63: full
   name, gender, date of birth, PPI country, campus) are audited (actor `member`, module
@@ -74,7 +74,7 @@ Schema and validation: `packages/domain/src/members/profile.ts` (Zod, shared by 
 - Database: `issueWhatsappCode` and `linkWhatsapp` in `packages/db/src/sql/member-profiles.ts`
   (`whatsappLinkCodes/{HMAC(code)}`, `memberProfiles/{uid}.whatsappVerifiedAt`); the link is audited
   (actor `member`, number redacted). A number verified on another account is refused.
-- Web: "Link my WhatsApp" on `/account/profile` (`apps/web/src/server/whatsapp-link.ts`); admin:
+- Web: "Link my WhatsApp" on `/settings/profile` (`apps/web/src/server/whatsapp-link.ts`); admin:
   the `message` event of `/webhooks/waha` (`apps/admin/src/server/whatsapp-link.ts`, see
   `apps/admin/docs/messaging.md`). The Role Manager popup shows verified / not verified only.
 - Not built: staff typing someone else's number (`profile.update_any`; no staff profile editor
@@ -95,7 +95,7 @@ fixed, note, by, at }`. Only `updateProof` / `proofsOf` (`packages/db/src/sql/me
   LoA/CoE); supporting = student card, optional. PDF, JPEG, PNG or WebP by magic bytes, at most
   5 MB, stored privately (not re-encoded, not encrypted: the committee opens them through the
   normal 15-minute signed link): `members/proofs/{uid}/{main|supporting}_{id}.{ext}`.
-- Web: upload on `/account/profile` and as step 2 of the apply wizard (same component), (`apps/web/src/server/student-proof.ts`, route
+- Web: upload on `/settings/profile` and as step 2 of the apply wizard (same component), (`apps/web/src/server/student-proof.ts`, route
   `/api/account/student-proof?file=main|supporting[&confirmed=1]`). A new main file needs the
   confirmation "this document states my active status" (`confirmed=1`, checked on the server); a
   supporting file needs a main file first. `GET ?file=…&v=<version>` shows the owner's own file only

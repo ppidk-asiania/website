@@ -63,8 +63,10 @@ test("sign-in, sign-up and password-reset pages are available", async ({ request
   }
 });
 
-test("the account page requires a session", async ({ request }) => {
-  const response = await request.get("/account", { maxRedirects: 0 });
+test("the settings pages require a session", async ({ request }) => {
+  const old = await request.get("/account/profile?next=/events", { maxRedirects: 0 });
+  expect(old.headers()["location"]).toContain("/settings/profile?next=");
+  const response = await request.get("/settings/account", { maxRedirects: 0 });
   expect(response.status()).toBe(307);
   expect(response.headers()["location"]).toContain("/login");
 });

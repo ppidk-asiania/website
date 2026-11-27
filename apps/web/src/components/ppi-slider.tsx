@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { SocialLinks } from "./social-links";
 
-const COUNTRIES = [
+export const COUNTRIES = [
   {
     name: "PPI Selandia Baru",
     mapNo: 1,

@@ -88,13 +88,13 @@ function toDoc(profile: MemberProfile): Record<string, unknown> {
 }
 
 type ProfileAudit = (input: {
-  action: "UPDATE";
+  action: "UPDATE" | "DELETE";
   title: string;
   resourceId: string;
   before: Snapshot | null;
   after: Snapshot | null;
   versionBefore: number;
-  versionAfter: number;
+  versionAfter: number | null;
 }) => AuditEvent;
 
 const memberAudit =
@@ -191,6 +191,41 @@ export function createSqlMemberProfileStore(db: Database) {
 
   return {
     ...repository,
+
+    /**
+     * Deletes the member's profile and WhatsApp link codes (account deletion). Returns the proof
+     * files to delete from storage; the audit entry keeps no personal data.
+     */
+    remove(uid: string, now: Date): Promise<string[]> {
+      const ref = profiles.doc(safeId.parse(uid));
+      return db.runTransaction(async (tx) => {
+        const [snapshot, old] = await Promise.all([
+          tx.get(ref),
+          tx.get(codes.where("uid", "==", uid)),
+        ]);
+        const log = snapshot.exists ? await auditLog.begin(tx) : null;
+        for (const doc of old.docs) tx.delete(doc.ref);
+        if (!snapshot.exists || !log) return [];
+        const profile = toProfile(snapshot.data() as Record<string, unknown>);
+        tx.delete(ref);
+        log.append(
+          memberAudit(
+            uid,
+            now,
+          )({
+            action: "DELETE",
+            title: uid,
+            resourceId: uid,
+            before: null,
+            after: null,
+            versionBefore: profile.version,
+            versionAfter: null,
+          }),
+        );
+        const proof = profile.studentProof;
+        return proof ? [proof.main.path, ...(proof.supporting ? [proof.supporting.path] : [])] : [];
+      });
+    },
 
     /** A new code replaces the member's old one. Null when the member has no profile. */
     issueWhatsappCode(uid: string, codeHash: string, now: Date): Promise<Date | null> {

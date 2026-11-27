@@ -1,21 +1,12 @@
 import "server-only";
-import { createPasskeyRoutes, type SignInMethods } from "@website/auth";
-import { createFirebaseAccountAdmin } from "@website/auth/firebase-admin";
+import { createAccountAdmin, createPasskeyRoutes, type SignInMethods } from "@website/auth";
 import { lazyEnv } from "@website/config/env";
-import { createSqlPasskeyStore, getDatabaseForRole } from "@website/db/sql";
+import { createSqlPasskeyStore } from "@website/db/sql";
+import { webDb } from "./db";
 import { getWebEnv } from "./env";
-import { identity } from "./session";
+import { authAccounts, identity, sessionRoutes } from "./session";
 
-const passkeyStore = lazyEnv(() => {
-  const env = getWebEnv();
-  return createSqlPasskeyStore(
-    getDatabaseForRole({
-      role: "web_ro",
-      url: env.DATABASE_URL,
-      connectionLimit: env.DATABASE_CONNECTION_LIMIT,
-    }),
-  );
-});
+export const passkeyStore = lazyEnv(() => createSqlPasskeyStore(webDb()));
 
 export const passkeyRoutes = lazyEnv(() => {
   const env = getWebEnv();
@@ -25,18 +16,12 @@ export const passkeyRoutes = lazyEnv(() => {
     identity: identity(),
     rpName: "PPIDK Asia-Oseania",
     origin: env.WEB_URL,
+    providerCount: async (uid) => (await accountAdmin().signInMethods(uid)).providers.length,
+    startSession: (uid) => sessionRoutes().start(uid, "passkey"),
   });
 });
 
-const accountAdmin = lazyEnv(() => {
-  const env = getWebEnv();
-  return createFirebaseAccountAdmin({
-    appEnv: env.APP_ENV,
-    projectId: env.FIREBASE_PROJECT_ID,
-    clientEmail: env.FIREBASE_CLIENT_EMAIL,
-    privateKey: env.FIREBASE_PRIVATE_KEY,
-  });
-});
+export const accountAdmin = lazyEnv(() => createAccountAdmin(authAccounts()));
 
 export async function ownSignInMethods(uid: string): Promise<SignInMethods> {
   const [methods, passkeys] = await Promise.all([

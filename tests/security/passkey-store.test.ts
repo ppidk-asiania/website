@@ -4,7 +4,7 @@ import { createSqlPasskeyStore } from "@website/db/sql";
 import { createMemoryPasskeyStore } from "@website/db/memory";
 import { fakeDb } from "../support/fake-db";
 
-type Firestore = Parameters<typeof createSqlPasskeyStore>[0];
+type Db = Parameters<typeof createSqlPasskeyStore>[0];
 const now = new Date("2026-10-07T10:00:00Z");
 const credential = (over: Partial<PasskeyCredential> = {}): PasskeyCredential => ({
   id: "cred-A_1",
@@ -14,12 +14,14 @@ const credential = (over: Partial<PasskeyCredential> = {}): PasskeyCredential =>
   transports: ["internal"],
   createdAt: now,
   lastUsedAt: null,
+  name: "Laptop",
+  device: "Chrome · macOS",
   ...over,
 });
 
 describe.each([
   ["memory", () => createMemoryPasskeyStore()],
-  ["firestore", () => createSqlPasskeyStore(fakeDb().db as unknown as Firestore)],
+  ["sql", () => createSqlPasskeyStore(fakeDb().db as unknown as Db)],
 ] as Array<[string, () => PasskeyStore]>)("%s passkey store", (_name, create) => {
   it("stores credentials and finds them by id and by user", async () => {
     const store = create();
@@ -48,6 +50,19 @@ describe.each([
     expect(await store.findById("cred-A_1")).toMatchObject({ counter: 2, lastUsedAt: now });
   });
 
+  it("renames and removes a credential only for its owner", async () => {
+    const store = create();
+    await store.add(credential());
+    expect(await store.rename("cred-A_1", "mallory", "Mine")).toBe(false);
+    expect(await store.remove("cred-A_1", "mallory")).toBe(false);
+    expect(await store.rename("missing", "alice", "X")).toBe(false);
+    expect(await store.remove("missing", "alice")).toBe(false);
+    expect(await store.rename("cred-A_1", "alice", "Work laptop")).toBe(true);
+    expect((await store.findById("cred-A_1"))?.name).toBe("Work laptop");
+    expect(await store.remove("cred-A_1", "alice")).toBe(true);
+    expect(await store.findById("cred-A_1")).toBeNull();
+  });
+
   it("challenges are single-use and expire", async () => {
     const store = create();
     const expiresAt = new Date(now.getTime() + 60_000);
@@ -66,5 +81,15 @@ describe.each([
   it("rejects ids that could address other documents", async () => {
     const store = create();
     await expect(store.consumeChallenge("../users/x", now)).rejects.toThrow();
+  });
+});
+
+describe("sql passkey store with rows saved before names existed", () => {
+  it("reads a missing name and device as empty", async () => {
+    const fake = fakeDb();
+    const store = createSqlPasskeyStore(fake.db as unknown as Db);
+    const { name: _name, device: _device, ...old } = credential();
+    await store.add(old as PasskeyCredential);
+    expect(await store.findById("cred-A_1")).toMatchObject({ name: "", device: "" });
   });
 });

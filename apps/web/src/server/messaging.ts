@@ -6,15 +6,20 @@ import { createResendSender, emailChannel, wahaChannel } from "@website/email";
 import { webDb } from "./db";
 import { getWebEnv } from "./env";
 
+export const email = lazyEnv(() => {
+  const env = getWebEnv();
+  return emailChannel(
+    env.RESEND_API_KEY ? createResendSender({ apiKey: env.RESEND_API_KEY }) : null,
+    env.EMAIL_FROM_TRANSACTIONAL,
+  );
+});
+
 export const messenger = lazyEnv(() => {
   const env = getWebEnv();
   return createMessenger({
     log: createSqlMessageLog(webDb()),
     channels: {
-      email: emailChannel(
-        env.RESEND_API_KEY ? createResendSender({ apiKey: env.RESEND_API_KEY }) : null,
-        env.EMAIL_FROM_TRANSACTIONAL,
-      ),
+      email: email(),
       // only the recruitment group notices (step 11.8) use it
       whatsapp: wahaChannel(
         env.WAHA_BASE_URL && env.WAHA_API_KEY
