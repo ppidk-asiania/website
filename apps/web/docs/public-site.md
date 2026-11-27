@@ -394,6 +394,15 @@ can also offer an item to give or lend (`POST /api/inventory/offers`, JSON, comp
 sees the state of their offers below the form. Code: `apps/web/src/server/inventory.ts`,
 `loan-requests.ts`, `contribution-offers.ts`.
 
+## Opportunities
+
+`/opportunities` (footer link) lists open and past-deadline postings (past ones greyed, without the apply
+button) with filters by type and country, and the career guides (news category `career`) below.
+`/opportunities/archive` lists closed postings. An external "Apply" goes through
+`/opportunities/{id}/apply`: signed-in only, counts one click, then redirects to the posting's https
+link (never shown in the page). Cached for minutes (`cacheTag("opportunities")`). Code:
+`apps/web/src/server/opportunities.ts`, `apps/web/src/app/opportunities`.
+
 ## Configuration
 
 `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, `RECAPTCHA_MIN_SCORE` (captcha);

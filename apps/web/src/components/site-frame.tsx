@@ -130,6 +130,7 @@ export function SiteFooter({ t }: { t: Dictionary }) {
           <a href="/sponsorship">{t.footer.sponsorship}</a>
           <a href="/donate">{t.footer.donate}</a>
           <a href="/inventory">{t.footer.inventory}</a>
+          <a href="/opportunities">{t.footer.opportunities}</a>
           <a href="/documents">{t.footer.documents}</a>
           <a href="/terms">{t.footer.terms}</a>
           <a href="/privacy">{t.footer.privacy}</a>

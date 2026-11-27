@@ -11,6 +11,7 @@ export const NEWS_CATEGORIES = [
   "community",
   "announcement",
   "international",
+  "career",
 ] as const;
 export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
 

@@ -27,6 +27,7 @@ export const ADMIN_PAGES = {
   registrants: { label: "Event registrants", extras: { export: "Export registrants" } },
   gallery: { label: "Gallery" },
   sponsors: { label: "Sponsors (directory and sponsorship page)" },
+  opportunities: { label: "Opportunities (jobs, internships, scholarships)" },
   inventory: {
     label: "Inventory (items, stock, loans)",
     extras: { approve: "Approve or reject requests, hand items over and take them back" },

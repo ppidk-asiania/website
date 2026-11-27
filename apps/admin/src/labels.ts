@@ -102,6 +102,7 @@ export const NEWS_CATEGORY_LABELS = {
   community: { id: "Komunitas", en: "Community" },
   announcement: { id: "Pengumuman", en: "Announcement" },
   international: { id: "Internasional", en: "International" },
+  career: { id: "Karier", en: "Career" },
 } as const satisfies Record<NewsCategory, Label>;
 
 export const EVENT_TYPE_LABELS = {

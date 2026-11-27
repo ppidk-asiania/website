@@ -50,13 +50,14 @@ describe("slugs, tags and categories", () => {
     expect(formatNewsDate(now, "en")).toBe("18 October 2026");
   });
 
-  it("has the five flowchart categories", () => {
+  it("has the five flowchart categories and the career guides category (N6.1)", () => {
     expect(NEWS_CATEGORIES).toEqual([
       "general",
       "academic",
       "community",
       "announcement",
       "international",
+      "career",
     ]);
   });
 });

@@ -85,6 +85,7 @@ import { createDonationActions } from "./donations";
 import { createInventoryActions } from "./inventory";
 import { createInventoryFlowActions } from "./inventory-flows";
 import { createLoanActions } from "./loans";
+import { createOpportunityActions } from "./opportunities";
 import { createSponsorActions } from "./sponsors";
 import { createRecruitmentActions } from "./recruitment";
 import { createRoleActions } from "./roles";
@@ -231,6 +232,14 @@ export const orgDocumentActions = lazyEnv(() =>
 
 export const sponsorActions = lazyEnv(() =>
   createSponsorActions({ sponsors: adminStores().sponsors, now: () => new Date() }),
+);
+
+export const opportunityActions = lazyEnv(() =>
+  createOpportunityActions({
+    opportunities: adminStores().opportunities,
+    chapterExists: async (id) => (await adminStores().chapters.get(id)) !== null,
+    now: () => new Date(),
+  }),
 );
 
 export const inventoryActions = lazyEnv(() =>
@@ -1367,6 +1376,11 @@ export const adminReads = {
   listAlbums: () => adminStores().galleries.listForAdmin(),
   listOrgDocuments: () => adminStores().orgDocuments.listForAdmin(),
   listSponsors: () => adminStores().sponsors.listForAdmin(),
+  listOpportunities: async () => {
+    const rows = await adminStores().opportunities.listForAdmin();
+    const clicks = await adminStores().opportunities.clickCounts(rows.map((o) => o.id));
+    return rows.map((o) => ({ ...o, clicks: clicks.get(o.id) ?? 0 }));
+  },
   listInventory: () => adminStores().inventory.list(),
   listLoans: () => adminStores().loans.list(),
   listReservations: () => adminStores().flows.listReservations(),
